@@ -1,0 +1,7 @@
+*.mp4
+__pycache__/*
+Binary/*
+Samples/*
+*.zip
+*.7z
+CSharp/*
