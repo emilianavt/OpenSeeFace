@@ -28,7 +28,15 @@ A simple demonstration can be achieved by creating a new scene in Unity, adding 
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
-The included `OpenSeeLauncher` component allows starting the face tracker program from Unity. It is designed to work with the pyinstaller created executable distributed in the binary release bundles.
+The included `OpenSeeLauncher` component allows starting the face tracker program from Unity. It is designed to work with the pyinstaller created executable distributed in the binary release bundles. It provides three public API functions:
+
+* `public string[] ListCameras()` returns the names of available cameras. The index of the camera in the array corresponds to its ID for the `cameraIndex` field. Setting the `cameraIndex` to `-1` will disable webcam capturing.
+* `public bool StartTracker()` will start the tracker. If it is already running, it will shut down the running instance and start a new one with the current settings.
+* `public void StopTracker()` will stop the tracker. The tracker is stopped automatically when the application is terminated or the `OpenSeeLauncher` object is destroyed.
+
+The `OpenSeeLauncher` component uses WinAPI job objects to ensure that the tracker child process is terminated if the application crashes.
+
+Additional custom commandline arguments should be added one by one into elements of `commandlineArguments` array. For example `-v 1` should be added as two elements, one element containing `-v` and one containing `1`, not a single one containing both parts.
 
 # General notes
 
