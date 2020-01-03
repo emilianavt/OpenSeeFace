@@ -41,7 +41,8 @@ Additional custom commandline arguments should be added one by one into elements
 # General notes
 
 * The tracking seems to be quite robust even with partial occlusion of the face, glasses or bad lighting conditions.
-* There is no gaze direction tracking, and the model seems prone to thinking eyes are opened, even when they are closed.
+* To detect whether eyes are opened or closed, a threshold should be applied to the `rightEyeOpen`/`leftEyeOpen` fields. The landmark points are not very sensitive to this.
+* While there is a gaze tracking model, its results are very noisy, so they are not yet accessible through the `OpenSee` component.
 * Depending on the frame rate, face tracking can easily use up a whole CPU core. At 30fps for a single face, it should still use less than 100% of one core on a decent CPU.
 * When setting the number of faces to track to a higher number than the number of faces actually in view, the OpenCV face detecter will attempt to find new faces every `--scan-every` frames. It can be quite slow, so try to set `--faces` no higher than the actual number of faces you are tracking.
 
