@@ -88,7 +88,9 @@ Additional training has been done on the WFLW dataset after reducing it to 66 po
       year = {2018}
     }
 
-The original model can be selected with `--model 0` instead.
+The original model can still be selected with `--model 0` instead.
+
+For the training the gaze and blink detection model, the WFLW dataset and [MRL Eye](http://mrl.cs.vsb.cz/eyedataset) datasets were used.
 
 ## Algorithm
 

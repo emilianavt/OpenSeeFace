@@ -53,13 +53,13 @@ def group_rects(rects):
                 rect_groups[str(other_rect)] = [group, -1, []]
     return rect_groups
 
-def logit(p):
+def logit(p, factor=16.0):
     if p >= 1.0:
         p = 0.9999999
     if p <= 0.0:
         p = 0.0000001
     p = p/(1-p)
-    return float(np.log(p) / 16.0)
+    return float(np.log(p) / factor)
 
 def matrix_to_quaternion(m):
     t = 0.0
@@ -87,7 +87,7 @@ def worker_thread(session, input, crop_info, queue, input_name, idx, tracker):
     queue.put((session, conf, lms, crop_info, idx))
 
 class Tracker():
-    def __init__(self, width, height, model_type=1, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None):
+    def __init__(self, width, height, model_type=1, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max_threads
@@ -123,6 +123,14 @@ class Tracker():
             options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
             self.sessions.append(onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options))
         self.input_name = self.session.get_inputs()[0].name
+        
+        options = onnxruntime.SessionOptions()
+        options.inter_op_num_threads = 1
+        options.intra_op_num_threads = max_threads
+        options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        options.log_severity_level = 3
+        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "gaze_opt.onnx"), sess_options=options)
 
         self.faceCascade = cv2.CascadeClassifier()
         self.faceCascade.load(os.path.join(model_base_path, "haarcascade_frontalface_alt2.xml"))
@@ -205,6 +213,11 @@ class Tracker():
             [-0.04980, -0.21723, -0.14035],
             [0.00000, -0.21201, -0.11404],
             [0.04980, -0.21723, -0.14035],
+            # Pupils and eyeball centers
+            [0.25799, 0.27608, -0.16923],
+            [-0.25799, 0.27608, -0.16923],
+            [0.25799, 0.27608, -0.24967],
+            [-0.25799, 0.27608, -0.24967],
         ], np.float32) * np.array([1.0, 1.0, 1.15])
         
         self.contour = np.empty((21 if self.high_quality_3d else 18, 3))
@@ -231,6 +244,7 @@ class Tracker():
         self.silent = silent
         self.res = 224. if self.model_type < 2 else 112.
         self.res_i = int(self.res)
+        self.no_gaze = no_gaze
 
     def landmarks(self, tensor, crop_info):
         crop_x1, crop_y1, scale_x, scale_y = crop_info
@@ -242,6 +256,15 @@ class Tracker():
             y = m % 28
             conf = float(tensor[i][x,y])
             avg_conf = avg_conf + conf
+
+            # Bugfix for heatmaps being offset during training (models need retraining, but this seems to be working fine somehow)
+            x += 2
+            y += 2
+            if x >= 28:
+                x = 27
+            if y >= 28:
+                y = 27
+
             off_x = 0
             off_y = 0
             if self.model_type > 0:
@@ -250,13 +273,15 @@ class Tracker():
             else:
                 off_x = self.res * ((2. * float(tensor[66 + i][y, x])) - 1.0)
                 off_y = self.res * ((2. * float(tensor[66 * 2 + i][y, x])) - 1.0)
-            x = crop_y1 + scale_y * (self.res * (float(x) / 28.) + off_x)
-            y = crop_x1 + scale_x * (self.res * (float(y) / 28.) + off_y)
-            lms.append((x,y,conf))
+            lm_x = crop_y1 + scale_y * (self.res * (float(x) / 28.) + off_x)
+            lm_y = crop_x1 + scale_x * (self.res * (float(y) / 28.) + off_y)
+            lms.append((lm_x,lm_y,conf))
         avg_conf = avg_conf / 66.
         return (avg_conf, lms)
 
-    def estimateDepth(self, lms):
+    def estimateDepth(self, lms, eye_state):
+        lms = np.concatenate((lms, np.array([[eye_state[0][1], eye_state[0][2], eye_state[0][3]], [eye_state[1][1], eye_state[1][2], eye_state[1][3]]], np.float)), 0)
+
         image_pts = np.empty((21 if self.high_quality_3d else 18, 2), np.float32)
         image_pts[0:17] = np.array(lms)[0:17,0:2]
         if (self.high_quality_3d):
@@ -266,26 +291,38 @@ class Tracker():
 
         success = False
         if self.max_faces < 2 and not self.rotation is None:
-            success, self.rotation, self.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(self.rotation), tvec=np.transpose(self.translation), flags=cv2.SOLVEPNP_EPNP)
+            success, self.rotation, self.translation, inliers = cv2.solvePnPRansac(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(self.rotation), tvec=np.transpose(self.translation), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
-            success, self.rotation, self.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, flags=cv2.SOLVEPNP_EPNP)
+            rvec = np.array([-180, 0, -90], np.float32)
+            tvec = np.array([0, 0, 0], np.float32)
+            success, self.rotation, self.translation, inliers = cv2.solvePnPRansac(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
 
         rotation = self.rotation
         translation = self.translation
 
+        pts_3d = np.zeros((70,3), np.float32)
         if not success:
-            self.rotation = np.array([0.0, 0.0, 0.0], np.float32)
-            self.translation = np.array([0.0, 0.0, 0.0], np.float32)
-            return False, np.zeros(4), 0.0, []
+            self.rotation = np.array([[0.0, 0.0, 0.0]], np.float32)
+            self.translation = np.array([[0.0, 0.0, 0.0]], np.float32)
+            return False, np.zeros(4), np.zeros(3), 99999., pts_3d, lms
         else:
             self.rotation = np.transpose(self.rotation)
             self.translation = np.transpose(self.translation)
 
         rmat, _ = cv2.Rodrigues(rotation)
         inverse_rotation = np.linalg.inv(rmat)
-        pts_3d = []
         pnp_error = 0.0
         for i, pt in enumerate(self.face_3d):
+            if i == 68:
+                eye_center = np.transpose(pts_3d[36:42,0:2], (1,0)).mean(1)
+                pt_3d = np.array([eye_center[0], eye_center[1], self.face_3d[i][2]], np.float32)
+                pts_3d[i] = pt_3d
+                continue
+            if i == 69:
+                eye_center = np.transpose(pts_3d[42:48,0:2], (1,0)).mean(1)
+                pt_3d = np.array([eye_center[0], eye_center[1], self.face_3d[i][2]], np.float32)
+                pts_3d[i] = pt_3d
+                continue
             reference = rmat.dot(pt)
             reference = reference + self.translation
             reference = self.camera.dot(reference[0])
@@ -295,14 +332,14 @@ class Tracker():
                 e1 = lms[i][0] - reference[0]
                 e2 = lms[i][1] - reference[1]
                 pnp_error += e1*e1 + e2*e2
-            pt_2d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
-            pt_2d = self.inverse_camera.dot(pt_2d) 
-            pt_2d = pt_2d - self.translation
-            pt_2d = inverse_rotation.dot(pt_2d[0])
-            pts_3d.append(pt_2d)
+            pt_3d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
+            pt_3d = self.inverse_camera.dot(pt_3d) 
+            pt_3d = pt_3d - self.translation
+            pt_3d = inverse_rotation.dot(pt_3d[0])
+            pts_3d[i,:] = pt_3d[:]
 
         euler = cv2.RQDecomp3x3(rmat)[0]
-        return True, matrix_to_quaternion(rmat), euler, np.sqrt(pnp_error / (2 * 17.0)), pts_3d
+        return True, matrix_to_quaternion(rmat), euler, np.sqrt(pnp_error / (2.0 * image_pts.shape[0])), pts_3d, lms
 
     def preprocess(self, im, crop):
         x1, y1, x2, y2 = crop
@@ -316,6 +353,53 @@ class Tracker():
             im = im.mean(1)
             im = np.expand_dims(im, 1)
         return im
+
+    def prepare_eye(self, frame, lms):
+        lms = np.transpose(lms, (1,0))
+        center = lms.mean(1)
+        radius = np.abs(lms - np.expand_dims(center, 1)).max(1).max() * 0.8
+        x = center[1]
+        y = center[0]
+        x1, y1 = clamp_to_im((x - radius, y - radius), self.width, self.height)
+        x2, y2 = clamp_to_im((x + radius, y + radius), self.width, self.height)
+        dist = min(x2-x1, y2-y1)
+        x2 = x1 + dist
+        y2 = y1 + dist
+        im = np.float32(frame[int(y1):int(y2), int(x1):int(x2),::-1])
+        im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_LINEAR) / self.std - self.mean
+        im = np.expand_dims(im, 0)
+        im = np.transpose(im, (0,3,1,2))
+        return (im, x1, y1, dist / 32.)
+
+    def get_eye_state(self, frame, lms):
+        if self.no_gaze:
+            return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
+        lms = np.array(lms)
+        e_x = [0,0]
+        e_y = [0,0]
+        scale = [0,0]
+        (right_eye, e_x[0], e_y[0], scale[0]) = self.prepare_eye(frame, lms[36:42,0:2])
+        (left_eye, e_x[1], e_y[1], scale[1]) = self.prepare_eye(frame, lms[42:48,0:2])
+        both_eyes = np.concatenate((right_eye, left_eye))
+        results = np.array(self.gaze_model.run([], {self.input_name: both_eyes})[0])
+        open = [0, 0]
+        open[0] = results[0][3].mean()
+        open[1] = results[1][3].mean()
+
+        eye_state = []
+        for i in range(2):
+            m = int(results[i][0].argmax())
+            x = m // 8
+            y = m % 8
+            conf = float(results[i][0][x,y])
+            
+            off_y = 32.0 * logit(results[i][1][y, x], 8.0)
+            off_x = 32.0 * logit(results[i][2][y, x], 8.0)
+            eye_y = e_y[i] + scale[i] * (32.0 * float(x) / 8.0 + off_x)
+            eye_x = e_x[i] + scale[i] * (32.0 * float(y) / 8.0 + off_y)
+            eye_state.append([open[i], eye_y, eye_x, conf])
+
+        return eye_state
 
     def predict(self, frame, additional_faces=[]):
         start = time.time()
@@ -404,6 +488,7 @@ class Tracker():
         best_results = {}
         for crop in crop_info:
             conf, lms, i = outputs[crop]
+            eye_state = self.get_eye_state(frame, lms)
             if conf < self.threshold:
                 continue;
             group_id = groups[str(new_faces[i])][0]
@@ -411,7 +496,7 @@ class Tracker():
                 best_results[group_id] = [-1, []]
             if conf > self.threshold and best_results[group_id][0] < conf:
                 best_results[group_id][0] = conf
-                best_results[group_id][1] = lms
+                best_results[group_id][1] = (lms, eye_state)
         
         sorted_results = sorted(best_results.values(), key=lambda x: x[0], reverse=True)
         duration_model = 1000 * (time.time() - start_model)
@@ -419,20 +504,20 @@ class Tracker():
         results = []
         detected = []
         detections = 0
-        for conf, lms in sorted_results:
+        for conf, (lms, eye_state) in sorted_results:
             if detections >= self.max_faces:
                 break;
             if conf > self.threshold:
                 detections += 1
                 start_pnp = time.time()
-                success, quaternion, euler, pnp_error, pts_3d = self.estimateDepth(lms)
+                success, quaternion, euler, pnp_error, pts_3d, lms = self.estimateDepth(lms, eye_state)
                 duration_pnp += 1000 * (time.time() - start_pnp)
-                results.append((conf, lms, success, pnp_error, quaternion, euler, self.rotation, self.translation, pts_3d))
+                results.append((conf, lms, success, pnp_error, quaternion, euler, self.rotation, self.translation, pts_3d, (eye_state[0][0], eye_state[1][0])))
                 min_x = 10000
                 max_x = -1
                 min_y = 10000
                 max_y = -1
-                for (x,y,c) in lms:
+                for (x,y,c) in lms[0:66]:
                     if x > max_x:
                         max_x = x
                     if y > max_y:

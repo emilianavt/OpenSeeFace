@@ -9,6 +9,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
     public bool show3DPoints = true;
     public bool applyTranslation = false;
     public bool applyRotation = false;
+    public float minConfidence = 0.20f;
     private OpenSee.OpenSeeData[] openSeeData;
     private GameObject[] gameObjects;
     private GameObject centerBall;
@@ -18,8 +19,8 @@ public class OpenSeeShowPoints : MonoBehaviour {
         if (openSee == null) {
             openSee = GetComponent<OpenSee>();
         }
-        gameObjects = new GameObject[66];
-        for (int i = 0; i < 66; i++) {
+        gameObjects = new GameObject[68];
+        for (int i = 0; i < 68; i++) {
             gameObjects[i] = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             gameObjects[i].name = "Point " + (i + 1);
             gameObjects[i].transform.SetParent(transform);
@@ -45,7 +46,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
         if (show3DPoints) {
             centerBall.gameObject.SetActive(false);
             for (int i = 0; i < 66; i++) {
-                if (openSeeData[0].got3DPoints) {
+                if (openSeeData[0].got3DPoints && openSeeData[0].confidence[i] > minConfidence) {
                     Renderer renderer = gameObjects[i].GetComponent<Renderer>();
                     renderer.material.SetColor("_Color", Color.Lerp(Color.red, Color.green, openSeeData[0].confidence[i]));
                     gameObjects[i].transform.localPosition = openSeeData[0].points3D[i];

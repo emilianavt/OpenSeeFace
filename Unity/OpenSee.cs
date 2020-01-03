@@ -16,7 +16,7 @@ public class OpenSee : MonoBehaviour {
     public int listenPort = 11573;
 
     private const int nPoints = 66;
-    private const int packetFrameSize = 8 + 1 + 4 + 4 * 4 + 3 * 4 + 3 * 4 + 4 * 66 + 4 * 2 * 66 + 4 * 3 * 66;
+    private const int packetFrameSize = 8 + 2 * 4 + 1 + 4 + 3 * 4 + 3 * 4 + 4 * 4 + 4 * 68 + 4 * 2 * 68 + 4 * 3 * 70;
 
     [Header("Tracking data")]
     [Tooltip("This is an informational property that tells you how many packets have been received")]
@@ -28,6 +28,10 @@ public class OpenSee : MonoBehaviour {
     public class OpenSeeData {
         [Tooltip("The time this tracking data was captured at.")]
         public double time;
+        [Tooltip("This field tells you how likely it is that the right eye is open.")]
+        public float rightEyeOpen;
+        [Tooltip("This field tells you how likely it is that the left eye is open.")]
+        public float leftEyeOpen;
         [Tooltip("This field tells you if 3D points have been successfully estimated from the 2D points. If this is false, do not rely on pose or 3D data.")]
         public bool got3DPoints;
         [Tooltip("This field contains the error for fitting the original 3D points. It shouldn't matter much, but it it is very high, something is probably wrong")]
@@ -42,9 +46,9 @@ public class OpenSee : MonoBehaviour {
         public Vector3 rawEuler;
         [Tooltip("This field tells you how certain the tracker is.")]
         public float[] confidence;
-        [Tooltip("These are the detected face landmarks in image coordinates.")]
+        [Tooltip("These are the detected face landmarks in image coordinates. There are 68 points. The last too points are pupil points from the gaze tracker.")]
         public Vector2[] points;
-        [Tooltip("These are 3D points estimated from the 2D points. The should be rotation and translation compensated.")]
+        [Tooltip("These are 3D points estimated from the 2D points. The should be rotation and translation compensated. There are 70 points with guesses for the eyeball center positions being added at the end of the 68 2D points.")]
         public Vector3[] points3D;
 
         public OpenSeeData() {
@@ -81,6 +85,9 @@ public class OpenSee : MonoBehaviour {
         public void readFromPacket(byte[] b, int o) {
             time = System.BitConverter.ToDouble(b, o);
             o += 8;
+            
+            rightEyeOpen = readFloat(b, ref o);
+            leftEyeOpen = readFloat(b, ref o);
 
             byte got3D = b[o];
             o++;
@@ -105,14 +112,23 @@ public class OpenSee : MonoBehaviour {
             for (int i = 0; i < nPoints; i++) {
                 confidence[i] = readFloat(b, ref o);
             }
+            
+            // Gaze tracker results are still bad, ignore them
+            readFloat(b, ref o); readFloat(b, ref o);
 
             for (int i = 0; i < nPoints; i++) {
                 points[i] = readVector2(b, ref o);
             }
+            
+            // Gaze tracker results are still bad, ignore them
+            readVector2(b, ref o); readVector2(b, ref o);
 
             for (int i = 0; i < nPoints; i++) {
                 points3D[i] = readVector3(b, ref o);
             }
+            
+            // Gaze tracker results are still bad, ignore them
+            readVector3(b, ref o); readVector3(b, ref o); readVector3(b, ref o); readVector3(b, ref o);
         }
     }
 

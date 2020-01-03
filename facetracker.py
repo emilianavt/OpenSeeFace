@@ -28,6 +28,7 @@ parser.add_argument("--log-data", help="You can set a filename to which tracking
 parser.add_argument("--model", type=int, help="This can be used to select between the two models with 0 being the original model that might be overall more accurate, 1 being a model that might be able to fit eye and eyebrow shapes more accurately and 2 being a much faster, but lower accuracy model", default=1, choices=[0, 1, 2])
 parser.add_argument("--model-dir", help="This can be used to specify the path to the directory containing the .onnx model files", default=None)
 parser.add_argument("--high-quality-3d", type=int, help="When set to 1, more nose points are used when estimating the face pose", default=1)
+parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experimental blink detection and gaze tracking are enabled, which makes things slightly slower", default=1)
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -103,7 +104,7 @@ try:
             first = False
             height, width, channels = frame.shape
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, pnp_quality=args.high_quality_3d, model_dir=args.model_dir)
+            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, pnp_quality=args.high_quality_3d, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True)
             if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (width,height))
 
@@ -114,13 +115,15 @@ try:
             tracking_frames += 1
         packet = bytearray()
         detected = False
-        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d) in enumerate(faces):
+        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d, (right_open, left_open)) in enumerate(faces): # TODO: eye_state
             if args.silent == 0:
                 print(f"Confidence: {conf:.4f} / 3D fitting error: {pnp_error:.4f}")
             detected = True
             if not success_3d:
-                pts_3d = np.zeros((66, 3), np.float32)
+                pts_3d = np.zeros((70, 3), np.float32)
             packet.extend(bytearray(struct.pack("d", now)))
+            packet.extend(bytearray(struct.pack("f", right_open)))
+            packet.extend(bytearray(struct.pack("f", left_open)))
             packet.extend(bytearray(struct.pack("B", 1 if success_3d else 0)))
             packet.extend(bytearray(struct.pack("f", pnp_error)))
             packet.extend(bytearray(struct.pack("f", quaternion[0])))
@@ -142,6 +145,10 @@ try:
                 packet.extend(bytearray(struct.pack("f", x)))
                 if not log is None:
                     log.write(f",{y},{x},{c}")
+                if pt_num == 66:# and right_open < 0.5:
+                    continue
+                if pt_num == 67:# and left_open < 0.5:
+                    continue
                 if args.visualize != 0 or not out is None:
                     if args.visualize > 1:
                         frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
