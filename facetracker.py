@@ -13,7 +13,7 @@ if os.name == 'nt':
 else:
     parser.add_argument("-W", "--width", type=int, help="Set raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
-parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default=0)
+parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default="0")
 parser.add_argument("-m", "--max-threads", type=int, help="Set the maximum number of threads", default=1)
 parser.add_argument("-t", "--threshold", type=float, help="Set minimum confidence threshold for face detection", default=0.4)
 parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visualize the tracking or to 2 to add numbers to the point display", default=0)
@@ -79,7 +79,7 @@ frame_count = 0
 
 if args.log_data != "":
     log = open(args.log_data, "w")
-    log.write("Frame,Time,Face,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
+    log.write("Frame,Time,Face,RightOpen,LeftOpen,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
     for i in range(66):
         log.write(f",Landmark[{i}].X,Landmark[{i}].Y,Landmark[{i}].Confidence")
     for i in range(66):
@@ -108,16 +108,18 @@ try:
             if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (width,height))
 
-        inference_start = time.time()
+        inference_start = time.perf_counter()
         faces = tracker.predict(frame)
         if len(faces) > 0:
-            tracking_time += (time.time() - inference_start) / len(faces)
+            tracking_time += (time.perf_counter() - inference_start) / len(faces)
             tracking_frames += 1
         packet = bytearray()
         detected = False
-        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d, (right_open, left_open)) in enumerate(faces): # TODO: eye_state
+        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d, (right_open, left_open), (face_y, face_x, face_height, face_width)) in enumerate(faces):
+            left_state = "O" if left_open > 0.5 else "-"
+            right_state = "O" if right_open > 0.5 else "-"
             if args.silent == 0:
-                print(f"Confidence: {conf:.4f} / 3D fitting error: {pnp_error:.4f}")
+                print(f"Confidence: {conf:.4f} / 3D fitting error: {pnp_error:.4f} / Eyes: {left_state}, {right_state}")
             detected = True
             if not success_3d:
                 pts_3d = np.zeros((70, 3), np.float32)
@@ -133,11 +135,11 @@ try:
             packet.extend(bytearray(struct.pack("f", euler[0])))
             packet.extend(bytearray(struct.pack("f", euler[1])))
             packet.extend(bytearray(struct.pack("f", euler[2])))
-            packet.extend(bytearray(struct.pack("f", translation[0][0])))
-            packet.extend(bytearray(struct.pack("f", translation[0][1])))
-            packet.extend(bytearray(struct.pack("f", translation[0][2])))
+            packet.extend(bytearray(struct.pack("f", translation[0])))
+            packet.extend(bytearray(struct.pack("f", translation[1])))
+            packet.extend(bytearray(struct.pack("f", translation[2])))
             if not log is None:
-                log.write(f"{frame_count},{now},{face_num},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{rotation[0][0]},{rotation[0][1]},{rotation[0][2]},{translation[0][0]},{translation[0][1]},{translation[0][2]}")
+                log.write(f"{frame_count},{now},{face_num},{right_open},{left_open},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{rotation[0][0]},{rotation[0][1]},{rotation[0][2]},{translation[0][0]},{translation[0][1]},{translation[0][2]}")
             for (x,y,c) in lms:
                 packet.extend(bytearray(struct.pack("f", c)))
             for pt_num, (x,y,c) in enumerate(lms):
@@ -194,7 +196,7 @@ try:
             out.write(frame)
 
         if args.visualize != 0:
-            cv2.imshow('Frame', frame)
+            cv2.imshow('OpenSeeFace Visualization', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 except KeyboardInterrupt:

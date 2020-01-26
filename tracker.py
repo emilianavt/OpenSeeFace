@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import math
 import cv2
 import onnxruntime
 import time
@@ -218,7 +219,7 @@ class Tracker():
             [-0.25799, 0.27608, -0.16923],
             [0.25799, 0.27608, -0.24967],
             [-0.25799, 0.27608, -0.24967],
-        ], np.float32) * np.array([1.0, 1.0, 1.15])
+        ], np.float32) * np.array([1.0, 1.0, 1.3])
         
         self.contour = np.empty((21 if self.high_quality_3d else 18, 3))
         self.contour[0:17] = self.face_3d[0:17]
@@ -256,23 +257,10 @@ class Tracker():
             y = m % 28
             conf = float(tensor[i][x,y])
             avg_conf = avg_conf + conf
-
-            # Bugfix for heatmaps being offset during training (models need retraining, but this seems to be working fine somehow)
-            x += 2
-            y += 2
-            if x >= 28:
-                x = 27
-            if y >= 28:
-                y = 27
-
-            off_x = 0
-            off_y = 0
-            if self.model_type > 0:
-                off_x = self.res * ((1. * logit(tensor[66 + i][y, x])) - 0.0)
-                off_y = self.res * ((1. * logit(tensor[66 * 2 + i][y, x])) - 0.0)
-            else:
-                off_x = self.res * ((2. * float(tensor[66 + i][y, x])) - 1.0)
-                off_y = self.res * ((2. * float(tensor[66 * 2 + i][y, x])) - 1.0)
+            off_x = self.res * ((1. * logit(tensor[66 + i][x, y])) - 0.0)
+            off_y = self.res * ((1. * logit(tensor[66 * 2 + i][x, y])) - 0.0)
+            off_x = math.floor(off_x + 0.5)
+            off_y = math.floor(off_y + 0.5)
             lm_x = crop_y1 + scale_y * (self.res * (float(x) / 28.) + off_x)
             lm_y = crop_x1 + scale_x * (self.res * (float(y) / 28.) + off_y)
             lms.append((lm_x,lm_y,conf))
@@ -291,19 +279,19 @@ class Tracker():
 
         success = False
         if self.max_faces < 2 and not self.rotation is None:
-            success, self.rotation, self.translation, inliers = cv2.solvePnPRansac(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(self.rotation), tvec=np.transpose(self.translation), flags=cv2.SOLVEPNP_ITERATIVE)
+            success, self.rotation, self.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(self.rotation), tvec=np.transpose(self.translation), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
-            rvec = np.array([-180, 0, -90], np.float32)
+            rvec = np.array([0, 0, 0], np.float32)
             tvec = np.array([0, 0, 0], np.float32)
-            success, self.rotation, self.translation, inliers = cv2.solvePnPRansac(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
+            success, self.rotation, self.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
 
         rotation = self.rotation
         translation = self.translation
 
         pts_3d = np.zeros((70,3), np.float32)
         if not success:
-            self.rotation = np.array([[0.0, 0.0, 0.0]], np.float32)
-            self.translation = np.array([[0.0, 0.0, 0.0]], np.float32)
+            self.rotation = np.array([0.0, 0.0, 0.0], np.float32)
+            self.translation = np.array([0.0, 0.0, 0.0], np.float32)
             return False, np.zeros(4), np.zeros(3), 99999., pts_3d, lms
         else:
             self.rotation = np.transpose(self.rotation)
@@ -325,7 +313,7 @@ class Tracker():
                 continue
             reference = rmat.dot(pt)
             reference = reference + self.translation
-            reference = self.camera.dot(reference[0])
+            reference = self.camera.dot(reference)
             depth = reference[2]
             if i < 17 or i == 30:
                 reference = reference / depth
@@ -335,7 +323,7 @@ class Tracker():
             pt_3d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
             pt_3d = self.inverse_camera.dot(pt_3d) 
             pt_3d = pt_3d - self.translation
-            pt_3d = inverse_rotation.dot(pt_3d[0])
+            pt_3d = inverse_rotation.dot(pt_3d)
             pts_3d[i,:] = pt_3d[:]
 
         euler = cv2.RQDecomp3x3(rmat)[0]
@@ -402,7 +390,7 @@ class Tracker():
         return eye_state
 
     def predict(self, frame, additional_faces=[]):
-        start = time.time()
+        start = time.perf_counter()
         im = frame
 
         duration_fd = 0.0
@@ -416,16 +404,16 @@ class Tracker():
         self.wait_count += 1
         if self.detected < self.max_faces:
             if self.detected == 0 or self.wait_count >= self.scan_every:
-                start_fd = time.time()
+                start_fd = time.perf_counter()
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 new_faces.extend(list(self.faceCascade.detectMultiScale(gray, 1.3, 4, 0 | cv2.CASCADE_SCALE_IMAGE, (50, 50))))
-                duration_fd = 1000 * (time.time() - start_fd)
+                duration_fd = 1000 * (time.perf_counter() - start_fd)
                 self.wait_count = 0
         else:
             self.wait_count = 0
 
         if len(new_faces) < 1:
-            duration = (time.time() - start) * 1000
+            duration = (time.perf_counter() - start) * 1000
             if not self.silent:
                 print(f"Took {duration:.2f}ms")
             return []
@@ -434,16 +422,11 @@ class Tracker():
         crop_info = []
         num_crops = 0
         for j, (x,y,w,h) in enumerate(new_faces):
-            if self.model_type < 2:
-                crop_x1 = x - int(w * 0.2)
-                crop_y1 = y - int(h * 0.25)
-                crop_x2 = x + w + int(w * 0.2)
-                crop_y2 = y + h + int(h * 0.25)
-            else:
-                crop_x1 = x - int(w * 0.1)
-                crop_y1 = y - int(h * 0.1)
-                crop_x2 = x + w + int(w * 0.1)
-                crop_y2 = y + h + int(h * 0.1)
+            crop_x1 = x - int(w * 0.1)
+            crop_y1 = y - int(h * 0.125)
+            crop_x2 = x + w + int(w * 0.1)
+            crop_y2 = y + h + int(h * 0.125)
+
             crop_x1, crop_y1 = clamp_to_im((crop_x1, crop_y1), self.width, self.height)
             crop_x2, crop_y2 = clamp_to_im((crop_x2, crop_y2), self.width, self.height)
 
@@ -453,16 +436,16 @@ class Tracker():
             if crop_x2 - crop_x1 < 4 or crop_y2 - crop_y1 < 4:
                 continue
 
-            start_pp = time.time()
+            start_pp = time.perf_counter()
             crop = self.preprocess(im, (crop_x1, crop_y1, crop_x2, crop_y2))
-            duration_pp += 1000 * (time.time() - start_pp)
+            duration_pp += 1000 * (time.perf_counter() - start_pp)
             crops.append(crop)
             crop_info.append((crop_x1, crop_y1, scale_x, scale_y))
             num_crops += 1
 
         groups = group_rects(new_faces)
 
-        start_model = time.time()
+        start_model = time.perf_counter()
         outputs = {}
         if num_crops == 1:
             output = self.session.run([], {self.input_name: crops[0]})[0]
@@ -499,7 +482,7 @@ class Tracker():
                 best_results[group_id][1] = (lms, eye_state)
         
         sorted_results = sorted(best_results.values(), key=lambda x: x[0], reverse=True)
-        duration_model = 1000 * (time.time() - start_model)
+        duration_model = 1000 * (time.perf_counter() - start_model)
 
         results = []
         detected = []
@@ -509,10 +492,9 @@ class Tracker():
                 break;
             if conf > self.threshold:
                 detections += 1
-                start_pnp = time.time()
+                start_pnp = time.perf_counter()
                 success, quaternion, euler, pnp_error, pts_3d, lms = self.estimateDepth(lms, eye_state)
-                duration_pnp += 1000 * (time.time() - start_pnp)
-                results.append((conf, lms, success, pnp_error, quaternion, euler, self.rotation, self.translation, pts_3d, (eye_state[0][0], eye_state[1][0])))
+                duration_pnp += 1000 * (time.perf_counter() - start_pnp)
                 min_x = 10000
                 max_x = -1
                 min_y = 10000
@@ -529,6 +511,7 @@ class Tracker():
                 w = max_x - min_x
                 y = max_y - min_y
                 detected.append((min_y, min_x, max_y - min_y, max_x - min_x))
+                results.append((conf, lms, success, pnp_error, quaternion, euler, self.rotation, self.translation, pts_3d, (eye_state[0][0], eye_state[1][0]), (min_y, min_x, max_y - min_y, max_x - min_x)))
 
         if len(detected) > 0:
             self.detected = len(detected)
@@ -552,8 +535,10 @@ class Tracker():
                         faces.append((x,y,w,h))
                     self.faces = faces
 
-        duration = (time.time() - start) * 1000
+        duration = (time.perf_counter() - start) * 1000
         if not self.silent:
             print(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
+        
+        results = sorted(results, key=lambda x: x[10][1] * self.height + x[10][0])
 
         return results

@@ -101,13 +101,13 @@ public class OpenSee : MonoBehaviour {
             rawEuler = readVector3(b, ref o);
 
             rotation = rawEuler;
-            rotation.z = (rotation.z + 90) % 360;
+            rotation.z = (rotation.z - 90) % 360;
             rotation.x = -(rotation.x + 180) % 360;
 
             float x = readFloat(b, ref o);
             float y = readFloat(b, ref o);
             float z = readFloat(b, ref o);
-            translation = new Vector3(y, -x, z);
+            translation = new Vector3(-y, x, -z);
 
             for (int i = 0; i < nPoints; i++) {
                 confidence[i] = readFloat(b, ref o);
