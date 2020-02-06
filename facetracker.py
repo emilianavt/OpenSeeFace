@@ -25,7 +25,7 @@ parser.add_argument("--discard-after", type=int, help="Set the how long the trac
 parser.add_argument("--video-out", help="Set this to the filename of an AVI file to save the tracking visualization as a video", default=None)
 parser.add_argument("--raw-rgb", type=int, help="When this is set, raw RGB frames of the size given with \"-W\" and \"-H\" are read from standard input instead of reading a video", default=0)
 parser.add_argument("--log-data", help="You can set a filename to which tracking data will be logged here", default="")
-parser.add_argument("--model", type=int, help="This can be used to select between the two models with 0 being the original model that might be overall more accurate, 1 being a model that might be able to fit eye and eyebrow shapes more accurately and 2 being a much faster, but lower accuracy model", default=1, choices=[0, 1, 2])
+parser.add_argument("--model", type=int, help="This can be used to select the tracking model. Higher numbers are models with better tracking quality, but slower speed. The recommended models are 3 and 1.", default=3, choices=[0, 1, 2, 3])
 parser.add_argument("--model-dir", help="This can be used to specify the path to the directory containing the .onnx model files", default=None)
 parser.add_argument("--high-quality-3d", type=int, help="When set to 1, more nose points are used when estimating the face pose", default=1)
 parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experimental blink detection and gaze tracking are enabled, which makes things slightly slower", default=1)
@@ -79,7 +79,7 @@ frame_count = 0
 
 if args.log_data != "":
     log = open(args.log_data, "w")
-    log.write("Frame,Time,Face,RightOpen,LeftOpen,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
+    log.write("Frame,Time,Width,Height,FPS,Face,RightOpen,LeftOpen,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,Euler.X,Euler.Y,Euler.Z,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
     for i in range(66):
         log.write(f",Landmark[{i}].X,Landmark[{i}].Y,Landmark[{i}].Confidence")
     for i in range(66):
@@ -106,7 +106,7 @@ try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, pnp_quality=args.high_quality_3d, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True)
             if not args.video_out is None:
-                out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('M','J','P','G'), 24, (width,height))
+                out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), 24, (width,height))
 
         inference_start = time.perf_counter()
         faces = tracker.predict(frame)
@@ -124,6 +124,8 @@ try:
             if not success_3d:
                 pts_3d = np.zeros((70, 3), np.float32)
             packet.extend(bytearray(struct.pack("d", now)))
+            packet.extend(bytearray(struct.pack("f", width)))
+            packet.extend(bytearray(struct.pack("f", height)))
             packet.extend(bytearray(struct.pack("f", right_open)))
             packet.extend(bytearray(struct.pack("f", left_open)))
             packet.extend(bytearray(struct.pack("B", 1 if success_3d else 0)))
@@ -139,7 +141,7 @@ try:
             packet.extend(bytearray(struct.pack("f", translation[1])))
             packet.extend(bytearray(struct.pack("f", translation[2])))
             if not log is None:
-                log.write(f"{frame_count},{now},{face_num},{right_open},{left_open},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{rotation[0][0]},{rotation[0][1]},{rotation[0][2]},{translation[0][0]},{translation[0][1]},{translation[0][2]}")
+                log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{right_open},{left_open},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{euler[0]},{euler[1]},{euler[2]},{rotation[0]},{rotation[1]},{rotation[2]},{translation[0]},{translation[1]},{translation[2]}")
             for (x,y,c) in lms:
                 packet.extend(bytearray(struct.pack("f", c)))
             for pt_num, (x,y,c) in enumerate(lms):

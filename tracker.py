@@ -88,7 +88,7 @@ def worker_thread(session, input, crop_info, queue, input_name, idx, tracker):
     queue.put((session, conf, lms, crop_info, idx))
 
 class Tracker():
-    def __init__(self, width, height, model_type=1, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False):
+    def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max_threads
@@ -96,7 +96,12 @@ class Tracker():
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
         self.model_type = model_type
-        self.models = ["snv2_opt.onnx", "snv2_opt_b.onnx", "snv2_opt_fast.onnx"]
+        self.models = [
+            "snv2_opt_fast.onnx",
+            "mnv3_opt_fast.onnx",
+            "snv2_opt_b.onnx",
+            "mnv3_opt_b.onnx"
+        ]
         model = self.models[self.model_type]
         model_base_path = resolve(os.path.join("models"))
         if model_dir is None:
@@ -243,7 +248,7 @@ class Tracker():
         self.scan_every = scan_every
         self.bbox_growth = bbox_growth
         self.silent = silent
-        self.res = 224. if self.model_type < 2 else 112.
+        self.res = 224. if self.model_type != 0 else 112.
         self.res_i = int(self.res)
         self.no_gaze = no_gaze
 
@@ -337,7 +342,7 @@ class Tracker():
         #im = (im - mean) / std
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,1,2))
-        if self.model_type > 1:
+        if self.model_type == 0:
             im = im.mean(1)
             im = np.expand_dims(im, 1)
         return im
