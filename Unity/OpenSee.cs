@@ -16,7 +16,7 @@ public class OpenSee : MonoBehaviour {
     public int listenPort = 11573;
 
     private const int nPoints = 66;
-    private const int packetFrameSize = 8 + 2 * 4 + 1 + 4 + 3 * 4 + 3 * 4 + 4 * 4 + 4 * 68 + 4 * 2 * 68 + 4 * 3 * 70;
+    private const int packetFrameSize = 8 + 2 * 4 + 2 * 4 + 1 + 4 + 3 * 4 + 3 * 4 + 4 * 4 + 4 * 68 + 4 * 2 * 68 + 4 * 3 * 70;
 
     [Header("Tracking data")]
     [Tooltip("This is an informational property that tells you how many packets have been received")]
@@ -28,6 +28,10 @@ public class OpenSee : MonoBehaviour {
     public class OpenSeeData {
         [Tooltip("The time this tracking data was captured at.")]
         public double time;
+        [Tooltip("This is the id of the tracked face. When tracking multiple faces, they might get reordered due to faces coming and going, but as long as tracking is not lost on a face, its id should stay the same.")]
+        public int id;
+        [Tooltip("This field gives the resolution of the camera or video being tracked.")]
+        public Vector2 cameraResolution;
         [Tooltip("This field tells you how likely it is that the right eye is open.")]
         public float rightEyeOpen;
         [Tooltip("This field tells you how likely it is that the left eye is open.")]
@@ -85,7 +89,10 @@ public class OpenSee : MonoBehaviour {
         public void readFromPacket(byte[] b, int o) {
             time = System.BitConverter.ToDouble(b, o);
             o += 8;
+            id = System.BitConverter.ToInt32(b, o);
+            o += 4;
             
+            cameraResolution = readVector2(b, ref o);
             rightEyeOpen = readFloat(b, ref o);
             leftEyeOpen = readFloat(b, ref o);
 

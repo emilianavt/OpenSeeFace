@@ -87,6 +87,21 @@ def worker_thread(session, input, crop_info, queue, input_name, idx, tracker):
     conf, lms = tracker.landmarks(output[0], crop_info)
     queue.put((session, conf, lms, crop_info, idx))
 
+class FaceInfo():
+    def __init__(self, id):
+        self.id = id
+        self.rotation = None
+        self.translation = None
+        self.coord = None
+        self.frame_count = -1
+    def update(self, coord, frame_count):
+        self.frame_count = frame_count
+        if coord is None:
+            self.rotation = None
+            self.translation = None
+        else:
+            self.coord = coord
+
 class Tracker():
     def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False):
         options = onnxruntime.SessionOptions()
@@ -236,6 +251,7 @@ class Tracker():
         self.inverse_camera = np.linalg.inv(self.camera)
         self.dist_coeffs = np.zeros((4,1))
 
+        self.frame_count = 0
         self.width = width
         self.height = height
         self.threshold = threshold
@@ -251,6 +267,7 @@ class Tracker():
         self.res = 224. if self.model_type != 0 else 112.
         self.res_i = int(self.res)
         self.no_gaze = no_gaze
+        self.face_info = [FaceInfo(id) for id in range(max_faces)]
 
     def landmarks(self, tensor, crop_info):
         crop_x1, crop_y1, scale_x, scale_y = crop_info
@@ -272,7 +289,7 @@ class Tracker():
         avg_conf = avg_conf / 66.
         return (avg_conf, lms)
 
-    def estimateDepth(self, lms, eye_state):
+    def estimateDepth(self, lms, eye_state, face_info):
         lms = np.concatenate((lms, np.array([[eye_state[0][1], eye_state[0][2], eye_state[0][3]], [eye_state[1][1], eye_state[1][2], eye_state[1][3]]], np.float)), 0)
 
         image_pts = np.empty((21 if self.high_quality_3d else 18, 2), np.float32)
@@ -283,24 +300,24 @@ class Tracker():
             image_pts[17] = np.array(lms)[30,0:2]
 
         success = False
-        if self.max_faces < 2 and not self.rotation is None:
-            success, self.rotation, self.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(self.rotation), tvec=np.transpose(self.translation), flags=cv2.SOLVEPNP_ITERATIVE)
+        if not face_info.rotation is None:
+            success, face_info.rotation, face_info.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(face_info.rotation), tvec=np.transpose(face_info.translation), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
             rvec = np.array([0, 0, 0], np.float32)
             tvec = np.array([0, 0, 0], np.float32)
-            success, self.rotation, self.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
+            success, face_info.rotation, face_info.translation = cv2.solvePnP(self.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
 
-        rotation = self.rotation
-        translation = self.translation
+        rotation = face_info.rotation
+        translation = face_info.translation
 
         pts_3d = np.zeros((70,3), np.float32)
         if not success:
-            self.rotation = np.array([0.0, 0.0, 0.0], np.float32)
-            self.translation = np.array([0.0, 0.0, 0.0], np.float32)
+            face_info.rotation = np.array([0.0, 0.0, 0.0], np.float32)
+            face_info.translation = np.array([0.0, 0.0, 0.0], np.float32)
             return False, np.zeros(4), np.zeros(3), 99999., pts_3d, lms
         else:
-            self.rotation = np.transpose(self.rotation)
-            self.translation = np.transpose(self.translation)
+            face_info.rotation = np.transpose(face_info.rotation)
+            face_info.translation = np.transpose(face_info.translation)
 
         rmat, _ = cv2.Rodrigues(rotation)
         inverse_rotation = np.linalg.inv(rmat)
@@ -317,7 +334,7 @@ class Tracker():
                 pts_3d[i] = pt_3d
                 continue
             reference = rmat.dot(pt)
-            reference = reference + self.translation
+            reference = reference + face_info.translation
             reference = self.camera.dot(reference)
             depth = reference[2]
             if i < 17 or i == 30:
@@ -327,7 +344,7 @@ class Tracker():
                 pnp_error += e1*e1 + e2*e2
             pt_3d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
             pt_3d = self.inverse_camera.dot(pt_3d) 
-            pt_3d = pt_3d - self.translation
+            pt_3d = pt_3d - face_info.translation
             pt_3d = inverse_rotation.dot(pt_3d)
             pts_3d[i,:] = pt_3d[:]
 
@@ -394,7 +411,31 @@ class Tracker():
 
         return eye_state
 
+    def get_face_info(self, lms):
+        coord = np.array(lms)[:, 0:2].mean(0)
+        empty = None
+        closest = None
+        best_distance = None
+        for face_info in self.face_info:
+            if face_info.frame_count != self.frame_count:
+                if face_info.coord is None:
+                    if empty is None:
+                        empty = face_info
+                else:
+                    d = np.linalg.norm(face_info.coord - coord)
+                    if best_distance is None or d < best_distance:
+                        best_distance = d
+                        closest = face_info
+        if closest is not None:
+            closest.update(coord, self.frame_count)
+            return closest
+        if empty is not None:
+            empty.update(coord, self.frame_count)
+            return empty
+        return FaceInfo(-1)
+
     def predict(self, frame, additional_faces=[]):
+        self.frame_count += 1
         start = time.perf_counter()
         im = frame
 
@@ -498,7 +539,8 @@ class Tracker():
             if conf > self.threshold:
                 detections += 1
                 start_pnp = time.perf_counter()
-                success, quaternion, euler, pnp_error, pts_3d, lms = self.estimateDepth(lms, eye_state)
+                face_info = self.get_face_info(lms)
+                success, quaternion, euler, pnp_error, pts_3d, lms = self.estimateDepth(lms, eye_state, face_info)
                 duration_pnp += 1000 * (time.perf_counter() - start_pnp)
                 min_x = 10000
                 max_x = -1
@@ -516,7 +558,11 @@ class Tracker():
                 w = max_x - min_x
                 y = max_y - min_y
                 detected.append((min_y, min_x, max_y - min_y, max_x - min_x))
-                results.append((conf, lms, success, pnp_error, quaternion, euler, self.rotation, self.translation, pts_3d, (eye_state[0][0], eye_state[1][0]), (min_y, min_x, max_y - min_y, max_x - min_x)))
+                results.append((conf, lms, success, pnp_error, quaternion, euler, face_info.rotation, face_info.translation, pts_3d, (eye_state[0][0], eye_state[1][0]), (min_y, min_x, max_y - min_y, max_x - min_x), face_info.id))
+
+        for face_info in self.face_info:
+            if face_info.frame_count != self.frame_count:
+                face_info.update(None, self.frame_count)
 
         if len(detected) > 0:
             self.detected = len(detected)
@@ -544,6 +590,6 @@ class Tracker():
         if not self.silent:
             print(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
         
-        results = sorted(results, key=lambda x: x[10][1] * self.height + x[10][0])
+        results = sorted(results, key=lambda x: x[11])
 
         return results

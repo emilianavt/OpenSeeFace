@@ -79,7 +79,7 @@ frame_count = 0
 
 if args.log_data != "":
     log = open(args.log_data, "w")
-    log.write("Frame,Time,Width,Height,FPS,Face,RightOpen,LeftOpen,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,Euler.X,Euler.Y,Euler.Z,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
+    log.write("Frame,Time,Width,Height,FPS,Face,FaceID,RightOpen,LeftOpen,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,Euler.X,Euler.Y,Euler.Z,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
     for i in range(66):
         log.write(f",Landmark[{i}].X,Landmark[{i}].Y,Landmark[{i}].Confidence")
     for i in range(66):
@@ -115,15 +115,16 @@ try:
             tracking_frames += 1
         packet = bytearray()
         detected = False
-        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d, (right_open, left_open), (face_y, face_x, face_height, face_width)) in enumerate(faces):
+        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d, (right_open, left_open), (face_y, face_x, face_height, face_width), face_id) in enumerate(faces):
             left_state = "O" if left_open > 0.5 else "-"
             right_state = "O" if right_open > 0.5 else "-"
             if args.silent == 0:
-                print(f"Confidence: {conf:.4f} / 3D fitting error: {pnp_error:.4f} / Eyes: {left_state}, {right_state}")
+                print(f"Confidence[{face_id}]: {conf:.4f} / 3D fitting error: {pnp_error:.4f} / Eyes: {left_state}, {right_state}")
             detected = True
             if not success_3d:
                 pts_3d = np.zeros((70, 3), np.float32)
             packet.extend(bytearray(struct.pack("d", now)))
+            packet.extend(bytearray(struct.pack("i", face_id)))
             packet.extend(bytearray(struct.pack("f", width)))
             packet.extend(bytearray(struct.pack("f", height)))
             packet.extend(bytearray(struct.pack("f", right_open)))
@@ -141,7 +142,7 @@ try:
             packet.extend(bytearray(struct.pack("f", translation[1])))
             packet.extend(bytearray(struct.pack("f", translation[2])))
             if not log is None:
-                log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{right_open},{left_open},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{euler[0]},{euler[1]},{euler[2]},{rotation[0]},{rotation[1]},{rotation[2]},{translation[0]},{translation[1]},{translation[2]}")
+                log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{face_id},{right_open},{left_open},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{euler[0]},{euler[1]},{euler[2]},{rotation[0]},{rotation[1]},{rotation[2]},{translation[0]},{translation[1]},{translation[2]}")
             for (x,y,c) in lms:
                 packet.extend(bytearray(struct.pack("f", c)))
             for pt_num, (x,y,c) in enumerate(lms):
