@@ -16,7 +16,7 @@ else:
 parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default="0")
 parser.add_argument("-m", "--max-threads", type=int, help="Set the maximum number of threads", default=1)
 parser.add_argument("-t", "--threshold", type=float, help="Set minimum confidence threshold for face detection", default=0.4)
-parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visualize the tracking or to 2 to add numbers to the point display", default=0)
+parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visualize the tracking, to 2 to also show face ids or to 3 to add numbers to the point display", default=0)
 parser.add_argument("-P", "--pnp-points", type=int, help="Set this to 1 to add the 3D fitting points to the visualization", default=0)
 parser.add_argument("-s", "--silent", type=int, help="Set this to 1 to prevent text output on the console", default=0)
 parser.add_argument("--faces", type=int, help="Set the maximum number of faces (slow)", default=1)
@@ -156,6 +156,8 @@ try:
                     continue
                 if args.visualize != 0 or not out is None:
                     if args.visualize > 1:
+                        frame = cv2.putText(frame, str(f.id), (int(f.bbox[0]), int(f.bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
+                    if args.visualize > 2:
                         frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = (0, 0, 255)

@@ -309,7 +309,7 @@ class Tracker():
 
         image_pts = np.empty((21 if self.high_quality_3d else 18, 2), np.float32)
         image_pts[0:17] = np.array(lms)[0:17,0:2]
-        if (self.high_quality_3d):
+        if self.high_quality_3d:
             image_pts[17:21] = np.array(lms)[27:31,0:2]
         else:
             image_pts[17] = np.array(lms)[30,0:2]
@@ -391,6 +391,8 @@ class Tracker():
         x2 = x1 + dist
         y2 = y1 + dist
         im = np.float32(frame[int(y1):int(y2), int(x1):int(x2),::-1])
+        if np.prod(im.shape) < 1:
+            return None, None, None, None
         im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_LINEAR) / self.std - self.mean
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,1,2))
@@ -405,6 +407,8 @@ class Tracker():
         scale = [0,0]
         (right_eye, e_x[0], e_y[0], scale[0]) = self.prepare_eye(frame, lms[36:42,0:2])
         (left_eye, e_x[1], e_y[1], scale[1]) = self.prepare_eye(frame, lms[42:48,0:2])
+        if right_eye is None or left_eye is None:
+            return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         both_eyes = np.concatenate((right_eye, left_eye))
         results = np.array(self.gaze_model.run([], {self.input_name: both_eyes})[0])
         open = [0, 0]
