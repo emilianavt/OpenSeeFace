@@ -115,37 +115,37 @@ try:
             tracking_frames += 1
         packet = bytearray()
         detected = False
-        for face_num, (conf, lms, success_3d, pnp_error, quaternion, euler, rotation, translation, pts_3d, (right_open, left_open), (face_y, face_x, face_height, face_width), face_id) in enumerate(faces):
-            left_state = "O" if left_open > 0.5 else "-"
-            right_state = "O" if right_open > 0.5 else "-"
+        for face_num, f in enumerate(faces):
+            right_state = "O" if f.eye_blink[0] > 0.5 else "-"
+            left_state = "O" if f.eye_blink[1] > 0.5 else "-"
             if args.silent == 0:
-                print(f"Confidence[{face_id}]: {conf:.4f} / 3D fitting error: {pnp_error:.4f} / Eyes: {left_state}, {right_state}")
+                print(f"Confidence[{f.id}]: {f.conf:.4f} / 3D fitting error: {f.pnp_error:.4f} / Eyes: {left_state}, {right_state}")
             detected = True
-            if not success_3d:
+            if not f.success:
                 pts_3d = np.zeros((70, 3), np.float32)
             packet.extend(bytearray(struct.pack("d", now)))
-            packet.extend(bytearray(struct.pack("i", face_id)))
+            packet.extend(bytearray(struct.pack("i", f.id)))
             packet.extend(bytearray(struct.pack("f", width)))
             packet.extend(bytearray(struct.pack("f", height)))
-            packet.extend(bytearray(struct.pack("f", right_open)))
-            packet.extend(bytearray(struct.pack("f", left_open)))
-            packet.extend(bytearray(struct.pack("B", 1 if success_3d else 0)))
-            packet.extend(bytearray(struct.pack("f", pnp_error)))
-            packet.extend(bytearray(struct.pack("f", quaternion[0])))
-            packet.extend(bytearray(struct.pack("f", quaternion[1])))
-            packet.extend(bytearray(struct.pack("f", quaternion[2])))
-            packet.extend(bytearray(struct.pack("f", quaternion[3])))
-            packet.extend(bytearray(struct.pack("f", euler[0])))
-            packet.extend(bytearray(struct.pack("f", euler[1])))
-            packet.extend(bytearray(struct.pack("f", euler[2])))
-            packet.extend(bytearray(struct.pack("f", translation[0])))
-            packet.extend(bytearray(struct.pack("f", translation[1])))
-            packet.extend(bytearray(struct.pack("f", translation[2])))
+            packet.extend(bytearray(struct.pack("f", f.eye_blink[0])))
+            packet.extend(bytearray(struct.pack("f", f.eye_blink[1])))
+            packet.extend(bytearray(struct.pack("B", 1 if f.success else 0)))
+            packet.extend(bytearray(struct.pack("f", f.pnp_error)))
+            packet.extend(bytearray(struct.pack("f", f.quaternion[0])))
+            packet.extend(bytearray(struct.pack("f", f.quaternion[1])))
+            packet.extend(bytearray(struct.pack("f", f.quaternion[2])))
+            packet.extend(bytearray(struct.pack("f", f.quaternion[3])))
+            packet.extend(bytearray(struct.pack("f", f.euler[0])))
+            packet.extend(bytearray(struct.pack("f", f.euler[1])))
+            packet.extend(bytearray(struct.pack("f", f.euler[2])))
+            packet.extend(bytearray(struct.pack("f", f.translation[0])))
+            packet.extend(bytearray(struct.pack("f", f.translation[1])))
+            packet.extend(bytearray(struct.pack("f", f.translation[2])))
             if not log is None:
-                log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{face_id},{right_open},{left_open},{conf},{success_3d},{pnp_error},{quaternion[0]},{quaternion[1]},{quaternion[2]},{quaternion[3]},{euler[0]},{euler[1]},{euler[2]},{rotation[0]},{rotation[1]},{rotation[2]},{translation[0]},{translation[1]},{translation[2]}")
-            for (x,y,c) in lms:
+                log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{f.id},{f.eye_blink[0]},{f.eye_blink[1]},{f.conf},{f.success},{f.pnp_error},{f.quaternion[0]},{f.quaternion[1]},{f.quaternion[2]},{f.quaternion[3]},{f.euler[0]},{f.euler[1]},{f.euler[2]},{f.rotation[0]},{f.rotation[1]},{f.rotation[2]},{f.translation[0]},{f.translation[1]},{f.translation[2]}")
+            for (x,y,c) in f.lms:
                 packet.extend(bytearray(struct.pack("f", c)))
-            for pt_num, (x,y,c) in enumerate(lms):
+            for pt_num, (x,y,c) in enumerate(f.lms):
                 packet.extend(bytearray(struct.pack("f", y)))
                 packet.extend(bytearray(struct.pack("f", x)))
                 if not log is None:
@@ -169,7 +169,7 @@ try:
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = (0, 0, 255)
             if args.pnp_points != 0 and (args.visualize != 0 or not out is None):
-                projected = cv2.projectPoints(tracker.contour, rotation, translation, tracker.camera, tracker.dist_coeffs)
+                projected = cv2.projectPoints(tracker.contour, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
                 for [(x,y)] in projected[0]:
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = (0, 255, 255)
@@ -182,7 +182,7 @@ try:
                     x -= 1
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = (0, 255, 255)
-            for (x,y,z) in pts_3d:
+            for (x,y,z) in f.pts_3d:
                 packet.extend(bytearray(struct.pack("f", x)))
                 packet.extend(bytearray(struct.pack("f", -y)))
                 packet.extend(bytearray(struct.pack("f", -z)))
