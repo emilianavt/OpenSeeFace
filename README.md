@@ -38,6 +38,27 @@ The `OpenSeeLauncher` component uses WinAPI job objects to ensure that the track
 
 Additional custom commandline arguments should be added one by one into elements of `commandlineArguments` array. For example `-v 1` should be added as two elements, one element containing `-v` and one containing `1`, not a single one containing both parts.
 
+## Expression detection
+
+The `OpenSeeExpression` component can be added to the same component as the `OpenSeeFace` component to detect specific facial expressions. It has to be calibrated on a per-user basis. It can be controlled either through the checkboxes in the Unity Editor or through the equivalent public methods that can be found in its source code.
+
+To calibrate this system, you have to gather example data for each expression. The way `OpenSeeExpression` is set up, it requires 400 examples of each expression, which should take around 30 seconds to capture. If capture is too fast, you can use the `recordingSkip` option to slow it down.
+
+The general process is as follows:
+
+* Type in a name for the expression you want to calibrate.
+* Make the expression and hold it, then tick the recording box.
+* Keep holding the expression and move your head around and turn it in various directions.
+* After a short while, start talking while doing so if the expression should be compatible with talking.
+* When the "Percent Recorded" field is at around 50, untick the recording box and work on capturing another expression.
+* When you have them all at around 50, go back to the first and go through them again to bring all the way to 100%.
+* Then tick the train box and you should get some statistics in the lower part.
+* Tick the predict box and it will show you which expression you are making.
+
+To delete the captured data for an expression, type in its name and tick the "Clear" box. To save both the trained model and the captured training data, type in a filename including its full path in the "Filename" field and tick the "Save" box. To load it, enter the filename and tick the "Load" box.
+
+Up to 25 expressions are supported, but a more reasonable number is 5-6.
+
 # General notes
 
 * The tracking seems to be quite robust even with partial occlusion of the face, glasses or bad lighting conditions.
@@ -48,11 +69,14 @@ Additional custom commandline arguments should be added one by one into elements
 
 # Models
 
-Three pretrained models are included. Using the `--model` switch, it is possible to select them for tracking.
+Four pretrained models are included. Using the `--model` switch, it is possible to select them for tracking.
 
-* Model **0**: This is the original model I trained. It is the most reliable for general 3D pose tracking, but it has difficulties with eyebrow and eye positions.
-* Model **1** (default): This model trades off a little bit of robustness for better facial feature tracking.
-* Model **2**: This is a smaller model that can run much faster, easily reaching 60 - 90 fps on a single CPU core. However, the tracking robustness and accuracy are lower.
+* Model **0**: This is a very fast, low accuracy model based on ShuffleNetV2. (67fps)
+* Model **1**: This is a slightly slower model with better accuracy based on MobileNetV3. (62fps)
+* Model **2**: This is a slower model with good accuracy based on ShuffleNetV2. (45fps)
+* Model **3** (default): This is the slowest and highest accuracy model. It is based on MobileNetV3. (42fps)
+
+FPS measurements are from running on one core of my CPU.
 
 # Release builds
 
@@ -97,8 +121,6 @@ Additional training has been done on the WFLW dataset after reducing it to 66 po
       year = {2018}
     }
 
-The original model can still be selected with `--model 0` instead.
-
 For the training the gaze and blink detection model, the WFLW dataset and [MRL Eye](http://mrl.cs.vsb.cz/eyedataset) datasets were used.
 
 ## Algorithm
@@ -110,16 +132,19 @@ The algorithm is inspired by:
 * [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/) by Olaf Ronneberger, Philipp Fischer, Thomas Brox
 * [MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://arxiv.org/abs/1704.04861) by Andrew G. Howard, Menglong Zhu, Bo Chen, Dmitry Kalenichenko, Weijun Wang, Tobias Weyand, Marco Andreetto, Hartwig Adam
 * [ShuffleNet V2: Practical Guidelines for Efficient CNN Architecture Design](https://arxiv.org/abs/1807.11164) by Ningning Ma, Xiangyu Zhang, Hai-Tao Zheng, Jian Sun
+* [Searching for MobileNetV3](https://arxiv.org/abs/1905.02244) by Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam
 
-The ShuffleNet V2 code is taken from `torchvision`.
+The ShuffleNet V2 code is taken from `torchvision`. The MobileNetV3 code was taken from [here](https://github.com/rwightman/gen-efficientnet-pytorch).
 
 For all training after the first model, a modified version of [Adaptive Wing Loss](https://github.com/tankrant/Adaptive-Wing-Loss) was used.
 
 * [Adaptive Wing Loss for Robust Face Alignment via Heatmap Regression](https://arxiv.org/abs/1904.07399) by Xinyao Wang, Liefeng Bo, Li Fuxin
 
+For expression detection, [LIBSVM](https://www.csie.ntu.edu.tw/~cjlin/libsvm/) is used.
+
 # License
 
-The code and model are distributed under the BSD 2-clause license. 
+The code and models are distributed under the BSD 2-clause license. 
 
 `models/haarcascade_frontalface_alt2.xml` is distributed under its own license. You can find licenses of third party libraries used for binary builds in the `Licenses` folder.
 
