@@ -31,9 +31,12 @@ public class OpenSeeIKTarget : MonoBehaviour
             return;
         }
         
+        // new Quaternion(-openSeeData[idx].rawQuaternion.x, -openSeeData[idx].rawQuaternion.y, openSeeData[idx].rawQuaternion.z, openSeeData[idx].rawQuaternion.w); // Good except for the head tilt in the start being flipped
+        Quaternion convertedQuaternion = new Quaternion(-openSeeData[idx].rawQuaternion.y, -openSeeData[idx].rawQuaternion.x, openSeeData[idx].rawQuaternion.z, openSeeData[idx].rawQuaternion.w);
+
         if (calibrate) {
             calibrate = false;
-            dR = Quaternion.Euler(-openSeeData[idx].rotation.x, openSeeData[idx].rotation.y, -openSeeData[0].rotation.z);
+            dR = convertedQuaternion;//Quaternion.Euler(-openSeeData[idx].rotation.x, openSeeData[idx].rotation.y, -openSeeData[0].rotation.z);
             dR = Quaternion.Inverse(dR);
             dT = openSeeData[idx].translation;
         }
@@ -41,6 +44,6 @@ public class OpenSeeIKTarget : MonoBehaviour
         Vector3 v = openSeeData[idx].translation - dT;
         v.z = -v.z;
         transform.localPosition = Vector3.Lerp(transform.localPosition, v * translationScale, 1f - smooth);
-        transform.localRotation = Quaternion.Lerp(transform.localRotation, Quaternion.Euler(-openSeeData[idx].rotation.x, openSeeData[idx].rotation.y, -openSeeData[idx].rotation.z) * dR, 1f - smooth);
+        transform.localRotation = Quaternion.Lerp(transform.localRotation, /*Quaternion.Euler(-openSeeData[idx].rotation.x, openSeeData[idx].rotation.y, -openSeeData[idx].rotation.z)*/ convertedQuaternion * dR, 1f - smooth);
     }
 }
