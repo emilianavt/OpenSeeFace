@@ -179,11 +179,11 @@ public class OpenSeeExpression : MonoBehaviour
         List<string> keys = new List<string>();
         foreach (string key in expressions.Keys) {
             List<float[]> list = expressions[key];
-            if (list.Count == maxSamples)
+            if (list != null && list.Count == maxSamples)
                 keys.Add(key);
             else {
-                Debug.Log("[Training error] Skipping expression " + key + " due to lack of collected data.");
-                return false;
+                Debug.Log("[Training warning] Skipping expression " + key + " due to lack of collected data.");
+                continue;
             }
         }
         int classes = keys.Count;
