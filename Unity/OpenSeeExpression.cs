@@ -21,11 +21,15 @@ public class OpenSeeExpression : MonoBehaviour
     public int expressionStabilizer = 1;
     [Tooltip("Setting this to a value above 1 will record only every recordingSkip-th frame when capture calibration data. This can be useful with cameras that have a high framerate leading to only a short time for capturing varied expression information. Usually at least 20-30 seconds are required to capture a good variety of angles and expression variation, so this should be set accordingly when using the recording flag. At 1, no frames are skipped.")]
     public int recordingSkip = 2;
+    [Tooltip("If allowOverRecording is enabled and expression data is recorded beyond 100%, this is used instead of recordingSkip to avoid quickly replacing the existing data.")]
+    public int overRecordingSkip = 5;
     [Tooltip("This is the filename used for loading and saving expression data using the load and save flags.")]
     public string filename = "";
     [Header("Toggles")]
     [Tooltip("When enabled, calibration data will be collected from the given OpenSee component.")]
     public bool recording = false;
+    [Tooltip("When enabled, you can keep recording past 100%. When doing so, random frames in the already collected data will be overwritten with new data. To prevent quickly replacing all the collected data, overRecordingSkip is used instead of recordingSkip, which should be set to a higher value.")]
+    public bool allowOverRecording = false;
     [Tooltip("When enabled, the calibration data collected for the current expression is cleared and this flag is set back to false.")]
     public bool clear = false;
     [Tooltip("When enabled, a new prediction model is trained and this flag is set back to false. Only expressions for which percentRecorded is 100% will be included in training.")]
@@ -104,6 +108,7 @@ public class OpenSeeExpression : MonoBehaviour
     private int lastPrediction = -1;
     private int lastPredictionCount = 0;
     private int frameCount = 0;
+    private System.Random rnd;
 
     private void ResetInfo() {
         recording = false;
@@ -134,6 +139,7 @@ public class OpenSeeExpression : MonoBehaviour
         ResetInfo();
         expressions = new Dictionary<string, List<float[]>>();
         model = new SVMModel();
+        rnd = new System.Random();
     }
 
     private float[] GetData(OpenSee.OpenSeeData t) {
@@ -175,12 +181,16 @@ public class OpenSeeExpression : MonoBehaviour
             List<float[]> list = expressions[key];
             if (list.Count == maxSamples)
                 keys.Add(key);
-            else
+            else {
+                Debug.Log("[Training error] Skipping expression " + key + " due to lack of collected data.");
                 return false;
+            }
         }
         int classes = keys.Count;
-        if (classes < 2 || classes > 25)
+        if (classes < 2 || classes > 25) {
+            Debug.Log("[Training error] The number of expressions that can be used for training is " + classes + ", which is either below 2 or higher than 25.");
             return false;
+        }
         keys.Sort();
         classLabels = keys.ToArray();
         int train_split = maxSamples * 3 / 4;
@@ -290,12 +300,19 @@ public class OpenSeeExpression : MonoBehaviour
             List<float[]> list = expressions[calibrationExpression];
             if (list.Count >= maxSamples) {
                 percentRecorded = 100f;
-                recording = false;
-                return false;
+                recording = allowOverRecording;
+                if (!recording)
+                    return false;
             }
-            if (frameCount % recordingSkip != 0)
+            int skip = recordingSkip;
+            if (percentRecorded >= 100f)
+                skip = overRecordingSkip;
+            if (frameCount % skip != 0)
                 return true;
-            list.Add(GetData(t));
+            if (percentRecorded >= 100f) {
+                list[rnd.Next(maxSamples)] = GetData(t);
+            } else
+                list.Add(GetData(t));
             percentRecorded = 100f * (float)list.Count/(float)maxSamples;
             return true;
         } else {
