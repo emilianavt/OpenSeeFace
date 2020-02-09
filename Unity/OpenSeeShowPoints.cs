@@ -49,17 +49,24 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 if (openSeeData[0].got3DPoints && openSeeData[0].confidence[i] > minConfidence) {
                     Renderer renderer = gameObjects[i].GetComponent<Renderer>();
                     renderer.material.SetColor("_Color", Color.Lerp(Color.red, Color.green, openSeeData[0].confidence[i]));
-                    gameObjects[i].transform.localPosition = openSeeData[0].points3D[i];
+                    Vector3 pt = openSeeData[0].points3D[i];
+                    pt.x = -pt.x;
+                    gameObjects[i].transform.localPosition = pt;
                 } else {
                     Renderer renderer = gameObjects[i].GetComponent<Renderer>();
                     renderer.material.SetColor("_Color", Color.cyan);
                 }
             }
             if (applyTranslation) {
-                transform.position = openSeeData[0].translation;
+                Vector3 v = openSeeData[0].translation;
+                v.x = -v.x;
+                v.z = -v.z;
+                transform.localPosition = v;
             }
             if (applyRotation) {
-                transform.eulerAngles = openSeeData[0].rotation;
+                Quaternion offset = Quaternion.Euler(0f, 0f, -90f);
+                Quaternion convertedQuaternion = new Quaternion(-openSeeData[0].rawQuaternion.y, -openSeeData[0].rawQuaternion.x, openSeeData[0].rawQuaternion.z, openSeeData[0].rawQuaternion.w) * offset;
+                transform.localRotation = convertedQuaternion;
             }
         } else {
             centerBall.gameObject.SetActive(false);
