@@ -122,12 +122,12 @@ public class SVMModel {
         DestroyModel();
         if (rows > 10000)
             return false;
-        if (cols < 1 || rows < 1 || features.Length != rows * cols || labels.Length != rows)
+        if (cols < 1 || rows < 1 || features.Length < rows * cols || labels.Length < rows)
             return false;
 
         int max = -1;
         HashSet<int> knownClasses = new HashSet<int>();
-        for (int i = 0; i < labels.Length; i++) {
+        for (int i = 0; i < rows; i++) {
             labels[i] = (float)Math.Round(labels[i]);
             int l = (int)labels[i];
             if (l > max)
@@ -154,9 +154,9 @@ public class SVMModel {
         accuracy = 0f;
         if (!haveModel)
             return null;
-        if (rows < 1 || features.Length != rows * cols || labels.Length != rows)
+        if (rows < 1 || features.Length < rows * cols || labels.Length < rows)
             return null;
-        for (int i = 0; i < labels.Length; i++) {
+        for (int i = 0; i < rows; i++) {
             labels[i] = (float)Math.Round(labels[i]);
             if (labels[i] < 0 || labels[i] >= maxClasses)
                 return null;

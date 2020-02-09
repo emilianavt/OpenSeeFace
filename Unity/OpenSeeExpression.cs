@@ -114,7 +114,6 @@ public class OpenSeeExpression : MonoBehaviour
         recording = false;
         clear = false;
         train = false;
-        predict = false;
         modelReady = false;
         accuracy = 0.0f;
         confusionMatrix = null;
@@ -177,13 +176,24 @@ public class OpenSeeExpression : MonoBehaviour
             return false;
         }
         List<string> keys = new List<string>();
+        List<string> accuracyWarnings = new List<string>();
+        int samples = 0;
         foreach (string key in expressions.Keys) {
             List<float[]> list = expressions[key];
-            if (list != null && list.Count == maxSamples)
+            if (list != null && list.Count == maxSamples) {
                 keys.Add(key);
-            else {
-                Debug.Log("[Training warning] Skipping expression " + key + " due to lack of collected data.");
-                continue;
+                samples += maxSamples;
+            } else {
+                if (list != null && list.Count > 20) {
+                    Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate.");
+                    accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate.");
+                    samples += list.Count;
+                    keys.Add(key);
+                } else {
+                    Debug.Log("[Training warning] Skipping expression " + key + " due to lack of collected data.");
+                    accuracyWarnings.Add("Skipping expression " + key + " due to lack of collected data.");
+                    continue;
+                }
             }
         }
         int classes = keys.Count;
@@ -206,7 +216,9 @@ public class OpenSeeExpression : MonoBehaviour
         System.Random rnd = new System.Random();
         for (int i = 0; i < classes; i++) {
             List<float[]> list = expressions[keys[i]];
-            for (int j = maxSamples; j > 1;) {
+            int local_train_split = list.Count * 3 / 4;
+            test_split = list.Count - local_train_split;
+            for (int j = list.Count; j > 1;) {
                 j--;
                 int k = rnd.Next(j + 1);
                 float[] tmp = list[k];
@@ -215,12 +227,12 @@ public class OpenSeeExpression : MonoBehaviour
             }
             for (int j = 0; j < train_split; j++) {
                 for (int k = 0; k < cols; k++) {
-                    X_train[i_train * cols + k] = list[j][k];
+                    X_train[i_train * cols + k] = list[j % local_train_split][k];
                 }
                 y_train[i_train] = i;
                 i_train++;
             }
-            for (int j = train_split; j < train_split + test_split; j++) {
+            for (int j = local_train_split; j < local_train_split + test_split; j++) {
                 for (int k = 0; k < cols; k++)
                     X_test[i_test * cols + k] = list[j][k];
                 y_test[i_test] = i;
@@ -228,13 +240,18 @@ public class OpenSeeExpression : MonoBehaviour
             }
         }
         model.TrainModel(X_train, y_train, rows_train, cols);
-        confusionMatrix = model.ConfusionMatrix(X_test, y_test, rows_test, out accuracy);
+        confusionMatrix = model.ConfusionMatrix(X_test, y_test, i_test, out accuracy);
         confusionMatrixString = SVMModel.FormatMatrix(confusionMatrix, classLabels);
-        List<string> accuracyWarnings = new List<string>();
         for (int label = 0; label < classes; label++) {
-            float error = 100f * (1f - ((float)confusionMatrix[label, label] / (float)test_split));
-            if (error > warningThreshold)
-                accuracyWarnings.Add("The expression \"" + classLabels[label] + "\" is misclassified with a chance of " + error.ToString("0.00") + "%.");
+            int total = 0;
+            for (int p = 0; p < classes; p++) {
+                total += confusionMatrix[label, p];
+            }
+            float error = 100f * (1f - ((float)confusionMatrix[label, label] / (float)total));
+            if (error > warningThreshold) {
+                accuracyWarnings.Add("[Training warning] The expression \"" + classLabels[label] + "\" is misclassified with a chance of " + error.ToString("0.00") + "%.");
+                Debug.Log("[Training warning] The expression \"" + classLabels[label] + "\" is misclassified with a chance of " + error.ToString("0.00") + "%.");
+            }
         }
         warnings = accuracyWarnings.ToArray();
         modelReady = true;
