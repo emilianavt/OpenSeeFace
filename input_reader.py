@@ -2,7 +2,7 @@ import re
 import sys
 import os
 import cv2
-import numpy
+import numpy as np
 import escapi
 
 def list_cameras():
@@ -83,7 +83,7 @@ class RawReader:
             bytes = sys.stdin.buffer.read(self.len)
             read_bytes += len(bytes)
             frame.extend(bytes)
-        return np.frombuffer(frame, dtype=np.uint8).reshape((self.height, self.width, 3))
+        return True, np.frombuffer(frame, dtype=np.uint8).reshape((self.height, self.width, 3))
     def close(self):
         self.open = False
 
@@ -91,12 +91,12 @@ class InputReader():
     def __init__(self, capture, raw_rgb, width, height, fps):
         self.reader = None
         try:
-            if os.path.exists(capture):
+            if raw_rgb > 0:
+                self.reader = RawReader(width, height)
+            elif os.path.exists(capture):
                 self.reader = VideoReader(capture)
             elif capture == str(int(capture)):
                 self.reader = CameraReader(int(capture), width, height, fps)
-            else:
-                self.reader = RawReader(width, height)
         except Exception as e:
             print("Error: " + str(e))
 
