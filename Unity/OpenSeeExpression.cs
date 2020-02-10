@@ -41,7 +41,7 @@ public class OpenSeeExpression : MonoBehaviour
     [Tooltip("When enabled, the expression data will be saved to the specified filename and this flag is set back to false.")]
     public bool save = false;
     [Header("Information")]
-    [Tooltip("This is the of expressions for which calibration data was collected. The maximum number is 25.")]
+    [Tooltip("This is the of expressions for which calibration data was collected. The maximum number is 10.")]
     public int expressionNumber = 0;
     [Tooltip("This is the percentage of necessary training data collected for the current expression.")]
     public float percentRecorded = 0.0f;
@@ -99,7 +99,7 @@ public class OpenSeeExpression : MonoBehaviour
     private Dictionary<string, List<float[]>> expressions;
     private SVMModel model = null;
     private string[] classLabels = null;
-    private int maxSamples = 400; // Allows 25 expressions without exceeding 10000 rows in total for SVM training, which is a commonly seen upper limit.
+    private int maxSamples = 1000; // Allows 10 expressions without exceeding 10000 rows in total for SVM training, which is a commonly seen upper limit.
     // rightEyeOpen, leftEyeOpen, translation, rawQuaternion, rawEuler, confidence, points/(width, height), points3D
     private int cols = 1 + 1 + 3 + 4 + 3 + /*66 + 2 * 66  +*/ 3 * 66;
     private double lastCapture = 0.0;
@@ -197,8 +197,8 @@ public class OpenSeeExpression : MonoBehaviour
             }
         }
         int classes = keys.Count;
-        if (classes < 2 || classes > 25) {
-            Debug.Log("[Training error] The number of expressions that can be used for training is " + classes + ", which is either below 2 or higher than 25.");
+        if (classes < 2 || classes > 10) {
+            Debug.Log("[Training error] The number of expressions that can be used for training is " + classes + ", which is either below 2 or higher than 10.");
             return false;
         }
         keys.Sort();
@@ -301,7 +301,7 @@ public class OpenSeeExpression : MonoBehaviour
             recordingSkip = 1;
         if (calibrationExpression == "")
             return false;
-        if (expressions.ContainsKey(calibrationExpression) || expressions.Keys.Count < 25) {
+        if (expressions.ContainsKey(calibrationExpression) || expressions.Keys.Count < 10) {
             OpenSee.OpenSeeData[] openSeeData = openSee.trackingData;
             if (openSeeData == null)
                 return false;

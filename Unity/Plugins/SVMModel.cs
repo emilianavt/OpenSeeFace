@@ -12,7 +12,7 @@ namespace OpenSee {
 public class SVMModel {
 	#region DllImport
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern System.IntPtr trainModel(float[] features, float[] labels, int rows, int cols);
+	private static extern System.IntPtr trainModel(float[] features, float[] labels, int rows, int cols, float C);
 
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
 	private static extern void predict(System.IntPtr model, float[] features, [Out] float[] predictions, int rows);
@@ -143,7 +143,7 @@ public class SVMModel {
 
         maxClasses = max + 1;
         this.cols = cols;
-        model = trainModel(features, labels, rows, cols);
+        model = trainModel(features, labels, rows, cols, 32f);
         haveModel = true;
 
         return true;
