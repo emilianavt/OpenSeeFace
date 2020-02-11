@@ -143,7 +143,7 @@ public class SVMModel {
 
         maxClasses = max + 1;
         this.cols = cols;
-        model = trainModel(features, labels, rows, cols, 32f);
+        model = trainModel(features, labels, rows, cols, 12f);
         haveModel = true;
 
         return true;
