@@ -11,6 +11,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     public bool calibrate = true;
     [Tooltip("This sets which face id to look for in the OpenSee data.")]
     public int faceId = 0;
+    [Tooltip("When this is enabled, rotations and movement are mirrored.")]
+    public bool mirrorMotion = false;
     [Tooltip("Often, the translation vector's scale is too high. Setting this somewhere between 0.05 to 0.3 seems stabilize things, but it also reduces the range of motion.")]
     public float translationScale = 0.3f;
     [Tooltip("This smoothed out the detected motion. Values can be between 0 (no smoothing) and 1 (no motion). The appropriate value probably depends on the camera's frame rate.")]
@@ -38,6 +40,7 @@ public class OpenSeeIKTarget : MonoBehaviour
     private Vector3 lastT;
     private Quaternion currentR;
     private Vector3 currentT;
+    private bool lastMirror = false;
     
     void Interpolate() {
         if (!interpolate || interpolateState < 2)
@@ -46,6 +49,14 @@ public class OpenSeeIKTarget : MonoBehaviour
         transform.localPosition = Vector3.Lerp(lastT, currentT, t);
         transform.localRotation = Quaternion.Lerp(lastR, currentR, t);
         interpolationCount++;
+    }
+    
+    Quaternion MirrorQuaternion(Quaternion q) {
+        return new Quaternion(-q.x, q.y, q.z, -q.w);
+    }
+    
+    Vector3 MirrorTranslation(Vector3 v) {
+        return new Vector3(-v.x, v.y, v.z);
     }
 
     void RunUpdate() {
@@ -74,12 +85,23 @@ public class OpenSeeIKTarget : MonoBehaviour
         t.z = -t.z;
 
         if (calibrate) {
-            calibrate = false;
             dR = convertedQuaternion;
             dR = Quaternion.Inverse(dR);
             dT = t;
             rotationOffset = new Vector3(dR.eulerAngles.x, dR.eulerAngles.y, dR.eulerAngles.z);
             translationOffset = new Vector3(dT.x, dT.y, dT.z);
+        }
+        
+        if (mirrorMotion != lastMirror || (mirrorMotion && calibrate)) {
+            dR = Quaternion.Inverse(MirrorQuaternion(Quaternion.Inverse(dR)));
+            dT = MirrorTranslation(dT);
+            lastMirror = mirrorMotion;
+        }
+        calibrate = false;
+        
+        if (mirrorMotion) {
+            convertedQuaternion = MirrorQuaternion(convertedQuaternion);
+            t = MirrorTranslation(t);
         }
 
         if (interpolateState > 1)
