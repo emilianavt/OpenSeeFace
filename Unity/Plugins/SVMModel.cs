@@ -12,16 +12,16 @@ namespace OpenSee {
 public class SVMModel {
 	#region DllImport
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern System.IntPtr trainModel(float[] features, float[] labels, int rows, int cols, float C);
+	private static extern System.IntPtr trainModel(float[] features, float[] labels, int rows, int cols, int classes, int probability, float C);
 
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern void predict(System.IntPtr model, float[] features, [Out] float[] predictions, int rows);
+	private static extern void predict(System.IntPtr model, float[] features, [Out] float[] predictions, [Out] double[] probabilities, int rows);
 
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-	private static extern System.IntPtr loadModel([MarshalAs(UnmanagedType.LPStr)]string filename, int cols, double[] means, double[] sdevs);
+	private static extern System.IntPtr loadModel([MarshalAs(UnmanagedType.LPStr)]string filename, int cols, int classes, double[] means, double[] sdevs);
 
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-	private static extern System.IntPtr loadModelString([MarshalAs(UnmanagedType.LPStr)]string modelString, int cols, double[] means, double[] sdevs);
+	private static extern System.IntPtr loadModelString([MarshalAs(UnmanagedType.LPStr)]string modelString, int cols, int classes, double[] means, double[] sdevs);
 
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
 	private static extern void getScales(System.IntPtr model, [Out] double[] means, [Out] double[] sdevs);
@@ -63,7 +63,7 @@ public class SVMModel {
             }
             cols = smr.cols;
             maxClasses = smr.maxClasses;
-            System.IntPtr model = loadModelString(smr.modelString, smr.cols, smr.means, smr.sdevs);
+            System.IntPtr model = loadModelString(smr.modelString, smr.cols, smr.maxClasses, smr.means, smr.sdevs);
             return model;
         }
 
@@ -118,7 +118,7 @@ public class SVMModel {
     }
 
     // features is a rows*cols long float array with rows written one after another. labels is a rows long float array with the corresponding classes as integral numbers from 0 to num_classes-1, where all classes have to exist. Training on more than 10000 rows is disabled.
-    public bool TrainModel(float[] features, float[] labels, int rows, int cols) {
+    public bool TrainModel(float[] features, float[] labels, int rows, int cols, int probability) {
         DestroyModel();
         if (rows > 10000)
             return false;
@@ -143,7 +143,7 @@ public class SVMModel {
 
         maxClasses = max + 1;
         this.cols = cols;
-        model = trainModel(features, labels, rows, cols, 12f);
+        model = trainModel(features, labels, rows, cols, maxClasses, probability, 2f);
         haveModel = true;
 
         return true;
@@ -163,7 +163,8 @@ public class SVMModel {
         }
         int[,] confusionMatrix = new int[maxClasses, maxClasses];
         float[] predictions = new float[rows];
-        predict(model, features, predictions, rows);
+        double[] probabilities = new double[rows * maxClasses];
+        predict(model, features, predictions, probabilities, rows);
         for (int i = 0; i < rows; i++) {
             predictions[i] = (float)Math.Round(predictions[i]);
             if (predictions[i] >= 0 && predictions[i] < maxClasses) {
@@ -219,14 +220,21 @@ public class SVMModel {
     }
 
     // features is a rows*cols long float array with rows written one after another.
-    public float[] Predict(float[] features, int rows) {
+    public float[] Predict(float[] features, out double[] probabilities, int rows) {
+        probabilities = null;
         if (!haveModel)
             return null;
         if (rows < 1 || features.Length != rows * cols)
             return null;
         float[] predictions = new float[rows];
-        predict(model, features, predictions, rows);
+        probabilities = new double[rows * maxClasses];
+        predict(model, features, predictions, probabilities, rows);
         return predictions;
+    }
+    
+    public float[] Predict(float[] features, int rows) {
+        double[] probabilities;
+        return Predict(features, out probabilities, rows);
     }
 
     public bool Ready() {

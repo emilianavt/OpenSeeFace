@@ -25,6 +25,8 @@ public class OpenSeeExpression : MonoBehaviour
     public int overRecordingSkip = 5;
     [Tooltip("This is the filename used for loading and saving expression data using the load and save flags.")]
     public string filename = "";
+    [Tooltip("When enabled, training will be done in such a way that the model can output probabilities. This is a lot slower!")]
+    public bool enableProbabilityTraining = false;
     [Header("Toggles")]
     [Tooltip("When enabled, calibration data will be collected from the given OpenSee component.")]
     public bool recording = false;
@@ -54,6 +56,8 @@ public class OpenSeeExpression : MonoBehaviour
     public float expressionTime = 0f;
     [Tooltip("This is currently detected expression.")]
     public string expression = "";
+    [Tooltip("These are the probabilities of all expressions. The labels in order can be retrieved through the GetClassLabels methods.")]
+    public double[] probabilities;
     [Header("Training statistics")]
     [Tooltip("This shows the accuracy result of the last training run.")]
     public float accuracy = 0.0f;
@@ -362,7 +366,10 @@ public class OpenSeeExpression : MonoBehaviour
                 i_test++;
             }
         }
-        model.TrainModel(X_train, y_train, rows_train, cols);
+        int probability = 0;
+        if (enableProbabilityTraining)
+            probability = 1;
+        model.TrainModel(X_train, y_train, rows_train, cols, probability);
         confusionMatrix = model.ConfusionMatrix(X_test, y_test, i_test, out accuracy);
         confusionMatrixString = SVMModel.FormatMatrix(confusionMatrix, classLabels);
         for (int label = 0; label < classes; label++) {
@@ -399,7 +406,7 @@ public class OpenSeeExpression : MonoBehaviour
         float[] predictionData = new float[cols];
         for (int i = 0; i < cols; i++)
             predictionData[i] = faceData[indices[i]];
-        float[] prediction = model.Predict(predictionData, 1);
+        float[] prediction = model.Predict(predictionData, out probabilities, 1);
         int predictedExpression = (int)Mathf.Round(prediction[0]);
         if (predictedExpression == lastPrediction)
             lastPredictionCount++;
@@ -463,6 +470,13 @@ public class OpenSeeExpression : MonoBehaviour
             calibrationExpression = "";
             return false;
         }
+    }
+    
+    public string[] GetClassLabels() {
+        List<string> labels = new List<string>();
+        foreach (string l in classLabels)
+            labels.Add(String.Copy(l));
+        return labels.ToArray();
     }
 
     public string[] GetExpressions() {

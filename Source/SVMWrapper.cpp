@@ -15,6 +15,7 @@ extern "C" void __cdecl print_log(const char *str) {
 struct SVMWrapper {
     struct svm_model *model;
     int cols;
+    int classes;
     double *means;
     double *sdevs;
     struct svm_parameter param;
@@ -86,7 +87,7 @@ void destroy_problem(struct svm_problem *problem) {
 }
 
 extern "C" {
-    __declspec(dllexport) void *__cdecl trainModel(float features[], float labels[], int rows, int cols) {
+    __declspec(dllexport) void *__cdecl trainModel(float features[], float labels[], int rows, int cols, int classes, int probability, float C) {
         if (!(rows > 0 && cols > 0))
             return NULL;
 
@@ -94,6 +95,7 @@ extern "C" {
 
         struct SVMWrapper *sw = new SVMWrapper();
         sw->cols = cols;
+        sw->classes = classes;
         sw->means = new double[cols];
         sw->sdevs = new double[cols];
 
@@ -104,11 +106,11 @@ extern "C" {
         sw->param.coef0 = 0;
         sw->param.nu = 0.5;
         sw->param.cache_size = 100;
-        sw->param.C = 4;
+        sw->param.C = C;
         sw->param.eps = 0.001;
         sw->param.p = 0.1;
         sw->param.shrinking = 1;
-        sw->param.probability = 0;
+        sw->param.probability = probability;
         sw->param.nr_weight = 0;
         sw->param.weight_label = NULL;
         sw->param.weight = NULL;
@@ -120,22 +122,23 @@ extern "C" {
         return sw;
     }
 
-    __declspec(dllexport) void __cdecl predict(void *ptr, float features[], float predictions[], int rows) {
+    __declspec(dllexport) void __cdecl predict(void *ptr, float features[], float predictions[], double probabilities[], int rows) {
         struct SVMWrapper *sw = (struct SVMWrapper *)ptr;
         int cols = sw->cols;
 
         svmnode **x = make_svmnode_array(features, rows, cols, sw->means, sw->sdevs, 0);
         for (int r = 0; r < rows; r++)
-            predictions[r] = (float)svm_predict(sw->model, x[r]);
+            predictions[r] = (float)svm_predict_probability(sw->model, x[r], &(probabilities[r * sw->classes]));
         destroy_svmnode_array(x);
 
         return;
     }
 
-    __declspec(dllexport) void *__cdecl loadModel(char *filename, int cols, double means[], double sdevs[]) {
+    __declspec(dllexport) void *__cdecl loadModel(char *filename, int cols, int classes, double means[], double sdevs[]) {
         struct SVMWrapper *sw = new SVMWrapper();
         sw->cols = cols;
         sw->model = svm_load_model(filename);
+        sw->classes = classes;
         sw->means = new double[cols];
         sw->sdevs = new double[cols];
         for (int c = 0; c < cols; c++) {
@@ -145,10 +148,11 @@ extern "C" {
         return sw;
     }
 
-    __declspec(dllexport) void *__cdecl loadModelString(char *modelString, int cols, double means[], double sdevs[]) {
+    __declspec(dllexport) void *__cdecl loadModelString(char *modelString, int cols, int classes, double means[], double sdevs[]) {
         struct SVMWrapper *sw = new SVMWrapper();
         sw->cols = cols;
         sw->model = svm_load_model_string(modelString);
+        sw->classes = classes;
         sw->means = new double[cols];
         sw->sdevs = new double[cols];
         for (int c = 0; c < cols; c++) {
@@ -168,7 +172,7 @@ extern "C" {
         }
     }
 
-    __declspec(dllexport) char *__cdecl getModel(void *ptr) {
+    __declspec(dllexport) char *__cdecl saveModelString (void *ptr) {
         struct SVMWrapper *sw = (struct SVMWrapper *)ptr;
         return svm_save_model_string(sw->model);
     }
