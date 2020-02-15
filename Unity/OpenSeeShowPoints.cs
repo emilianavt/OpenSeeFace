@@ -9,6 +9,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
     public bool show3DPoints = true;
     public bool applyTranslation = false;
     public bool applyRotation = false;
+    [Range(0, 1)]
     public float minConfidence = 0.20f;
     private OpenSee.OpenSeeData[] openSeeData;
     private GameObject[] gameObjects;
@@ -31,7 +32,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
         centerBall.transform.SetParent(transform);
         centerBall.transform.localScale = new Vector3(0.1f, 0.1f, 0.1f);
 	}
-    
+
 	void Update () {
         if (!openSee)
             return;
@@ -98,7 +99,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
             center.y = center.y / (maxX - minX);
             center.z = 0.5f;
             centerBall.transform.localPosition = center;
-            
+
             for (int i = 0; i < 66; i++) {
                 Renderer renderer = gameObjects[i].GetComponent<Renderer>();
                 renderer.material.SetColor("_Color", Color.Lerp(Color.red, Color.green, openSeeData[0].confidence[i]));

@@ -91,7 +91,7 @@ public class OpenSee : MonoBehaviour {
             o += 8;
             id = System.BitConverter.ToInt32(b, o);
             o += 4;
-            
+
             cameraResolution = readVector2(b, ref o);
             rightEyeOpen = readFloat(b, ref o);
             leftEyeOpen = readFloat(b, ref o);
@@ -119,21 +119,21 @@ public class OpenSee : MonoBehaviour {
             for (int i = 0; i < nPoints; i++) {
                 confidence[i] = readFloat(b, ref o);
             }
-            
+
             // Gaze tracker results are still bad, ignore them
             readFloat(b, ref o); readFloat(b, ref o);
 
             for (int i = 0; i < nPoints; i++) {
                 points[i] = readVector2(b, ref o);
             }
-            
+
             // Gaze tracker results are still bad, ignore them
             readVector2(b, ref o); readVector2(b, ref o);
 
             for (int i = 0; i < nPoints; i++) {
                 points3D[i] = readVector3(b, ref o);
             }
-            
+
             // Gaze tracker results are still bad, ignore them
             readVector3(b, ref o); readVector3(b, ref o); readVector3(b, ref o); readVector3(b, ref o);
         }

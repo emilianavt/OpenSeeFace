@@ -154,7 +154,7 @@ public class OpenSeeExpression : MonoBehaviour
     private System.Random rnd;
 
     private int[] indices;
-    
+
     private int[] indicesFaceContour = new int[] {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
     private int[] indicesBrowRight = new int[] {17, 18, 19, 20, 21};
     private int[] indicesBrowLeft = new int[] {22, 23, 24, 25, 26};
@@ -164,7 +164,7 @@ public class OpenSeeExpression : MonoBehaviour
     private int[] indicesMouthCorner = new int[] {58, 62};
     private int[] indicesLipUpper = new int[] {48, 49, 50, 51, 52, 59, 60, 61};
     private int[] indicesLipLower = new int[] {53, 54, 55, 56, 57, 63, 64, 65};
-    
+
     private void SelectPoints() {
         List<int> indexList = new List<int>();
         for (int i = 0; i < colsBase; i++)
@@ -312,8 +312,8 @@ public class OpenSeeExpression : MonoBehaviour
                 samples += maxSamples;
             } else {
                 if (list != null && list.Count > 20) {
-                    Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate.");
-                    accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate.");
+                    //Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate.");
+                    //accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate.");
                     samples += list.Count;
                     keys.Add(key);
                 } else {
@@ -326,6 +326,7 @@ public class OpenSeeExpression : MonoBehaviour
         int classes = keys.Count;
         if (classes < 2 || classes > 10) {
             Debug.Log("[Training error] The number of expressions that can be used for training is " + classes + ", which is either below 2 or higher than 10.");
+            accuracyWarnings.Add("[Training error] The number of expressions that can be used for training is " + classes + ", which is either below 2 or higher than 10.");
             return false;
         }
         keys.Sort();
@@ -387,7 +388,7 @@ public class OpenSeeExpression : MonoBehaviour
         modelReady = true;
         return true;
     }
-    
+
     public bool PredictExpression() {
         if (openSee == null || !(modelReady && model.Ready())) {
             ResetInfo();
@@ -471,7 +472,7 @@ public class OpenSeeExpression : MonoBehaviour
             return false;
         }
     }
-    
+
     public string[] GetClassLabels() {
         List<string> labels = new List<string>();
         foreach (string l in classLabels)
@@ -486,13 +487,13 @@ public class OpenSeeExpression : MonoBehaviour
         keys.Sort();
         return keys.ToArray();
     }
-    
+
     public void ClearExpression() {
             if (expressions.ContainsKey(calibrationExpression))
                 expressions.Remove(calibrationExpression);
             clear = false;
     }
-    
+
     public void LoadFromBytes(byte[] data) {
         load = false;
         if (openSee == null) {
@@ -504,7 +505,7 @@ public class OpenSeeExpression : MonoBehaviour
         if (model.Ready())
             modelReady = true;
     }
-    
+
     public byte[] SaveToBytes() {
         save = false;
         if (openSee == null) {
@@ -513,7 +514,7 @@ public class OpenSeeExpression : MonoBehaviour
         }
         return OpenSeeExpressionRepresentation.ToSerialized(expressions, model, classLabels, indices, pointSelection);
     }
-    
+
     public void LoadFromFile() {
         load = false;
         if (openSee == null) {
@@ -523,7 +524,7 @@ public class OpenSeeExpression : MonoBehaviour
         byte[] data = File.ReadAllBytes(filename);
         LoadFromBytes(data);
     }
-    
+
     public void SaveToFile() {
         save = false;
         if (openSee == null) {
@@ -559,12 +560,12 @@ public class OpenSeeExpression : MonoBehaviour
             PredictExpression();
         else
             predict = false;
-        
+
         if (expressions.ContainsKey(calibrationExpression))
             percentRecorded = 100f * (float)expressions[calibrationExpression].Count/(float)maxSamples;
         else
             percentRecorded = 0f;
-        
+
         OpenSee.OpenSeeData[] openSeeData = openSee.trackingData;
         if (openSeeData == null)
             return;

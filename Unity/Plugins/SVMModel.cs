@@ -231,7 +231,7 @@ public class SVMModel {
         predict(model, features, predictions, probabilities, rows);
         return predictions;
     }
-    
+
     public float[] Predict(float[] features, int rows) {
         double[] probabilities;
         return Predict(features, out probabilities, rows);
