@@ -47,6 +47,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float visemeFactor = 0.6f;
     [Tooltip("This is the gain applied to audio read from the microphone. If your input level is high, set this back to 1. If your recording is very quiet and the lip sync has trouble picking up your speech, you can try increasing it.")]
     public float gain = 2f;
+    [Header("Lip sync information")]
+    [Tooltip("This shows if the lip sync system is currently active.")]
+    public bool active = false;
 
     private OVRLipSync.Frame visemeData = new OVRLipSync.Frame();
     private float volume;
@@ -248,12 +251,13 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     public void InitializeLipSync() {
+        active = false;
         if (catsData == null)
             InitCatsData();
         if (!isCanned && clip != null)
             Microphone.End(lastMic);
 
-        partialAudio = new float[1024];
+        partialAudio = null;
         partialPos = 0;
 
         audioSource = GetComponent<AudioSource>();
@@ -261,6 +265,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             isCanned = true;
             clip = audioSource.clip;
             channels = clip.channels;
+            partialAudio = new float[1024 * channels];
             freq = audioSource.clip.frequency;
             if (!inited) {
                 if (OVRLipSync.IsInitialized() == OVRLipSync.Result.Success) {
@@ -272,6 +277,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 OVRLipSync.SendSignal(context, OVRLipSync.Signals.VisemeSmoothing, smoothAmount, 0);
                 inited = true;
             }
+            active = true;
             return;
         }
         
@@ -300,30 +306,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
         clip = Microphone.Start(lastMic, true, 1, freq);
         channels = clip.channels;
+        partialAudio = new float[1024 * channels];
         lastPos = 0;
-    }
-
-    // This should be necessary, but in practice it makes everything stop working!?
-    float[] ToStereo(float[] buffer, int len) {
-        float[] stereo = buffer;
-        if (channels == 1) {
-            stereo = new float[len * 2];
-            for (int i = 0; i < len; i++) {
-                stereo[i * 2] = buffer[i];
-                stereo[i * 2 + 1] = buffer[i];
-            }
-            buffer = stereo;
-        } else if (channels > 2) {
-            stereo = new float[len * 2];
-            for (int i = 0; i < len; i++) {
-                stereo[i * 2] = buffer[i * channels];
-                stereo[i * 2 + 1] = buffer[i * channels + 1];
-            }
-        }
-        return stereo;
+        active = true;
     }
 
     float[] ReadMic() {
+        if (clip == null)
+            return null;
         if (isCanned)
             return null;
         int pos = Microphone.GetPosition(lastMic);
@@ -332,23 +322,35 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         int len = pos - lastPos;
         if (lastPos > pos)
             len = pos + clip.samples - lastPos;
+        if (clip.channels != channels) {
+            if (clip.channels > 2) {
+                Debug.Log("Audio with more than 3 channels is not supported.");
+                Microphone.End(lastMic);
+                clip = null;
+                active = false;
+                return null;
+            }
+            channels = clip.channels;
+            partialAudio = new float[1024 * channels];
+        }
         float[] buffer = new float[len * channels];
         clip.GetData(buffer, lastPos);
         lastPos = pos;
-        //buffer = ToStereo(buffer, len);
         return buffer;
     }
 
     void ProcessBuffer(float[] buffer) {
+        if (buffer == null)
+            return;
         int totalLen = partialPos + buffer.Length;
         int bufferPos = 0;
-        if (totalLen >= 1024) {
+        if (totalLen >= 1024 * channels) {
             volume = 0f;
-            while (totalLen >= 1024) {
+            while (totalLen >= 1024 * channels) {
                 int sliceLen = 1024 - partialPos;
-                Array.Copy(buffer, bufferPos, partialAudio, partialPos, sliceLen);
-                totalLen -= 1024;
-                if (totalLen < 1024) {
+                Array.Copy(buffer, bufferPos, partialAudio, partialPos, sliceLen * channels);
+                totalLen -= 1024 * channels;
+                if (totalLen < 1024 * channels) {
                     for (int i = 0; i < partialAudio.Length; i++) {
                         partialAudio[i] = partialAudio[i] * gain;//Mathf.Clamp(partialAudio[i] * gain, 0f, 1f);
                         volume += Mathf.Abs(partialAudio[i]);
@@ -356,7 +358,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     lock (this) {
                         if (context != 0) {
                             OVRLipSync.Frame frame = this.visemeData;
-                            OVRLipSync.ProcessFrame(context, partialAudio, frame);
+                            if (channels == 2)
+                                OVRLipSync.ProcessFrameInterleaved(context, partialAudio, frame);
+                            else
+                                OVRLipSync.ProcessFrame(context, partialAudio, frame);
                         } else {
                             Debug.Log("OVRLipSync context is 0");
                         }
@@ -367,16 +372,27 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
             volume /= (float)buffer.Length;
         }
-        if (totalLen > 0)
+        if (totalLen > 0) {
             Array.Copy(buffer, bufferPos, partialAudio, partialPos, buffer.Length - bufferPos);
+            partialPos += (buffer.Length - bufferPos) / channels;
+        }
     }
 
     void OnAudioFilterRead(float[] data, int channels) {
         if (isCanned) {
+            if (channels > 3) {
+                Debug.Log("Audio with more than 3 channels is not supported.");
+                clip = null;
+                isCanned = false;
+                active = false;
+                return;
+            }
             float[] buffer = new float[data.Length];
             Array.Copy(data, buffer, data.Length);
-            this.channels = channels;
-            //buffer = ToStereo(buffer, data.Length / channels);
+            if (channels != this.channels) {
+                this.channels = channels;
+                partialAudio = new float[1024 * channels];
+            }
             ProcessBuffer(buffer);
         }
     }
@@ -437,6 +453,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void DestroyContext() {
+        active = false;
         lock (this) {
             if (context != 0) {
                 if (OVRLipSync.DestroyContext(context) != OVRLipSync.Result.Success) {
