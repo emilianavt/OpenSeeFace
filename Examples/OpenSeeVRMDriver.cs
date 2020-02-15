@@ -274,6 +274,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
             return;
         }
+        
+        isCanned = false;
 
         int minFreq;
         int maxFreq = AudioSettings.outputSampleRate;
