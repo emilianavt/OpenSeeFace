@@ -26,6 +26,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true),
         new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true)
     };
+    [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
+    public bool reloadExpressions = false;
     [Header("Lip sync settings")]
     [Tooltip("This allows you to select the OVRLipSync provider.")]
     public OVRLipSync.ContextProviders provider = OVRLipSync.ContextProviders.Enhanced;
@@ -35,8 +37,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public AudioSource audioSource = null;
     [Tooltip("This is the microphone audio will be captured from. A list can be retrieved from Microphone.devices.")]
     public string mic = null;
-    [Tooltip("When enabled, the lip sync function will start right away.")]
-    public bool autoStartLipSync = false;
+    [Tooltip("When enabled, the lip sync function will be initialized or reinitialized in the next Update or FixedUpdate call, according to the fixedUpdate flag. This flag is reset to false afterwards. It is also possible to call InitializeLipSync instead.")]
+    public bool initializeLipSync = false;
     [Range(1, 100)]
     [Tooltip("This sets the viseme smoothing in a range from 1 to 100, where 1 means no smoothing and values above 90 mean pretty much no visemes.")]
     public int smoothAmount = 50;
@@ -154,7 +156,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
     }
 
-    void InitExpressionMap() {
+    public void InitExpressionMap() {
         expressionMap = new Dictionary<string, OpenSeeVRMExpression>();
         foreach (var expression in expressions) {
             expression.blendShapeKey = new BlendShapeKey(expression.blendShapePreset);
@@ -163,6 +165,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void UpdateExpression() {
+        if (reloadExpressions) {
+            InitExpressionMap();
+            reloadExpressions = false;
+        }
         if (vrmBlendShapeProxy == null) {
             currentExpression = null;
             return;
@@ -399,11 +405,13 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     void Start() {
         InitExpressionMap();
-        if (autoStartLipSync)
-            InitializeLipSync();
     }
 
     void RunUpdates() {
+        if (initializeLipSync) {
+            InitializeLipSync();
+            initializeLipSync = false;
+        }
         UpdateExpression();
         BlinkEyes();
         ReadAudio();
