@@ -137,6 +137,7 @@ public class OpenSeeExpression : MonoBehaviour
         }
     }
 
+    private OpenSee.OpenSeeData openSeeData = null;
     private Dictionary<string, List<float[]>> expressions;
     private SVMModel model = null;
     private string[] classLabels = null;
@@ -394,16 +395,10 @@ public class OpenSeeExpression : MonoBehaviour
             ResetInfo();
             return false;
         }
-        OpenSee.OpenSeeData[] openSeeData = openSee.trackingData;
-        if (openSeeData == null)
+        openSeeData = openSee.GetOpenSeeData(faceId);
+        if (openSeeData == null || openSeeData.time <= lastCapture)
             return false;
-        OpenSee.OpenSeeData t = null;
-        foreach (OpenSee.OpenSeeData data in openSeeData)
-            if (data.id == faceId)
-                t = data;
-        if (t == null || t.time <= lastCapture)
-            return false;
-        float[] faceData = GetData(t);
+        float[] faceData = GetData(openSeeData);
         float[] predictionData = new float[cols];
         for (int i = 0; i < cols; i++)
             predictionData[i] = faceData[indices[i]];
@@ -436,14 +431,8 @@ public class OpenSeeExpression : MonoBehaviour
         if (calibrationExpression == "")
             return false;
         if (expressions.ContainsKey(calibrationExpression) || expressions.Keys.Count < 10) {
-            OpenSee.OpenSeeData[] openSeeData = openSee.trackingData;
-            if (openSeeData == null)
-                return false;
-            OpenSee.OpenSeeData t = null;
-            foreach (OpenSee.OpenSeeData data in openSeeData)
-                if (data.id == faceId)
-                    t = data;
-            if (t == null || t.time <= lastCapture)
+            openSeeData = openSee.GetOpenSeeData(faceId);
+            if (openSeeData == null || openSeeData.time <= lastCapture)
                 return false;
             if (!expressions.ContainsKey(calibrationExpression)) {
                 expressions.Add(calibrationExpression, new List<float[]>());
@@ -461,9 +450,9 @@ public class OpenSeeExpression : MonoBehaviour
             if (frameCount % skip != 0)
                 return true;
             if (percentRecorded >= 100f) {
-                list[rnd.Next(maxSamples)] = GetData(t);
+                list[rnd.Next(maxSamples)] = GetData(openSeeData);
             } else
-                list.Add(GetData(t));
+                list.Add(GetData(openSeeData));
             percentRecorded = 100f * (float)list.Count/(float)maxSamples;
             return true;
         } else {
@@ -566,16 +555,9 @@ public class OpenSeeExpression : MonoBehaviour
         else
             percentRecorded = 0f;
 
-        OpenSee.OpenSeeData[] openSeeData = openSee.trackingData;
         if (openSeeData == null)
             return;
-        OpenSee.OpenSeeData t = null;
-        foreach (OpenSee.OpenSeeData data in openSeeData)
-            if (data.id == faceId)
-                t = data;
-        if (t == null || t.time <= lastCapture)
-            return;
-       lastCapture = t.time;
+       lastCapture = openSeeData.time;
    }
 }
 

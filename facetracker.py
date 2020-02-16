@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 import argparse
@@ -29,6 +30,7 @@ parser.add_argument("--model", type=int, help="This can be used to select the tr
 parser.add_argument("--model-dir", help="This can be used to specify the path to the directory containing the .onnx model files", default=None)
 parser.add_argument("--high-quality-3d", type=int, help="When set to 1, more nose points are used when estimating the face pose", default=1)
 parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experimental blink detection and gaze tracking are enabled, which makes things slightly slower", default=1)
+parser.add_argument("--face-id-offset", type=int, help="When set, this offset is added to all face ids, which can be useful for mixing tracking data from multiple network sources", default=0)
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -116,6 +118,8 @@ try:
         packet = bytearray()
         detected = False
         for face_num, f in enumerate(faces):
+            f = copy.copy(f)
+            f.id += args.face_id_offset
             right_state = "O" if f.eye_blink[0] > 0.5 else "-"
             left_state = "O" if f.eye_blink[1] > 0.5 else "-"
             if args.silent == 0:

@@ -85,7 +85,7 @@ public class OpenSee : MonoBehaviour {
             Vector2 v = new Vector2(readFloat(b, ref o), readFloat(b, ref o));
             return v;
         }
-
+        
         public void readFromPacket(byte[] b, int o) {
             time = System.BitConverter.ToDouble(b, o);
             o += 8;
@@ -139,10 +139,19 @@ public class OpenSee : MonoBehaviour {
         }
     }
 
+    private Dictionary<int, OpenSeeData> openSeeDataMap;
     private Socket socket;
     private byte[] buffer;
     private Thread receiveThread = null;
     private volatile bool stopReception = false;
+
+    public OpenSeeData GetOpenSeeData(int faceId) {
+        if (openSeeDataMap == null)
+            return null;
+        if (!openSeeDataMap.ContainsKey(faceId))
+            return null;
+        return openSeeDataMap[faceId];
+    }
 
     void performReception() {
         EndPoint senderRemote = new IPEndPoint(IPAddress.Any, 0);
@@ -154,18 +163,20 @@ public class OpenSee : MonoBehaviour {
                 }
                 receivedPackets++;
                 int i = 0;
-                OpenSeeData[] newData = new OpenSeeData[receivedBytes / packetFrameSize];
                 for (int offset = 0; offset < receivedBytes; offset += packetFrameSize) {
-                    newData[i] = new OpenSeeData();
-                    newData[i].readFromPacket(buffer, offset);
+                    OpenSeeData newData = new OpenSeeData();
+                    newData.readFromPacket(buffer, offset);
+                    openSeeDataMap[newData.id] = newData;
                     i++;
                 }
-                trackingData = newData;
+                trackingData = new OpenSeeData[openSeeDataMap.Count];
+                openSeeDataMap.Values.CopyTo(trackingData, 0);
             } catch { }
         }
     }
 
     void Start () {
+        openSeeDataMap = new Dictionary<int, OpenSeeData>();
         buffer = new byte[65535];
 
         socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
@@ -180,8 +191,8 @@ public class OpenSee : MonoBehaviour {
 
     void Update () {
 	}
-
-    void OnApplicationQuit() {
+    
+    void EndReceiver() {
         if (receiveThread != null) {
             stopReception = true;
             receiveThread.Join();
@@ -189,6 +200,14 @@ public class OpenSee : MonoBehaviour {
         }
         if (socket != null)
             socket.Close();
+    }
+
+    void OnApplicationQuit() {
+        EndReceiver();
+    }
+    
+    void OnDestroy() {
+        EndReceiver();
     }
 }
 

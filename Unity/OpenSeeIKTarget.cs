@@ -61,27 +61,18 @@ public class OpenSeeIKTarget : MonoBehaviour
     }
 
     void RunUpdate() {
-        var openSeeData = openSee.trackingData;
-        if (openSeeData == null || openSeeData.Length < 1)
+        var openSeeData = openSee.GetOpenSeeData(faceId);
+        if (openSeeData == null)
             return;
-        int idx = -1;
-        int i = 0;
-        foreach (var item in openSeeData) {
-            if (item.id == faceId)
-                idx = i;
-            i++;
-        }
-        if (idx < 0)
-            return;
-        if (openSeeData[idx].time > updated) {
-            updated = openSeeData[idx].time;
+        if (openSeeData.time > updated) {
+            updated = openSeeData.time;
         } else {
             Interpolate();
             return;
         }
 
-        Quaternion convertedQuaternion = new Quaternion(-openSeeData[idx].rawQuaternion.y, -openSeeData[idx].rawQuaternion.x, openSeeData[idx].rawQuaternion.z, openSeeData[idx].rawQuaternion.w);
-        Vector3 t = openSeeData[idx].translation;
+        Quaternion convertedQuaternion = new Quaternion(-openSeeData.rawQuaternion.y, -openSeeData.rawQuaternion.x, openSeeData.rawQuaternion.z, openSeeData.rawQuaternion.w);
+        Vector3 t = openSeeData.translation;
         t.x = -t.x;
         t.z = -t.z;
 

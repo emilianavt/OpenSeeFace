@@ -29,7 +29,7 @@ public class OpenSeeLauncher : MonoBehaviour {
     [Tooltip("The path, where the .onnx model files can be found")]
     public string modelPath = "models\\";
     [Tooltip("Additional options that should be passed to the face tracker.")]
-    public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "2", "--model", "3" });
+    public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "4" });
     [Header("Runtime information")]
     [Tooltip("This field shows if the tracker is currently alive.")]
     public bool trackerAlive = false;
