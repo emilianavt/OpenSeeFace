@@ -187,6 +187,8 @@ public class OpenSee : MonoBehaviour {
             receiveThread.Join();
             stopReception = false;
         }
+        if (socket != null)
+            socket.Close();
     }
 }
 
