@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Collections;
 using System.Collections.Generic;
@@ -11,6 +12,20 @@ using UnityEngine;
 namespace OpenSee {
 
 public class OpenSeeLauncher : MonoBehaviour {
+    #region DllImport
+    [DllImport("escapi_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "countCaptureDevices")]
+	private static extern int countCaptureDevices_x64();
+
+	[DllImport("escapi_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "getCaptureDeviceName")]
+	private static extern void getCaptureDeviceName_x64(int deviceno, [Out] StringBuilder namebuffer, int bufferlength);
+
+    [DllImport("escapi_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "countCaptureDevices")]
+	private static extern int countCaptureDevices_x86();
+
+	[DllImport("escapi_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "getCaptureDeviceName")]
+	private static extern void getCaptureDeviceName_x86(int deviceno, [Out] StringBuilder namebuffer, int bufferlength);
+    #endregion
+    
     [Header("Settings")]
     [Tooltip("If this is left empty, it will default to the OpenSee component on the same game object.")]
     public OpenSee openSeeTarget;
@@ -30,6 +45,10 @@ public class OpenSeeLauncher : MonoBehaviour {
     public string modelPath = "models\\";
     [Tooltip("Additional options that should be passed to the face tracker.")]
     public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "4" });
+    [Tooltip("IL2CPP doesn't support Proocess.Start. When this is enabled, OpenSeeLauncher will create the tracking process by calling the necessary API functions directly through the DLLs. In this case, reading the standard output from the process will not be supported. It will also retrieve the camera list directly through the escapi DLLs, so make sure it is part of your Unity project.")]
+    public bool usePinvoke = false;
+    [Tooltip("When this is enabled, even if usePinvoke is disabled, the camera list will be retrieved through escapi DLLs directly, which can be faster. Make sure the DLLs are in your Unity project.")]
+    public bool usePinvokeListCameras = false;
     [Header("Runtime information")]
     [Tooltip("This field shows if the tracker is currently alive.")]
     public bool trackerAlive = false;
@@ -38,6 +57,7 @@ public class OpenSeeLauncher : MonoBehaviour {
     private Process trackerProcess = null;
     private StringBuilder trackerSB = null;
     private bool dontPrintNow = false;
+    private System.IntPtr processHandle = System.IntPtr.Zero;
     private Job job = null;
 
     private bool CheckSetup(bool requireTarget) {
@@ -85,9 +105,37 @@ public class OpenSeeLauncher : MonoBehaviour {
         return true;
     }
     
+    private string[] EscapiListCameras_x64() {
+		List<string> cameras = new List<string>();
+		int count = countCaptureDevices_x64();
+		for (int i = 0; i < count; i++) {
+			StringBuilder namebuffer = new StringBuilder(2048);
+			getCaptureDeviceName_x64(i, namebuffer, 2048);
+			cameras.Add(namebuffer.ToString());
+		}
+		return cameras.ToArray();
+    }
+    
+    private string[] EscapiListCameras_x86() {
+		List<string> cameras = new List<string>();
+		int count = countCaptureDevices_x86();
+		for (int i = 0; i < count; i++) {
+			StringBuilder namebuffer = new StringBuilder(2048);
+			getCaptureDeviceName_x86(i, namebuffer, 2048);
+			cameras.Add(namebuffer.ToString());
+		}
+		return cameras.ToArray();
+    }
+    
     public string[] ListCameras() {
         if (!CheckSetup(false))
             return null;
+        if (usePinvoke || usePinvokeListCameras) {
+            if (Environment.Is64BitProcess)
+                return EscapiListCameras_x64();
+            else
+                return EscapiListCameras_x86();
+        }
         
         StringBuilder stringBuilder;
         ProcessStartInfo processStartInfo;
@@ -151,16 +199,6 @@ public class OpenSeeLauncher : MonoBehaviour {
         if (!CheckSetup(true))
             return false;
 
-        ProcessStartInfo processStartInfo;
-        
-        processStartInfo = new ProcessStartInfo();
-        processStartInfo.CreateNoWindow = true;
-        processStartInfo.RedirectStandardOutput = true;
-        processStartInfo.RedirectStandardInput = true;
-        processStartInfo.RedirectStandardError = true;
-        processStartInfo.UseShellExecute = false;
-        processStartInfo.FileName = exePath;
-        
         List<string> arguments = new List<string>();
         arguments.Add("--ip");
         arguments.Add(ip);
@@ -177,7 +215,13 @@ public class OpenSeeLauncher : MonoBehaviour {
             arguments.Add(argument);
         }
         string argumentString = EscapeArguments(arguments.ToArray());
-        processStartInfo.Arguments = argumentString;
+
+        if (processHandle != System.IntPtr.Zero) {
+            if (OpenSeeProcessInterface.Alive(processHandle))
+                OpenSeeProcessInterface.TerminateProcess(processHandle, 0);
+            OpenSeeProcessInterface.CloseHandle(processHandle);
+            processHandle = System.IntPtr.Zero;
+        }
         
         if (trackerProcess != null && !trackerProcess.HasExited) {
             trackerProcess.CloseMainWindow();
@@ -190,32 +234,58 @@ public class OpenSeeLauncher : MonoBehaviour {
             }
         }
 
-        trackerSB = new StringBuilder();
-        trackerProcess = new Process();
-        trackerProcess.StartInfo = processStartInfo;
-        dontPrintNow = dontPrint;
-        if (!dontPrintNow) {
-            trackerProcess.EnableRaisingEvents = true;
-            trackerProcess.OutputDataReceived += new DataReceivedEventHandler(delegate(object sender, DataReceivedEventArgs e) {
-                trackerSB.Append(e.Data);
-                trackerSB.Append("\n");
-            });
-            trackerProcess.ErrorDataReceived += new DataReceivedEventHandler(delegate(object sender, DataReceivedEventArgs e) {
-                trackerSB.Append(e.Data);
-                trackerSB.Append("\n");
-            });
-        }
-        trackerProcess.Start();
-        job.AddProcess(trackerProcess.Handle);
-        if (!dontPrintNow) {
-            trackerProcess.BeginOutputReadLine();
-            trackerProcess.BeginErrorReadLine();
-        }
+        if (!usePinvoke) {
+            ProcessStartInfo processStartInfo;
+            processStartInfo = new ProcessStartInfo();
+            processStartInfo.CreateNoWindow = true;
+            processStartInfo.RedirectStandardOutput = true;
+            processStartInfo.RedirectStandardInput = true;
+            processStartInfo.RedirectStandardError = true;
+            processStartInfo.UseShellExecute = false;
+            processStartInfo.FileName = exePath;
+            processStartInfo.Arguments = argumentString;
+            
+            trackerSB = new StringBuilder();
+            trackerProcess = new Process();
+            trackerProcess.StartInfo = processStartInfo;
+            dontPrintNow = dontPrint;
+            if (!dontPrintNow) {
+                trackerProcess.EnableRaisingEvents = true;
+                trackerProcess.OutputDataReceived += new DataReceivedEventHandler(delegate(object sender, DataReceivedEventArgs e) {
+                    trackerSB.Append(e.Data);
+                    trackerSB.Append("\n");
+                });
+                trackerProcess.ErrorDataReceived += new DataReceivedEventHandler(delegate(object sender, DataReceivedEventArgs e) {
+                    trackerSB.Append(e.Data);
+                    trackerSB.Append("\n");
+                });
+            }
+            trackerProcess.Start();
+            job.AddProcess(trackerProcess.Handle);
+            if (!dontPrintNow) {
+                trackerProcess.BeginOutputReadLine();
+                trackerProcess.BeginErrorReadLine();
+            }
 
-        return !trackerProcess.HasExited;
+            return !trackerProcess.HasExited;
+        } else {
+            string dir = Path.GetDirectoryName(exePath);
+            OpenSeeProcessInterface.Start(exePath, "facetracker " + argumentString, dir, true, out processHandle);
+            if (processHandle != System.IntPtr.Zero) {
+                job.AddProcess(processHandle);
+                return OpenSeeProcessInterface.Alive(processHandle);
+            } else
+                return false;
+        }
     }
     
     public void StopTracker() {
+        if (processHandle != System.IntPtr.Zero) {
+            if (OpenSeeProcessInterface.Alive(processHandle))
+                OpenSeeProcessInterface.TerminateProcess(processHandle, 0);
+            OpenSeeProcessInterface.CloseHandle(processHandle);
+            processHandle = System.IntPtr.Zero;
+        }
         if (trackerProcess != null && !trackerProcess.HasExited) {
             trackerProcess.CloseMainWindow();
             trackerProcess.Close();
@@ -246,11 +316,16 @@ public class OpenSeeLauncher : MonoBehaviour {
     }
     
     public void Update() {
-        if (trackerProcess != null)
-            trackerAlive = !trackerProcess.HasExited;
-        else {
-            trackerAlive = false;
+        if (processHandle != System.IntPtr.Zero) {
+            trackerAlive = OpenSeeProcessInterface.Alive(processHandle);
             return;
+        } else {
+            if (trackerProcess != null)
+                trackerAlive = !trackerProcess.HasExited;
+            else {
+                trackerAlive = false;
+                return;
+            }
         }
         if (dontPrintNow || trackerSB == null)
             return;

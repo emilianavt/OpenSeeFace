@@ -85,7 +85,6 @@ namespace OpenSee
         {
             return AddProcess(Process.GetProcessById(processId).Handle);
         }
-
     }
 
     #region Helper classes
