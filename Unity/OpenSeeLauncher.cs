@@ -45,10 +45,14 @@ public class OpenSeeLauncher : MonoBehaviour {
     public string modelPath = "models\\";
     [Tooltip("Additional options that should be passed to the face tracker.")]
     public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "4" });
-    [Tooltip("IL2CPP doesn't support Proocess.Start. When this is enabled, OpenSeeLauncher will create the tracking process by calling the necessary API functions directly through the DLLs. In this case, reading the standard output from the process will not be supported. It will also retrieve the camera list directly through the escapi DLLs, so make sure it is part of your Unity project.")]
+    [Tooltip("IL2CPP doesn't support Proocess.Start. When this is enabled, OpenSeeLauncher will create the tracking process by calling the necessary API functions directly through the DLLs. In this case, reading the standard output from the process will not be supported and it will instead be send to the logfiles set in pinvokeStdOut and pinvokeStdErr in the persistent data directory. It will also retrieve the camera list directly through the escapi DLLs, so make sure it is part of your Unity project.")]
     public bool usePinvoke = false;
     [Tooltip("When this is enabled, even if usePinvoke is disabled, the camera list will be retrieved through escapi DLLs directly, which can be faster. Make sure the DLLs are in your Unity project.")]
     public bool usePinvokeListCameras = false;
+    [Tooltip("This is the standard output log file's name in the persistent data directory.")]
+    public string pinvokeStdOut = "output.txt";
+    [Tooltip("This is the standard error log file's name in the persistent data directory.")]
+    public string pinvokeStdErr = "error.txt";
     [Header("Runtime information")]
     [Tooltip("This field shows if the tracker is currently alive.")]
     public bool trackerAlive = false;
@@ -58,6 +62,8 @@ public class OpenSeeLauncher : MonoBehaviour {
     private StringBuilder trackerSB = null;
     private bool dontPrintNow = false;
     private System.IntPtr processHandle = System.IntPtr.Zero;
+    private System.IntPtr processStdOut = System.IntPtr.Zero;
+    private System.IntPtr processStdErr = System.IntPtr.Zero;
     private Job job = null;
 
     private bool CheckSetup(bool requireTarget) {
@@ -216,23 +222,7 @@ public class OpenSeeLauncher : MonoBehaviour {
         }
         string argumentString = EscapeArguments(arguments.ToArray());
 
-        if (processHandle != System.IntPtr.Zero) {
-            if (OpenSeeProcessInterface.Alive(processHandle))
-                OpenSeeProcessInterface.TerminateProcess(processHandle, 0);
-            OpenSeeProcessInterface.CloseHandle(processHandle);
-            processHandle = System.IntPtr.Zero;
-        }
-        
-        if (trackerProcess != null && !trackerProcess.HasExited) {
-            trackerProcess.CloseMainWindow();
-            trackerProcess.Close();
-            if (!dontPrintNow) {
-                try {
-                    trackerProcess.CancelOutputRead();
-                    trackerProcess.CancelErrorRead();
-                } catch {}
-            }
-        }
+        StopTracker();
 
         if (!usePinvoke) {
             ProcessStartInfo processStartInfo;
@@ -270,7 +260,9 @@ public class OpenSeeLauncher : MonoBehaviour {
             return !trackerProcess.HasExited;
         } else {
             string dir = Path.GetDirectoryName(exePath);
-            OpenSeeProcessInterface.Start(exePath, "facetracker " + argumentString, dir, true, out processHandle);
+            string outputLog = Application.persistentDataPath + "/" + pinvokeStdOut;
+            string errorLog = Application.persistentDataPath + "/" + pinvokeStdErr;
+            OpenSeeProcessInterface.Start(exePath, "facetracker " + argumentString, dir, true, outputLog, errorLog, out processHandle, out processStdOut, out processStdErr);
             if (processHandle != System.IntPtr.Zero) {
                 job.AddProcess(processHandle);
                 return OpenSeeProcessInterface.Alive(processHandle);
@@ -285,6 +277,14 @@ public class OpenSeeLauncher : MonoBehaviour {
                 OpenSeeProcessInterface.TerminateProcess(processHandle, 0);
             OpenSeeProcessInterface.CloseHandle(processHandle);
             processHandle = System.IntPtr.Zero;
+        }
+        if (processStdOut != System.IntPtr.Zero) {
+            OpenSeeProcessInterface.CloseHandle(processStdOut);
+            processStdOut = System.IntPtr.Zero;
+        }
+        if (processStdErr != System.IntPtr.Zero) {
+            OpenSeeProcessInterface.CloseHandle(processStdErr);
+            processStdErr = System.IntPtr.Zero;
         }
         if (trackerProcess != null && !trackerProcess.HasExited) {
             trackerProcess.CloseMainWindow();
