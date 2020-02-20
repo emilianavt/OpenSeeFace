@@ -158,6 +158,8 @@ try:
                     continue
                 if pt_num == 67:# and left_open < 0.5:
                     continue
+                x = int(x + 0.5)
+                y = int(y + 0.5)
                 if args.visualize != 0 or not out is None:
                     if args.visualize > 1:
                         frame = cv2.putText(frame, str(f.id), (int(f.bbox[0]), int(f.bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
@@ -175,8 +177,13 @@ try:
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = (0, 0, 255)
             if args.pnp_points != 0 and (args.visualize != 0 or not out is None):
-                projected = cv2.projectPoints(tracker.contour, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
+                if args.pnp_points > 1:
+                    projected = cv2.projectPoints(f.face_3d, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
+                else:
+                    projected = cv2.projectPoints(f.contour, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
                 for [(x,y)] in projected[0]:
+                    x = int(x + 0.5)
+                    y = int(y + 0.5)
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = (0, 255, 255)
                     x += 1
