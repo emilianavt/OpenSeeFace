@@ -16,6 +16,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public VRMBlendShapeProxy vrmBlendShapeProxy;
     [Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
     public bool fixedUpdate = true;
+    [Tooltip("When enabled, the avatar will blink automatically. Otherwise, blinks will be applied according to the face tracking's blink detection, allowing it to wink. Even for tracked eye blinks, the eye blink setting of the current expression is used.")]
+    public bool autoBlink = true;
     [Tooltip("This component lets you customize the automatic eye blinking.")]
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
@@ -64,7 +66,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private int lastPos = 0;
     private int channels = 0;
     private AudioClip clip = null;
-    private OVRLipSync.Viseme previousViseme = OVRLipSync.Viseme.sil;
     private BlendShapeKey[] visemePresetMap;
     private Dictionary<string, OpenSeeVRMExpression> expressionMap;
     private OpenSeeVRMExpression currentExpression = null;
@@ -194,12 +195,29 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void BlinkEyes() {
         if (vrmBlendShapeProxy == null || eyeBlinker == null)
             return;
-        if (eyeBlinker.Blink() && (currentExpression == null || currentExpression.enableBlinking)) {
-            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 1f);
-            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 1f);
-        } else {
-            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
-            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
+        if (autoBlink) {
+            if (eyeBlinker.Blink() && (currentExpression == null || currentExpression.enableBlinking)) {
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 1f);
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 1f);
+            } else {
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
+            }
+        } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
+            OpenSee.OpenSee.OpenSeeData openSeeData = openSeeExpression.openSee.GetOpenSeeData(openSeeExpression.faceId);
+            if (openSeeData == null || !currentExpression.enableBlinking) {
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
+                return;
+            }
+            float right = 1f;
+            if (openSeeData.rightEyeOpen > 0.5f)
+                right = 0f;
+            float left = 1f;
+            if (openSeeData.leftEyeOpen > 0.5f)
+                left = 0f;
+            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
+            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), left);
         }
     }
 
