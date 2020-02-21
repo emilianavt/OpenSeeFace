@@ -169,8 +169,9 @@ public class OpenSeeExpression : MonoBehaviour
     private void SelectPoints() {
         List<int> indexList = new List<int>();
         for (int i = 0; i < colsBase; i++)
-            indexList.Add(i);
-        cols = colsBase;
+            if (i < 2 || i > 4) // Translation should not be used for training!
+                indexList.Add(i);
+        cols = indexList.Count;
         if (pointSelection.pointsFaceContour)
             foreach (int i in indicesFaceContour) {
                 indexList.Add(colsBase + i * 3);
