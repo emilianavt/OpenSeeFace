@@ -21,12 +21,19 @@ public class OpenSeeShowPoints : MonoBehaviour {
         if (openSee == null) {
             openSee = GetComponent<OpenSee>();
         }
-        gameObjects = new GameObject[68];
-        for (int i = 0; i < 68; i++) {
+        gameObjects = new GameObject[70];
+        for (int i = 0; i < 70; i++) {
             gameObjects[i] = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             gameObjects[i].name = "Point " + (i + 1);
             gameObjects[i].transform.SetParent(transform);
             gameObjects[i].transform.localScale = new Vector3(0.025f, 0.025f, 0.025f);
+            if (i >= 68) {
+                GameObject cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                cylinder.transform.SetParent(gameObjects[i].transform);
+                cylinder.transform.localEulerAngles = new Vector3(90f, 0f, 0f);
+                cylinder.transform.localPosition = new Vector3(0f, 0f, -4f);
+                cylinder.transform.localScale = new Vector3(1f, 4f, 1f);
+            }
         }
         centerBall = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         centerBall.name = "Center";
@@ -50,13 +57,20 @@ public class OpenSeeShowPoints : MonoBehaviour {
         }
         if (show3DPoints) {
             centerBall.gameObject.SetActive(false);
-            for (int i = 0; i < 66; i++) {
-                if (openSeeData.got3DPoints && openSeeData.confidence[i] > minConfidence) {
+            for (int i = 0; i < 70; i++) {
+                if (openSeeData.got3DPoints && (i >= 68 || openSeeData.confidence[i] > minConfidence)) {
                     Renderer renderer = gameObjects[i].GetComponent<Renderer>();
-                    renderer.material.SetColor("_Color", Color.Lerp(Color.red, Color.green, openSeeData.confidence[i]));
                     Vector3 pt = openSeeData.points3D[i];
                     pt.x = -pt.x;
                     gameObjects[i].transform.localPosition = pt;
+                    if (i < 68)
+                        renderer.material.SetColor("_Color", Color.Lerp(Color.red, Color.green, openSeeData.confidence[i]));
+                    else {
+                        if (i == 68)
+                            gameObjects[i].transform.localRotation = openSeeData.rightGaze;
+                        else
+                            gameObjects[i].transform.localRotation = openSeeData.leftGaze;
+                    }
                 } else {
                     Renderer renderer = gameObjects[i].GetComponent<Renderer>();
                     renderer.material.SetColor("_Color", Color.cyan);

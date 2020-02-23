@@ -120,8 +120,8 @@ try:
         for face_num, f in enumerate(faces):
             f = copy.copy(f)
             f.id += args.face_id_offset
-            right_state = "O" if f.eye_blink[0] > 0.5 else "-"
-            left_state = "O" if f.eye_blink[1] > 0.5 else "-"
+            right_state = "O" if f.eye_blink[0] > 0.8 else "-"
+            left_state = "O" if f.eye_blink[1] > 0.8 else "-"
             if args.silent == 0:
                 print(f"Confidence[{f.id}]: {f.conf:.4f} / 3D fitting error: {f.pnp_error:.4f} / Eyes: {left_state}, {right_state}")
             detected = True
@@ -154,9 +154,9 @@ try:
                 packet.extend(bytearray(struct.pack("f", x)))
                 if not log is None:
                     log.write(f",{y},{x},{c}")
-                if pt_num == 66:# and right_open < 0.5:
+                if pt_num == 66 and f.eye_blink[0] < 0.5:
                     continue
-                if pt_num == 67:# and left_open < 0.5:
+                if pt_num == 67 and f.eye_blink[0] < 0.5:
                     continue
                 x = int(x + 0.5)
                 y = int(y + 0.5)
@@ -165,17 +165,20 @@ try:
                         frame = cv2.putText(frame, str(f.id), (int(f.bbox[0]), int(f.bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
                     if args.visualize > 2:
                         frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
+                    color = (0, 0, 255)
+                    if pt_num >= 66:
+                        color = (255, 255, 0)
                     if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 0, 255)
+                        frame[int(x), int(y)] = color
                     x += 1
                     if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 0, 255)
+                        frame[int(x), int(y)] = color
                     y += 1
                     if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 0, 255)
+                        frame[int(x), int(y)] = color
                     x -= 1
                     if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 0, 255)
+                        frame[int(x), int(y)] = color
             if args.pnp_points != 0 and (args.visualize != 0 or not out is None):
                 if args.pnp_points > 1:
                     projected = cv2.projectPoints(f.face_3d, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)

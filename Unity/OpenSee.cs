@@ -15,7 +15,7 @@ public class OpenSee : MonoBehaviour {
     [Tooltip("This is the port the server will listen for tracking packets on")]
     public int listenPort = 11573;
 
-    private const int nPoints = 66;
+    private const int nPoints = 68;
     private const int packetFrameSize = 8 + 4 + 2 * 4 + 2 * 4 + 1 + 4 + 3 * 4 + 3 * 4 + 4 * 4 + 4 * 68 + 4 * 2 * 68 + 4 * 3 * 70;
 
     [Header("Tracking data")]
@@ -36,6 +36,10 @@ public class OpenSee : MonoBehaviour {
         public float rightEyeOpen;
         [Tooltip("This field tells you how likely it is that the left eye is open.")]
         public float leftEyeOpen;
+        [Tooltip("This field tells you how likely it is that the right eye is open.")]
+        public Quaternion rightGaze;
+        [Tooltip("This field tells you how likely it is that the left eye is open.")]
+        public Quaternion leftGaze;
         [Tooltip("This field tells you if 3D points have been successfully estimated from the 2D points. If this is false, do not rely on pose or 3D data.")]
         public bool got3DPoints;
         [Tooltip("This field contains the error for fitting the original 3D points. It shouldn't matter much, but it it is very high, something is probably wrong")]
@@ -58,7 +62,12 @@ public class OpenSee : MonoBehaviour {
         public OpenSeeData() {
             confidence = new float[nPoints];
             points = new Vector2[nPoints];
-            points3D = new Vector3[nPoints];
+            points3D = new Vector3[nPoints + 2];
+        }
+        
+        private Vector3 swapX(Vector3 v) {
+            v.x = -v.x;
+            return v;
         }
 
         private float readFloat(byte[] b, ref int o) {
@@ -120,22 +129,16 @@ public class OpenSee : MonoBehaviour {
                 confidence[i] = readFloat(b, ref o);
             }
 
-            // Gaze tracker results are still bad, ignore them
-            readFloat(b, ref o); readFloat(b, ref o);
-
             for (int i = 0; i < nPoints; i++) {
                 points[i] = readVector2(b, ref o);
             }
 
-            // Gaze tracker results are still bad, ignore them
-            readVector2(b, ref o); readVector2(b, ref o);
-
-            for (int i = 0; i < nPoints; i++) {
+            for (int i = 0; i < nPoints + 2; i++) {
                 points3D[i] = readVector3(b, ref o);
             }
-
-            // Gaze tracker results are still bad, ignore them
-            readVector3(b, ref o); readVector3(b, ref o); readVector3(b, ref o); readVector3(b, ref o);
+            
+            rightGaze = Quaternion.LookRotation(swapX(points3D[66]) - swapX(points3D[68])) * Quaternion.AngleAxis(180, Vector3.right) * Quaternion.AngleAxis(180, Vector3.forward);
+            leftGaze = Quaternion.LookRotation(swapX(points3D[67]) - swapX(points3D[69])) * Quaternion.AngleAxis(180, Vector3.right) * Quaternion.AngleAxis(180, Vector3.forward);
         }
     }
 

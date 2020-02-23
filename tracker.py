@@ -25,6 +25,32 @@ def clamp_to_im(pt, w, h):
         y = h-1
     return (int(x), int(y+1))
 
+def rotate(origin, point, angle):
+    angle = -angle
+    ox, oy = origin
+    px, py = point
+
+    qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
+    qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
+    return qx, qy
+
+def angle(p1, p2):
+    p1 = np.array(p1)
+    p2 = np.array(p2)
+    a = np.arctan2(*(p2 - p1)[::-1])
+    return (a % (2 * np.pi))
+
+def compensate(p1, p2):
+    a = angle(p1, p2)
+    return rotate(p1, p2, a), a
+
+def rotate_image(image, angle, center):
+    (h, w) = image.shape[:2]
+    angle = np.rad2deg(angle)
+    M = cv2.getRotationMatrix2D((center[0], center[1]), angle, 1.0)
+    rotated = cv2.warpAffine(image, M, (w, h))
+    return rotated
+
 def intersects(r1, r2):
     r1_x1, r1_y1, r1_x2, r1_y2 = r1
     r1_x2 += r1_x1
@@ -93,9 +119,14 @@ class FaceInfo():
         self.id = id
         self.frame_count = -1
         self.tracker = tracker
+        self.face_3d = copy.copy(self.tracker.face_3d)
         self.reset()
         self.alive = False
         self.coord = None
+
+        self.limit_3d_adjustment = True
+        self.update_count_delta = 50.
+        self.update_count_max = 1500.
 
     def reset(self):
         self.alive = False
@@ -111,8 +142,8 @@ class FaceInfo():
         self.pts_3d = None
         self.eye_blink = None
         self.bbox = None
-        self.face_3d = copy.copy(self.tracker.face_3d)
         self.contour = np.zeros((21,3))
+        self.update_counts = np.zeros((66,2))
         self.update_contour()
 
     def update(self, result, coord, frame_count):
@@ -133,19 +164,19 @@ class FaceInfo():
 
     def adjust_3d(self):
         r = 1.0 + np.random.random_sample((66,3)) * 0.02 - 0.01
+        update_type = -1
         if self.euler[0] > -165 and self.euler[0] < 145:
             r[:, :] = 1.0
-            print("Skipping all")
         elif self.euler[1] > -10 and self.euler[1] < 20:
             r[:, 2] = 1.0
-            print("Skipping depth")
+            update_type = 0
         else:
             r[:, 0:2] = 1.0
             if self.euler[2] > 120 or self.euler[2] < 60:
                 r[:, 2] = 1.0
-                print("Skipping all-b")
             # Enable only one side of the points, depending on direction
             elif self.euler[1] < -10:
+                update_type = 1
                 r[0:8, 2] = 1.0
                 r[17:22, 2] = 1.0
                 r[31:33, 2] = 1.0
@@ -153,6 +184,7 @@ class FaceInfo():
                 for i in [48, 49, 56, 57, 58, 59, 65]:
                     r[i, 2] = 1.0
             else:
+                update_type = 1
                 r[8:17, 2] = 1.0
                 r[22:27, 2] = 1.0
                 r[34:36, 2] = 1.0
@@ -168,10 +200,28 @@ class FaceInfo():
         for i in range(66):
             lm = self.lms[i, 0:2]
             if np.linalg.norm(c_projected[i] - lm) < np.linalg.norm(o_projected[i] - lm):
-                updated[i] = c[i]
-                changed = True
-        self.face_3d = self.face_3d * 0.3 + updated * 0.7
+                can_update = False
+                if not self.limit_3d_adjustment or self.update_counts[i, update_type] < self.update_counts[i, abs(update_type - 1)] + self.update_count_delta:
+                    can_update = True
+                    self.update_counts[i, update_type] += 1
+                if can_update:
+                    updated[i] = c[i]
+                    changed = True
+
         if changed:
+            # Update weighted by point confidence
+            weights = np.zeros((66,3))
+            weights[:, :] = self.lms[0:66, 2:3]
+            weights[weights > 0.7] = 1.0
+            weights = 1.0 - weights
+            if self.limit_3d_adjustment:
+                # And by update count
+                weights[:, 0:2] *= self.update_counts[:, 0:1] / self.update_count_max
+                weights[:, 2] *= self.update_counts[:, 1] / self.update_count_max
+                weights = 1 - 1 / (1 + np.power(1 / (weights / self.update_count_max) - 1, -3))
+                weights[weights > 0.975] = 0.975
+            self.face_3d[0:66] = self.face_3d[0:66] * weights + updated[0:66] * (1. - weights)
+
             self.update_contour()
 
 
@@ -224,7 +274,7 @@ class Tracker():
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
-        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "gaze_opt.onnx"), sess_options=options)
+        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_16_split_opt.onnx"), sess_options=options)
 
         self.faceCascade = cv2.CascadeClassifier()
         self.faceCascade.load(os.path.join(model_base_path, "haarcascade_frontalface_alt2.xml"))
@@ -332,6 +382,7 @@ class Tracker():
         self.res = 224. if self.model_type != 0 else 112.
         self.res_i = int(self.res)
         self.no_gaze = no_gaze
+        self.debug_gaze = False
         self.face_info = [FaceInfo(id, self) for id in range(max_faces)]
 
     def landmarks(self, tensor, crop_info):
@@ -389,15 +440,32 @@ class Tracker():
         pnp_error = 0.0
         for i, pt in enumerate(face_info.face_3d):
             if i == 68:
-                eye_center = np.transpose(pts_3d[36:42,0:2], (1,0)).mean(1)
-                pt_3d = np.array([eye_center[0], eye_center[1], face_info.face_3d[i][2]], np.float32)
+                # Right eyeball
+                # Eyeballs have an average diameter of 12.5mm and and the distance between eye corners is 30-35mm, so a conversion factor of 0.385 can be applied
+                eye_center = (pts_3d[36] + pts_3d[39]) / 2.0
+                d_corner = np.linalg.norm(pts_3d[36] - pts_3d[39])
+                depth = 0.385 * d_corner
+                pt_3d = np.array([eye_center[0], eye_center[1], eye_center[2] - depth])
                 pts_3d[i] = pt_3d
                 continue
             if i == 69:
-                eye_center = np.transpose(pts_3d[42:48,0:2], (1,0)).mean(1)
-                pt_3d = np.array([eye_center[0], eye_center[1], face_info.face_3d[i][2]], np.float32)
+                # Left eyeball
+                eye_center = (pts_3d[42] + pts_3d[45]) / 2.0
+                d_corner = np.linalg.norm(pts_3d[42] - pts_3d[45])
+                depth = 0.385 * d_corner
+                pt_3d = np.array([eye_center[0], eye_center[1], eye_center[2] - depth])
                 pts_3d[i] = pt_3d
                 continue
+            if i == 66:
+                d1 = np.linalg.norm(lms[i,0:2] - lms[36,0:2])
+                d2 = np.linalg.norm(lms[i,0:2] - lms[39,0:2])
+                d = d1 + d2
+                pt = (pts_3d[36] * d1 + pts_3d[39] * d2) / d
+            if i == 67:
+                d1 = np.linalg.norm(lms[i,0:2] - lms[42,0:2])
+                d2 = np.linalg.norm(lms[i,0:2] - lms[45,0:2])
+                d = d1 + d2
+                pt = (pts_3d[42] * d1 + pts_3d[45] * d2) / d
             reference = rmat.dot(pt)
             reference = reference + face_info.translation
             reference = self.camera.dot(reference)
@@ -429,24 +497,56 @@ class Tracker():
             im = np.expand_dims(im, 1)
         return im
 
-    def prepare_eye(self, frame, lms):
-        lms = np.transpose(lms, (1,0))
-        center = lms.mean(1)
-        radius = np.abs(lms - np.expand_dims(center, 1)).max(1).max() * 0.8
-        x = center[1]
-        y = center[0]
-        x1, y1 = clamp_to_im((x - radius, y - radius), self.width, self.height)
-        x2, y2 = clamp_to_im((x + radius, y + radius), self.width, self.height)
-        dist = min(x2-x1, y2-y1)
-        x2 = x1 + dist
-        y2 = y1 + dist
-        im = np.float32(frame[int(y1):int(y2), int(x1):int(x2),::-1])
+    def corners_to_eye(self, corners, w, h, flip):
+        ((cx1, cy1), (cx2, cy2)) = corners
+        c1 = np.array([cx1, cy1])
+        c2 = np.array([cx2, cy2])
+        c2, angle = compensate(c1, c2)
+        center = (c1 + c2) / 2.0
+        radius = np.linalg.norm(c1 - c2) / 2.0
+        radius = np.array([radius * 1.4, radius * 1.2])
+        upper_left = clamp_to_im(center - radius, w, h)
+        lower_right = clamp_to_im(center + radius, w, h)
+        return upper_left, lower_right, center, radius, c1, angle
+
+    def prepare_eye(self, frame, full_frame, lms, flip):
+        outer_pt = tuple(lms[0])
+        inner_pt = tuple(lms[1])
+        h, w, _ = frame.shape
+        (x1, y1), (x2, y2), center, radius, reference, angle = self.corners_to_eye((outer_pt, inner_pt), w, h, flip)
+        im = rotate_image(frame[:, :, ::], angle, reference)
+        im = im[int(y1):int(y2), int(x1):int(x2),:]
         if np.prod(im.shape) < 1:
-            return None, None, None, None
-        im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_LINEAR) / self.std - self.mean
+            return None, None, None, None, None, None
+        if flip:
+            im = cv2.flip(im, 1)
+        scale = np.array([(x2 - x1), (y2 - y1)]) / 32.
+        im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_LINEAR)
+        if self.debug_gaze:
+            if not flip:
+                full_frame[0:32, 0:32] = im
+            else:
+                full_frame[0:32, 32:64] = im
+        im = im.astype(np.float32)[:,:,::-1] / self.std - self.mean
         im = np.expand_dims(im, 0)
-        im = np.transpose(im, (0,3,1,2))
-        return (im, x1, y1, dist / 32.)
+        im = np.transpose(im, (0,3,2,1))
+        return im, x1, y1, scale, reference, angle
+
+    def extract_face(self, frame, lms):
+        lms = np.array(lms)[:,0:2][:,::-1]
+        x1, y1 = tuple(lms.min(0))
+        x2, y2 = tuple(lms.max(0))
+        radius_x = 1.2 * (x2 - x1) / 2.0
+        radius_y = 1.2 * (y2 - y1) / 2.0
+        radius = np.array((radius_x, radius_y))
+        center = (np.array((x1, y1)) + np.array((x2, y2))) / 2.0
+        w, h, _ = frame.shape
+        x1, y1 = clamp_to_im(center - radius, h, w)
+        x2, y2 = clamp_to_im(center + radius + 1, h, w)
+        offset = np.array((x1, y1))
+        lms = (lms[:, 0:2] - offset).astype(np.int)
+        frame = frame[y1:y2, x1:x2]
+        return frame, lms, offset
 
     def get_eye_state(self, frame, lms):
         if self.no_gaze:
@@ -455,27 +555,56 @@ class Tracker():
         e_x = [0,0]
         e_y = [0,0]
         scale = [0,0]
-        (right_eye, e_x[0], e_y[0], scale[0]) = self.prepare_eye(frame, lms[36:42,0:2])
-        (left_eye, e_x[1], e_y[1], scale[1]) = self.prepare_eye(frame, lms[42:48,0:2])
+        reference = [None, None]
+        angle = [0, 0]
+        face_frame, lms, offset = self.extract_face(frame, lms)
+        (right_eye, e_x[0], e_y[0], scale[0], reference[0], angle[0]) = self.prepare_eye(face_frame, frame, np.array([lms[36,0:2], lms[39,0:2]]), False)
+        (left_eye, e_x[1], e_y[1], scale[1], reference[1], angle[1]) = self.prepare_eye(face_frame, frame, np.array([lms[42,0:2], lms[45,0:2]]), True)
         if right_eye is None or left_eye is None:
             return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         both_eyes = np.concatenate((right_eye, left_eye))
-        results = np.array(self.gaze_model.run([], {self.input_name: both_eyes})[0])
+        results = self.gaze_model.run([], {self.input_name: both_eyes})
         open = [0, 0]
-        open[0] = results[0][3].mean()
-        open[1] = results[1][3].mean()
+        open[0] = 1#results[1][0].argmax()
+        open[1] = 1#results[1][1].argmax()
+        results = np.array(results[0])
 
         eye_state = []
         for i in range(2):
             m = int(results[i][0].argmax())
-            x = m // 8
-            y = m % 8
+            x = m // 16
+            y = m % 16
             conf = float(results[i][0][x,y])
 
-            off_y = 32.0 * logit(results[i][1][y, x], 8.0)
-            off_x = 32.0 * logit(results[i][2][y, x], 8.0)
-            eye_y = e_y[i] + scale[i] * (32.0 * float(x) / 8.0 + off_x)
-            eye_x = e_x[i] + scale[i] * (32.0 * float(y) / 8.0 + off_y)
+            off_x = 32.0 * logit(results[i][1][x, y], 16.0)
+            off_y = 32.0 * logit(results[i][2][x, y], 16.0)
+            if i == 1:
+                eye_x = 32.0 * float(x) / 16.0 + off_x
+            else:
+                eye_x = 32.0 * float(x) / 16.0 + off_x
+            eye_y = 32.0 * float(y) / 16.0 + off_y
+
+            if self.debug_gaze:
+                if i == 0:
+                    frame[int(eye_y), int(eye_x)] = (0, 0, 255)
+                    frame[int(eye_y+1), int(eye_x)] = (0, 0, 255)
+                    frame[int(eye_y+1), int(eye_x+1)] = (0, 0, 255)
+                    frame[int(eye_y), int(eye_x+1)] = (0, 0, 255)
+                else:
+                    frame[int(eye_y), 32+int(eye_x)] = (0, 0, 255)
+                    frame[int(eye_y+1), 32+int(eye_x)] = (0, 0, 255)
+                    frame[int(eye_y+1), 32+int(eye_x+1)] = (0, 0, 255)
+                    frame[int(eye_y), 32+int(eye_x+1)] = (0, 0, 255)
+
+            if i == 0:
+                eye_x = e_x[i] + scale[i][0] * eye_x
+            else:
+                eye_x = e_x[i] + scale[i][0] * (32. - eye_x)
+            eye_y = e_y[i] + scale[i][1] * eye_y
+            eye_x, eye_y = rotate(reference[i], (eye_x, eye_y), -angle[i])
+
+            eye_x = eye_x + offset[0]
+            eye_y = eye_y + offset[1]
             eye_state.append([open[i], eye_y, eye_x, conf])
 
         return eye_state

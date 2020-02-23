@@ -12,12 +12,25 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Header("Settings")]
     [Tooltip("This is the OpenSeeExpression module used for expression prediction.")]
     public OpenSeeExpression openSeeExpression;
+    [Tooltip("This is the OpenSeeIKTarget module used to move the avatar.")]
+    public OpenSeeIKTarget openSeeIKTarget;
     [Tooltip("This is the target VRM avatar's blend shape proxy.")]
     public VRMBlendShapeProxy vrmBlendShapeProxy;
-    [Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
-    public bool fixedUpdate = true;
+    //[Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
+    //public bool fixedUpdate = true;
     [Tooltip("When enabled, the avatar will blink automatically. Otherwise, blinks will be applied according to the face tracking's blink detection, allowing it to wink. Even for tracked eye blinks, the eye blink setting of the current expression is used.")]
     public bool autoBlink = true;
+    [Tooltip("When enabled, the avatar's eye will move according to the face tracker's gaze tracking.")]
+    public bool gazeTracking = true;
+    [Tooltip("This is the right eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
+    public Transform rightEye;
+    [Tooltip("This is the left eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
+    public Transform leftEye;
+    [Tooltip("This is the gaze smoothing factor, with 0 being no smoothing and 1 being a fixed gaze.")]
+    [Range(0, 1)]
+    public float gazeSmoothing = 0.9f;
+    [Tooltip("For bone based gaze tracking, the conversion factor from [-1, 1] to degrees should be entered here. For blendshapes, sometimes gaze tracking does not follow the gaze strongly enough. With these factors, its effect can be strengthened.")]
+    public Vector2 gazeFactor = new Vector2(5f, 5f);
     [Tooltip("This component lets you customize the automatic eye blinking.")]
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
@@ -39,7 +52,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public AudioSource audioSource = null;
     [Tooltip("This is the microphone audio will be captured from. A list can be retrieved from Microphone.devices.")]
     public string mic = null;
-    [Tooltip("When enabled, the lip sync function will be initialized or reinitialized in the next Update or FixedUpdate call, according to the fixedUpdate flag. This flag is reset to false afterwards. It is also possible to call InitializeLipSync instead.")]
+    [Tooltip("When enabled, the lip sync function will be initialized or reinitialized in the next Update or FixedUpdate call, according to the IK target's fixedUpdate flag. This flag is reset to false afterwards. It is also possible to call InitializeLipSync instead.")]
     public bool initializeLipSync = false;
     [Range(1, 100)]
     [Tooltip("This sets the viseme smoothing in a range from 1 to 100, where 1 means no smoothing and values above 90 mean pretty much no visemes.")]
@@ -69,6 +82,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private BlendShapeKey[] visemePresetMap;
     private Dictionary<string, OpenSeeVRMExpression> expressionMap;
     private OpenSeeVRMExpression currentExpression = null;
+    private OpenSee.OpenSee.OpenSeeData openSeeData = null;
+    private double lastGaze = 0f;
+    private float lastLookUpDown = 0f;
+    private float lastLookLeftRight = 0f;
+    private float currentLookUpDown = 0f;
+    private float currentLookLeftRight = 0f;
+    private int interpolationCount = 0;
+    private int interpolationState = 0;
 
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
@@ -191,6 +212,93 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         currentExpression = expressionMap[openSeeExpression.expression];
         vrmBlendShapeProxy.ImmediatelySetValue(currentExpression.blendShapeKey, currentExpression.weight);
     }
+    
+    void GetLookParameters(ref float lookLeftRight, ref float lookUpDown, bool update, int gazePoint, int topRight, int topLeft, int bottomRight, int bottomLeft) {
+        float borderRight = (openSeeData.points3D[topRight].x + openSeeData.points3D[bottomRight].x) / 2.0f;
+        float borderLeft = (openSeeData.points3D[topLeft].x + openSeeData.points3D[bottomLeft].x) / 2.0f;
+        float horizontalCenter = (borderRight + borderLeft) / 2.0f;
+        float horizontalRadius = (Mathf.Abs(horizontalCenter - borderRight) + Mathf.Abs(borderLeft - horizontalCenter)) / 2.0f;
+        float borderTop = (openSeeData.points3D[topRight].y + openSeeData.points3D[topLeft].y) / 2.0f;
+        float borderBottom = (openSeeData.points3D[bottomRight].y + openSeeData.points3D[bottomLeft].y) / 2.0f;
+        float verticalCenter = (borderTop + borderBottom) / 2.0f;
+        float verticalRadius = (Mathf.Abs(verticalCenter - borderTop) + Mathf.Abs(borderBottom - verticalCenter)) / 2.0f;
+        float x = openSeeData.points3D[gazePoint].x;
+        float y = openSeeData.points3D[gazePoint].y;
+        if (!update) {
+            lookLeftRight = Mathf.Clamp(gazeFactor.x * (x - horizontalCenter) / horizontalRadius, -1f, 1f);
+            lookUpDown = Mathf.Clamp(gazeFactor.y * (y - verticalCenter) / verticalRadius, -1f, 1f);
+        } else {
+            lookLeftRight += Mathf.Clamp(gazeFactor.x * (x - horizontalCenter) / horizontalRadius, -1f, 1f);
+            lookLeftRight /= 2.0f;
+            lookUpDown += Mathf.Clamp(gazeFactor.y * (y - verticalCenter) / verticalRadius, -1f, 1f);
+            lookUpDown /= 2.0f;
+        }
+    }
+    
+    void UpdateGaze() {
+        if (openSeeData == null || vrmBlendShapeProxy == null || openSeeIKTarget == null || !(openSeeIKTarget.averageInterpolations > 0f))
+            return;
+        
+        float lookUpDown = 0f;
+        float lookLeftRight = 0f;
+
+        if (lastGaze < openSeeData.time) {
+            GetLookParameters(ref lookLeftRight, ref lookUpDown, false, 66, 37, 38, 41, 40);
+            GetLookParameters(ref lookLeftRight, ref lookUpDown, true,  67, 43, 44, 47, 46);
+            
+            lookLeftRight = Mathf.Lerp(lastLookLeftRight, lookLeftRight, gazeSmoothing);
+            lookUpDown = Mathf.Lerp(lastLookUpDown, lookUpDown, gazeSmoothing);
+            lastLookLeftRight = currentLookLeftRight;
+            lastLookUpDown = currentLookUpDown;
+            currentLookLeftRight = lookLeftRight;
+            currentLookUpDown = lookUpDown;
+            lastGaze = openSeeData.time;
+            if (interpolationState < 2)
+                interpolationState++;
+            interpolationCount = 0;
+        }
+        
+        if (interpolationState < 2)
+            return;
+        
+        float t = Mathf.Clamp((float)interpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
+        lookLeftRight = Mathf.Lerp(lastLookLeftRight, currentLookLeftRight, t);
+        lookUpDown = Mathf.Lerp(lastLookUpDown, currentLookUpDown, t);
+        interpolationCount++;
+        
+        if (!openSeeIKTarget.mirrorMotion)
+            lookLeftRight = -lookLeftRight;
+        
+        if (leftEye == null || rightEye == null) {
+            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookUp), 0f);
+            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookDown), 0f);
+            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookLeft), 0);
+            vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookRight), 0f);
+            if (gazeTracking) {
+                if (lookUpDown > 0f) {
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookUp), lookUpDown);
+                } else {
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookDown), -lookUpDown);
+                }
+                
+                if (lookLeftRight > 0f) {
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookLeft), lookLeftRight);
+                } else {
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookRight), -lookLeftRight);
+                }
+            }
+        } else {
+            //vrmLookAtHead.UpdateType = VRM.UpdateType.None;
+            //vrmLookAtHead.RaiseYawPitchChanged(gazeFactor.y * lookLeftRight, gazeFactor.x * lookUpDown);
+            rightEye.localRotation = Quaternion.identity;
+            leftEye.localRotation = Quaternion.identity;
+            if (gazeTracking) {
+                Quaternion rotation = Quaternion.AngleAxis(gazeFactor.x * lookUpDown, Vector3.right) * Quaternion.AngleAxis(gazeFactor.y * lookLeftRight, Vector3.up);
+                rightEye.localRotation = rotation;
+                leftEye.localRotation = rotation;
+            }
+        }
+    }
 
     void BlinkEyes() {
         if (vrmBlendShapeProxy == null || eyeBlinker == null)
@@ -204,7 +312,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
             }
         } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
-            OpenSee.OpenSee.OpenSeeData openSeeData = openSeeExpression.openSee.GetOpenSeeData(openSeeExpression.faceId);
             if (openSeeData == null || !currentExpression.enableBlinking) {
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
@@ -444,18 +551,21 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void RunUpdates() {
+        if (openSeeExpression != null && openSeeExpression.openSee != null)
+            openSeeData = openSeeExpression.openSee.GetOpenSeeData(openSeeExpression.faceId);
         if (initializeLipSync) {
             InitializeLipSync();
             initializeLipSync = false;
         }
         UpdateExpression();
+        UpdateGaze();
         BlinkEyes();
         ReadAudio();
         ApplyVisemes();
     }
 
     void FixedUpdate() {
-        if (fixedUpdate) {
+        if (openSeeIKTarget.fixedUpdate) {
             RunUpdates();
         }
     }
@@ -465,7 +575,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             OVRLipSync.SendSignal(context, OVRLipSync.Signals.VisemeSmoothing, smoothAmount, 0);
             lastSmoothing = smoothAmount;
         }
-        if (!fixedUpdate) {
+        if (!openSeeIKTarget.fixedUpdate) {
             RunUpdates();
         }
     }
