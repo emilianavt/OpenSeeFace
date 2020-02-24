@@ -124,7 +124,7 @@ class FaceInfo():
         self.alive = False
         self.coord = None
 
-        self.limit_3d_adjustment = True
+        self.limit_3d_adjustment = False
         self.update_count_delta = 50.
         self.update_count_max = 1500.
 
@@ -274,7 +274,7 @@ class Tracker():
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
-        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_16_split_opt.onnx"), sess_options=options)
+        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
 
         self.faceCascade = cv2.CascadeClassifier()
         self.faceCascade.load(os.path.join(model_base_path, "haarcascade_frontalface_alt2.xml"))
@@ -497,6 +497,11 @@ class Tracker():
             im = np.expand_dims(im, 1)
         return im
 
+    def equalize(self, im):
+        im_yuv = cv2.cvtColor(im, cv2.COLOR_BGR2YUV)
+        im_yuv[:,:,0] = cv2.equalizeHist(im_yuv[:,:,0])
+        return cv2.cvtColor(im_yuv, cv2.COLOR_YUV2BGR)
+
     def corners_to_eye(self, corners, w, h, flip):
         ((cx1, cy1), (cx2, cy2)) = corners
         c1 = np.array([cx1, cy1])
@@ -522,6 +527,7 @@ class Tracker():
             im = cv2.flip(im, 1)
         scale = np.array([(x2 - x1), (y2 - y1)]) / 32.
         im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_LINEAR)
+        #im = self.equalize(im)
         if self.debug_gaze:
             if not flip:
                 full_frame[0:32, 0:32] = im
@@ -572,17 +578,17 @@ class Tracker():
         eye_state = []
         for i in range(2):
             m = int(results[i][0].argmax())
-            x = m // 16
-            y = m % 16
+            x = m // 8
+            y = m % 8
             conf = float(results[i][0][x,y])
 
-            off_x = 32.0 * logit(results[i][1][x, y], 16.0)
-            off_y = 32.0 * logit(results[i][2][x, y], 16.0)
+            off_x = 32.0 * logit(results[i][1][x, y], 8.0)
+            off_y = 32.0 * logit(results[i][2][x, y], 8.0)
             if i == 1:
-                eye_x = 32.0 * float(x) / 16.0 + off_x
+                eye_x = 32.0 * float(x) / 8.0 + off_x
             else:
-                eye_x = 32.0 * float(x) / 16.0 + off_x
-            eye_y = 32.0 * float(y) / 16.0 + off_y
+                eye_x = 32.0 * float(x) / 8.0 + off_x
+            eye_y = 32.0 * float(y) / 8.0 + off_y
 
             if self.debug_gaze:
                 if i == 0:
