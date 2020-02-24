@@ -28,9 +28,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public Transform leftEye;
     [Tooltip("This is the gaze smoothing factor, with 0 being no smoothing and 1 being a fixed gaze.")]
     [Range(0, 1)]
-    public float gazeSmoothing = 0.9f;
-    [Tooltip("For bone based gaze tracking, the conversion factor from [-1, 1] to degrees should be entered here. For blendshapes, sometimes gaze tracking does not follow the gaze strongly enough. With these factors, its effect can be strengthened.")]
-    public Vector2 gazeFactor = new Vector2(5f, 5f);
+    public float gazeSmoothing = 0.6f;
+    [Tooltip("This is the gaze stabilization factor, with 0 being no stabilization and 1 being a fixed gaze.")]
+    [Range(0, 1)]
+    public float gazeStabilizer = 0.1f;
+    [Tooltip("For bone based gaze tracking, the conversion factor from [-1, 1] to degrees should be entered here. For blendshapes, sometimes gaze tracking does not follow the gaze strongly enough. With these factors, its effect can be strengthened, but usually it should be set to 1.")]
+    public Vector2 gazeFactor = new Vector2(5f, 10f);
     [Tooltip("This component lets you customize the automatic eye blinking.")]
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
@@ -224,13 +227,15 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         float verticalRadius = (Mathf.Abs(verticalCenter - borderTop) + Mathf.Abs(borderBottom - verticalCenter)) / 2.0f;
         float x = openSeeData.points3D[gazePoint].x;
         float y = openSeeData.points3D[gazePoint].y;
+        float newLookLeftRight = Mathf.Clamp((x - horizontalCenter) / horizontalRadius, -1f, 1f);
+        float newLookUpDown = Mathf.Clamp((y - verticalCenter) / verticalRadius, -1f, 1f);
         if (!update) {
-            lookLeftRight = Mathf.Clamp(gazeFactor.x * (x - horizontalCenter) / horizontalRadius, -1f, 1f);
-            lookUpDown = Mathf.Clamp(gazeFactor.y * (y - verticalCenter) / verticalRadius, -1f, 1f);
+            lookLeftRight = newLookLeftRight;
+            lookUpDown = newLookUpDown;
         } else {
-            lookLeftRight += Mathf.Clamp(gazeFactor.x * (x - horizontalCenter) / horizontalRadius, -1f, 1f);
+            lookLeftRight += newLookLeftRight;
             lookLeftRight /= 2.0f;
-            lookUpDown += Mathf.Clamp(gazeFactor.y * (y - verticalCenter) / verticalRadius, -1f, 1f);
+            lookUpDown += newLookUpDown;
             lookUpDown /= 2.0f;
         }
     }
@@ -239,23 +244,26 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (openSeeData == null || vrmBlendShapeProxy == null || openSeeIKTarget == null || !(openSeeIKTarget.averageInterpolations > 0f))
             return;
         
-        float lookUpDown = 0f;
-        float lookLeftRight = 0f;
+        float lookUpDown = currentLookUpDown;
+        float lookLeftRight = currentLookLeftRight;
 
         if (lastGaze < openSeeData.time) {
             GetLookParameters(ref lookLeftRight, ref lookUpDown, false, 66, 37, 38, 41, 40);
             GetLookParameters(ref lookLeftRight, ref lookUpDown, true,  67, 43, 44, 47, 46);
             
-            lookLeftRight = Mathf.Lerp(lastLookLeftRight, lookLeftRight, gazeSmoothing);
-            lookUpDown = Mathf.Lerp(lastLookUpDown, lookUpDown, gazeSmoothing);
-            lastLookLeftRight = currentLookLeftRight;
-            lastLookUpDown = currentLookUpDown;
-            currentLookLeftRight = lookLeftRight;
-            currentLookUpDown = lookUpDown;
-            lastGaze = openSeeData.time;
-            if (interpolationState < 2)
-                interpolationState++;
-            interpolationCount = 0;
+            lookLeftRight = Mathf.Lerp(currentLookLeftRight, lookLeftRight, 1f - gazeSmoothing);
+            lookUpDown = Mathf.Lerp(currentLookUpDown, lookUpDown, 1f - gazeSmoothing);
+
+            if (Mathf.Abs(lookLeftRight - currentLookLeftRight) + Mathf.Abs(lookUpDown - currentLookUpDown) > gazeStabilizer) {
+                lastLookLeftRight = currentLookLeftRight;
+                lastLookUpDown = currentLookUpDown;
+                currentLookLeftRight = lookLeftRight;
+                currentLookUpDown = lookUpDown;
+                lastGaze = openSeeData.time;
+                if (interpolationState < 2)
+                    interpolationState++;
+                interpolationCount = 0;
+            }
         }
         
         if (interpolationState < 2)
@@ -276,15 +284,15 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookRight), 0f);
             if (gazeTracking) {
                 if (lookUpDown > 0f) {
-                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookUp), lookUpDown);
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookUp), gazeFactor.x * lookUpDown);
                 } else {
-                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookDown), -lookUpDown);
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookDown), -gazeFactor.x * lookUpDown);
                 }
                 
                 if (lookLeftRight > 0f) {
-                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookLeft), lookLeftRight);
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookLeft), gazeFactor.y * lookLeftRight);
                 } else {
-                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookRight), -lookLeftRight);
+                    vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.LookRight), -gazeFactor.y * lookLeftRight);
                 }
             }
         } else {
@@ -293,7 +301,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             rightEye.localRotation = Quaternion.identity;
             leftEye.localRotation = Quaternion.identity;
             if (gazeTracking) {
-                Quaternion rotation = Quaternion.AngleAxis(gazeFactor.x * lookUpDown, Vector3.right) * Quaternion.AngleAxis(gazeFactor.y * lookLeftRight, Vector3.up);
+                Quaternion rotation = Quaternion.AngleAxis(-gazeFactor.x * lookUpDown, Vector3.right) * Quaternion.AngleAxis(-gazeFactor.y * lookLeftRight, Vector3.up);
                 rightEye.localRotation = rotation;
                 leftEye.localRotation = rotation;
             }
