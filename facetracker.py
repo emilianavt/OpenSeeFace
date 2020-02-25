@@ -21,6 +21,7 @@ parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visual
 parser.add_argument("-P", "--pnp-points", type=int, help="Set this to 1 to add the 3D fitting points to the visualization", default=0)
 parser.add_argument("-s", "--silent", type=int, help="Set this to 1 to prevent text output on the console", default=0)
 parser.add_argument("--faces", type=int, help="Set the maximum number of faces (slow)", default=1)
+parser.add_argument("--scan-retinaface", type=int, help="When set to 1, scanning for additional faces will be performed using RetinaFace in a background thread, otherwise a simpler, faster face detection mechanism is used. When the maximum number of faces is 1, this option does nothing.", default=0)
 parser.add_argument("--scan-every", type=int, help="Set after how many frames a scan for new faces should run", default=3)
 parser.add_argument("--discard-after", type=int, help="Set the how long the tracker should keep looking for lost faces", default=10)
 parser.add_argument("--video-out", help="Set this to the filename of an AVI file to save the tracking visualization as a video", default=None)
@@ -106,7 +107,7 @@ try:
             first = False
             height, width, channels = frame.shape
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, pnp_quality=args.high_quality_3d, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True)
+            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, pnp_quality=args.high_quality_3d, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True, use_retinaface=args.scan_retinaface)
             if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), 24, (width,height))
 

@@ -7,6 +7,7 @@ import time
 import queue
 import threading
 import copy
+from retinaface import RetinaFaceDetector
 
 def resolve(name):
     f = os.path.join(os.path.dirname(__file__), name)
@@ -226,7 +227,7 @@ class FaceInfo():
 
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False):
+    def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False, use_retinaface=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max_threads
@@ -247,6 +248,10 @@ class Tracker():
                 model_base_path = resolve(os.path.join("..", "models"))
         else:
             model_base_path = model_dir
+
+        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_384.json"), threads=max_threads, top_k=max_faces)
+        self.retinaface_slow = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_384.json"), threads=2, top_k=max_faces)
+        self.use_retinaface = use_retinaface
 
         # Single face instance with multiple threads
         self.session = onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options)
@@ -664,13 +669,23 @@ class Tracker():
         new_faces.extend(self.faces)
         new_faces.extend(additional_faces)
         self.wait_count += 1
-        if self.detected < self.max_faces:
-            if self.detected == 0 or self.wait_count >= self.scan_every:
-                start_fd = time.perf_counter()
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                new_faces.extend(list(self.faceCascade.detectMultiScale(gray, 1.3, 4, 0 | cv2.CASCADE_SCALE_IMAGE, (50, 50))))
-                duration_fd = 1000 * (time.perf_counter() - start_fd)
-                self.wait_count = 0
+        if self.detected == 0:
+            start_fd = time.perf_counter()
+            new_faces.extend(self.retinaface.detect_retina(frame))
+            duration_fd = 1000 * (time.perf_counter() - start_fd)
+            self.wait_count = 0
+        elif self.detected < self.max_faces:
+            if self.use_retinaface > 0:
+                new_faces.extend(self.retinaface_slow.get_results())
+            if self.wait_count >= self.scan_every:
+                if self.use_retinaface > 0:
+                    self.retinaface_slow.background_detect(frame)
+                else:
+                    start_fd = time.perf_counter()
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    new_faces.extend(list(self.faceCascade.detectMultiScale(gray, 1.3, 4, 0 | cv2.CASCADE_SCALE_IMAGE, (50, 50))))
+                    duration_fd = 1000 * (time.perf_counter() - start_fd)
+                    self.wait_count = 0
         else:
             self.wait_count = 0
 

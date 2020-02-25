@@ -141,6 +141,17 @@ For all training after the first model, a modified version of [Adaptive Wing Los
 
 For expression detection, [LIBSVM](https://www.csie.ntu.edu.tw/~cjlin/libsvm/) is used.
 
+Face detection is done using OpenCV's Haar Cascade classifier or RetinaFace.
+
+    @inproceedings{deng2019retinaface,
+      title={RetinaFace: Single-stage Dense Face Localisation in the Wild},
+      author={Deng, Jiankang and Guo, Jia and Yuxiang, Zhou and Jinke Yu and Irene Kotsia and Zafeiriou, Stefanos},
+      booktitle={arxiv},
+      year={2019}
+    }
+
+RetinaFace detection is based on [this](https://github.com/biubug6/Pytorch_Retinaface) implementation. The pretrained model was modified to remove unnecessary landmark detection and converted to ONNX format for a resolution of 384x384.
+
 # License
 
 The code and models are distributed under the BSD 2-clause license. 
