@@ -179,20 +179,26 @@ public class OpenSee : MonoBehaviour {
     }
 
     void Start () {
-        openSeeDataMap = new Dictionary<int, OpenSeeData>();
+        if (openSeeDataMap == null)
+            openSeeDataMap = new Dictionary<int, OpenSeeData>();
         buffer = new byte[65535];
 
-        socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        IPAddress ip;
-        IPAddress.TryParse(listenAddress, out ip);
-        socket.Bind(new IPEndPoint(ip, listenPort));
-        socket.ReceiveTimeout = 15;
+        if (socket == null) {
+            socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            IPAddress ip;
+            IPAddress.TryParse(listenAddress, out ip);
+            socket.Bind(new IPEndPoint(ip, listenPort));
+            socket.ReceiveTimeout = 15;
+        }
 
         receiveThread = new Thread(() => performReception());
         receiveThread.Start();
     }
 
     void Update () {
+        if (!receiveThread.IsAlive) {
+            Start();
+        }
 	}
     
     void EndReceiver() {

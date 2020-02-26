@@ -169,7 +169,7 @@ public class OpenSeeExpression : MonoBehaviour
     private void SelectPoints() {
         List<int> indexList = new List<int>();
         for (int i = 0; i < colsBase; i++)
-            if (i < 2 || i > 4) // Translation should not be used for training!
+            if (i > 4) // Translation and (sometimes unavailable) eye open fields should not be used for training!
                 indexList.Add(i);
         cols = indexList.Count;
         if (pointSelection.pointsFaceContour)
@@ -303,6 +303,8 @@ public class OpenSeeExpression : MonoBehaviour
             ResetInfo();
             return false;
         }
+        modelReady = false;
+        //model = new SVMModel();
         SelectPoints();
         List<string> keys = new List<string>();
         List<string> accuracyWarnings = new List<string>();
