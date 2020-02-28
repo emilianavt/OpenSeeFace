@@ -196,7 +196,7 @@ public class OpenSee : MonoBehaviour {
     }
 
     void Update () {
-        if (!receiveThread.IsAlive) {
+        if (receiveThread != null && !receiveThread.IsAlive) {
             Start();
         }
 	}
