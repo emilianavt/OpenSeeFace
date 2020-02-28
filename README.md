@@ -150,7 +150,7 @@ Face detection is done using OpenCV's Haar Cascade classifier or RetinaFace.
       year={2019}
     }
 
-RetinaFace detection is based on [this](https://github.com/biubug6/Pytorch_Retinaface) implementation. The pretrained model was modified to remove unnecessary landmark detection and converted to ONNX format for a resolution of 384x384.
+RetinaFace detection is based on [this](https://github.com/biubug6/Pytorch_Retinaface) implementation. The pretrained model was modified to remove unnecessary landmark detection and converted to ONNX format for a resolution of 640x640.
 
 # License
 

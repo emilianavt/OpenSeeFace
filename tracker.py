@@ -120,14 +120,15 @@ class FaceInfo():
         self.id = id
         self.frame_count = -1
         self.tracker = tracker
+        self.contour_pts = [0,1,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45]
         self.face_3d = copy.copy(self.tracker.face_3d)
         self.reset()
         self.alive = False
         self.coord = None
 
-        self.limit_3d_adjustment = False
-        self.update_count_delta = 50.
-        self.update_count_max = 1500.
+        self.limit_3d_adjustment = True
+        self.update_count_delta = 75.
+        self.update_count_max = 2500.
 
     def reset(self):
         self.alive = False
@@ -157,11 +158,7 @@ class FaceInfo():
             self.alive = True
 
     def update_contour(self):
-        self.contour[0:17] = self.face_3d[0:17]
-        if self.tracker.high_quality_3d:
-            self.contour[17:21] = self.face_3d[27:31]
-        else:
-            self.contour[17] = self.face_3d[30]
+        self.contour = np.array(self.face_3d[self.contour_pts])
 
     def adjust_3d(self):
         r = 1.0 + np.random.random_sample((66,3)) * 0.02 - 0.01
@@ -182,16 +179,14 @@ class FaceInfo():
                 r[17:22, 2] = 1.0
                 r[31:33, 2] = 1.0
                 r[36:42, 2] = 1.0
-                for i in [48, 49, 56, 57, 58, 59, 65]:
-                    r[i, 2] = 1.0
+                r[[48, 49, 56, 57, 58, 59, 65], 2] = 1.0
             else:
                 update_type = 1
                 r[8:17, 2] = 1.0
                 r[22:27, 2] = 1.0
                 r[34:36, 2] = 1.0
                 r[42:48, 2] = 1.0
-                for i in [51, 52, 53, 54, 61, 62, 63]:
-                    r[i, 2] = 1.0
+                r[[51, 52, 53, 54, 61, 62, 63], 2] = 1.0
 
         c = self.face_3d[0:66] * r
         o_projected = np.squeeze(np.array(cv2.projectPoints(self.face_3d[0:66], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
@@ -227,7 +222,7 @@ class FaceInfo():
 
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, pnp_quality=1, model_dir=None, no_gaze=False, use_retinaface=False):
+    def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max_threads
@@ -249,8 +244,8 @@ class Tracker():
         else:
             model_base_path = model_dir
 
-        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_384.json"), threads=max_threads, top_k=max_faces)
-        self.retinaface_slow = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_384.json"), threads=2, top_k=max_faces)
+        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=max_threads, top_k=max_faces, res=(640, 640))
+        self.retinaface_scan = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=2, top_k=max_faces, res=(640, 640))
         self.use_retinaface = use_retinaface
 
         # Single face instance with multiple threads
@@ -292,7 +287,6 @@ class Tracker():
         self.std = self.std * 255.0
 
         # PnP solving
-        self.high_quality_3d = False if pnp_quality == 0 else True
         self.face_3d = np.array([
             [0.50194, 0.28030, -0.49561],
             [0.48377, 0.15031, -0.50000],
@@ -413,12 +407,7 @@ class Tracker():
     def estimate_depth(self, face_info):
         lms = np.concatenate((face_info.lms, np.array([[face_info.eye_state[0][1], face_info.eye_state[0][2], face_info.eye_state[0][3]], [face_info.eye_state[1][1], face_info.eye_state[1][2], face_info.eye_state[1][3]]], np.float)), 0)
 
-        image_pts = np.empty((21 if self.high_quality_3d else 18, 2), np.float32)
-        image_pts[0:17] = np.array(lms)[0:17,0:2]
-        if self.high_quality_3d:
-            image_pts[17:21] = np.array(lms)[27:31,0:2]
-        else:
-            image_pts[17] = np.array(lms)[30,0:2]
+        image_pts = np.array(lms)[face_info.contour_pts, 0:2]
 
         success = False
         if not face_info.rotation is None:
@@ -671,15 +660,16 @@ class Tracker():
         self.wait_count += 1
         if self.detected == 0:
             start_fd = time.perf_counter()
-            new_faces.extend(self.retinaface.detect_retina(frame))
+            retinaface_detections = self.retinaface.detect_retina(frame)
+            new_faces.extend(retinaface_detections)
             duration_fd = 1000 * (time.perf_counter() - start_fd)
             self.wait_count = 0
         elif self.detected < self.max_faces:
             if self.use_retinaface > 0:
-                new_faces.extend(self.retinaface_slow.get_results())
+                new_faces.extend(self.retinaface_scan.get_results())
             if self.wait_count >= self.scan_every:
                 if self.use_retinaface > 0:
-                    self.retinaface_slow.background_detect(frame)
+                    self.retinaface_scan.background_detect(frame)
                 else:
                     start_fd = time.perf_counter()
                     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

@@ -42,7 +42,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, true, true),
         new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, true, true),
         new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true),
-        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true)
+        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true),
+        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, true, true)
     };
     [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
     public bool reloadExpressions = false;
@@ -161,6 +162,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         public string trigger = "neutral";
         [Tooltip("This is the VRM blend shape that will get triggered by the expression.")]
         public BlendShapePreset blendShapePreset;
+        [Tooltip("When this name is set, it will be used to create a custom blendshape key.")]
+        public string customBlendShapeName = "";
         [Tooltip("The weight determines the value the expression blend shape should be set to.")]
         [Range(0, 1)]
         public float weight = 1f;
@@ -182,12 +185,24 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
         }
+
+        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, bool visemes, bool blinking) {
+            this.trigger = trigger;
+            this.customBlendShapeName = name;
+            this.weight = weight;
+            this.visemeFactor = factor;
+            this.enableVisemes = visemes;
+            this.enableBlinking = blinking;
+        }
     }
 
     public void InitExpressionMap() {
         expressionMap = new Dictionary<string, OpenSeeVRMExpression>();
         foreach (var expression in expressions) {
-            expression.blendShapeKey = new BlendShapeKey(expression.blendShapePreset);
+            if (expression.customBlendShapeName != "")
+                expression.blendShapeKey = new BlendShapeKey(expression.customBlendShapeName);
+            else
+                expression.blendShapeKey = new BlendShapeKey(expression.blendShapePreset);
             expressionMap.Add(expression.trigger, expression);
         }
     }
@@ -216,7 +231,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         vrmBlendShapeProxy.ImmediatelySetValue(currentExpression.blendShapeKey, currentExpression.weight);
     }
     
-    void GetLookParameters(ref float lookLeftRight, ref float lookUpDown, bool update, int gazePoint, int topRight, int topLeft, int bottomRight, int bottomLeft) {
+    void GetLookParameters(ref float lookLeftRight, ref float lookUpDown, bool update, int gazePoint, int right, int left, int topRight, int topLeft, int bottomRight, int bottomLeft) {
         float borderRight = (openSeeData.points3D[topRight].x + openSeeData.points3D[bottomRight].x) / 2.0f;
         float borderLeft = (openSeeData.points3D[topLeft].x + openSeeData.points3D[bottomLeft].x) / 2.0f;
         float horizontalCenter = (borderRight + borderLeft) / 2.0f;
@@ -248,8 +263,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         float lookLeftRight = currentLookLeftRight;
 
         if (lastGaze < openSeeData.time) {
-            GetLookParameters(ref lookLeftRight, ref lookUpDown, false, 66, 37, 38, 41, 40);
-            GetLookParameters(ref lookLeftRight, ref lookUpDown, true,  67, 43, 44, 47, 46);
+            GetLookParameters(ref lookLeftRight, ref lookUpDown, false, 66, 36, 39, 37, 38, 41, 40);
+            GetLookParameters(ref lookLeftRight, ref lookUpDown, true,  67, 42, 45, 43, 44, 47, 46);
             
             lookLeftRight = Mathf.Lerp(currentLookLeftRight, lookLeftRight, 1f - gazeSmoothing);
             lookUpDown = Mathf.Lerp(currentLookUpDown, lookUpDown, 1f - gazeSmoothing);

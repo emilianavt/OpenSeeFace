@@ -59,7 +59,7 @@ def worker_thread(rfd, frame):
     rfd.running = False
 
 class RetinaFaceDetector():
-    def __init__(self, model_path="models/retinaface_opt.onnx", json_path="models/priorbox_384.json", threads=4, min_conf=0.3, nms_threshold=0.4, top_k=1):
+    def __init__(self, model_path="models/retinaface_640x640_opt.onnx", json_path="models/priorbox_640x640.json", threads=4, min_conf=0.4, nms_threshold=0.4, top_k=1, res=(640, 640)):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = threads
@@ -67,7 +67,7 @@ class RetinaFaceDetector():
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
         self.session = onnxruntime.InferenceSession(model_path, sess_options=options)
-        self.res = 384
+        self.res_w, self.res_h = res
         with open(json_path, "r") as prior_file:
             self.priorbox = np.array(json.loads(prior_file.read()))
         self.min_conf = min_conf
@@ -81,18 +81,18 @@ class RetinaFaceDetector():
         h, w, _ = frame.shape
         im = None
         if h > w:
-            resize = h / self.res
-            im = cv2.resize(frame, (int(w / resize), self.res), interpolation=cv2.INTER_LINEAR)
+            resize = h / self.res_h
+            im = cv2.resize(frame, (int(w / resize), self.res_h), interpolation=cv2.INTER_LINEAR)
             resize = 1 / resize
         else:
-            resize = w / self.res
-            im = cv2.resize(frame, (self.res, int(h / resize)), interpolation=cv2.INTER_LINEAR)
+            resize = w / self.res_w
+            im = cv2.resize(frame, (self.res_w, int(h / resize)), interpolation=cv2.INTER_LINEAR)
             resize = 1 / resize
-        pad_h = self.res - im.shape[0]
-        pad_w = self.res - im.shape[1]
+        pad_h = self.res_h - im.shape[0]
+        pad_w = self.res_w - im.shape[1]
         im = cv2.copyMakeBorder(im, 0, pad_h, 0, pad_w, cv2.BORDER_CONSTANT, (0, 0, 0))
         im = np.float32(im)
-        scale = np.array((self.res, self.res, self.res, self.res))
+        scale = np.array((self.res_w, self.res_h, self.res_w, self.res_h))
         im -= (104, 117, 123)
         im = im.transpose(2, 0, 1)
         im = np.expand_dims(im, 0)
@@ -112,8 +112,8 @@ class RetinaFaceDetector():
         dets = dets[:self.top_k, 0:4]
         dets[:, 2:4] = dets[:, 2:4] - dets[:, 0:2]
 
-        if is_background:
-            upsize = dets[:, 2:4] * np.array([[0.1, 0.0]])
+        if True:#is_background:
+            upsize = dets[:, 2:4] * np.array([[0.15, 0.2]])
             dets[:, 0:2] -= upsize
             dets[:, 2:4] += upsize * 2
 
