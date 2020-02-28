@@ -22,6 +22,10 @@ public class OpenSeeIKTarget : MonoBehaviour
     public bool interpolate = true;
     [Tooltip("When set to true, the transform will be updated in FixedUpdate, otherwise it will be updated in Update.")]
     public bool fixedUpdate = false;
+    [Tooltip("When set to true, the IK target's position and location will slowly drift back to its neutral pose.")]
+    public bool driftBack = false;
+    [Tooltip("This sets the strength of the drifting effect. At 0 there is now drifting, while the IK target will be static at 1.")]
+    public float driftFactor = 0.005f;
     [Header("Information")]
     [Tooltip("This is the current rotation calibration value as euler angles.")]
     public Vector3 rotationOffset = new Vector3(0f, 0f, -90f);
@@ -75,6 +79,7 @@ public class OpenSeeIKTarget : MonoBehaviour
         Vector3 t = openSeeData.translation;
         t.x = -t.x;
         t.z = -t.z;
+        Vector3 convertedTranslation = new Vector3(t.x, t.y, t.z);
 
         if (calibrate) {
             dR = convertedQuaternion;
@@ -119,6 +124,18 @@ public class OpenSeeIKTarget : MonoBehaviour
             transform.localPosition = Vector3.Lerp(transform.localPosition, (t - dT) * translationScale, 1f - smooth);
             transform.localRotation = Quaternion.Lerp(transform.localRotation, convertedQuaternion * dR, 1f - smooth);
         }
+        
+        if (driftBack) {
+            if (mirrorMotion) {
+                dT = Vector3.Lerp(dT, MirrorTranslation(convertedTranslation), driftFactor);
+                dR = Quaternion.Lerp(dR, Quaternion.Inverse(convertedQuaternion), driftFactor);
+            } else {
+                dT = Vector3.Lerp(dT, convertedTranslation, driftFactor);
+                dR = Quaternion.Lerp(dR, Quaternion.Inverse(convertedQuaternion), driftFactor);
+            }
+            rotationOffset = new Vector3(dR.eulerAngles.x, dR.eulerAngles.y, dR.eulerAngles.z);
+            translationOffset = new Vector3(dT.x, dT.y, dT.z);
+       }
     }
 
     void FixedUpdate()

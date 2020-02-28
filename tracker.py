@@ -161,65 +161,73 @@ class FaceInfo():
         self.contour = np.array(self.face_3d[self.contour_pts])
 
     def adjust_3d(self):
-        r = 1.0 + np.random.random_sample((66,3)) * 0.02 - 0.01
-        update_type = -1
-        if self.euler[0] > -165 and self.euler[0] < 145:
-            r[:, :] = 1.0
-        elif self.euler[1] > -10 and self.euler[1] < 20:
-            r[:, 2] = 1.0
-            update_type = 0
-        else:
-            r[:, 0:2] = 1.0
-            if self.euler[2] > 120 or self.euler[2] < 60:
+        if self.conf < 0.4:
+            return
+        max_runs = 1
+        eligible = np.arange(0, 66)
+        changed_any = False
+        d_o = np.ones((66,))
+        d_c = np.ones((66,))
+        for runs in range(max_runs):
+            r = 1.0 + np.random.random_sample((66,3)) * 0.02 - 0.01
+            update_type = -1
+            if self.euler[0] > -165 and self.euler[0] < 145:
+                continue
+            elif self.euler[1] > -10 and self.euler[1] < 20:
                 r[:, 2] = 1.0
-            # Enable only one side of the points, depending on direction
-            elif self.euler[1] < -10:
-                update_type = 1
-                r[0:8, 2] = 1.0
-                r[17:22, 2] = 1.0
-                r[31:33, 2] = 1.0
-                r[36:42, 2] = 1.0
-                r[[48, 49, 56, 57, 58, 59, 65], 2] = 1.0
+                update_type = 0
             else:
-                update_type = 1
-                r[8:17, 2] = 1.0
-                r[22:27, 2] = 1.0
-                r[34:36, 2] = 1.0
-                r[42:48, 2] = 1.0
-                r[[51, 52, 53, 54, 61, 62, 63], 2] = 1.0
+                r[:, 0:2] = 1.0
+                if self.euler[2] > 120 or self.euler[2] < 60:
+                    continue
+                # Enable only one side of the points, depending on direction
+                elif self.euler[1] < -10:
+                    update_type = 1
+                    r[[0, 1, 2, 3, 4, 5, 6, 7, 17, 18, 19, 20, 21, 31, 32, 36, 37, 38, 39, 40, 41, 48, 49, 56, 57, 58, 59, 65], 2] = 1.0
+                    eligible = [8, 9, 10, 11, 12, 13, 14, 15, 16, 22, 23, 24, 25, 26, 27, 28, 29, 30, 33, 34, 35, 42, 43, 44, 45, 46, 47, 50, 51, 52, 53, 54, 55, 60, 61, 62, 63, 64]
+                else:
+                    update_type = 1
+                    r[[9, 10, 11, 12, 13, 14, 15, 16, 22, 23, 24, 25, 26, 34, 35, 42, 43, 44, 45, 46, 47, 51, 52, 53, 54, 61, 62, 63], 2] = 1.0
+                    eligible = [0, 1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 27, 28, 29, 30, 31, 32, 33, 36, 37, 38, 39, 40, 41, 48, 49, 50, 55, 56, 57, 58, 59, 60, 64, 65]
 
-        c = self.face_3d[0:66] * r
-        o_projected = np.squeeze(np.array(cv2.projectPoints(self.face_3d[0:66], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
-        c_projected = np.squeeze(np.array(cv2.projectPoints(c[0:66], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
-        changed = False
-        updated = copy.copy(self.face_3d)
-        for i in range(66):
-            lm = self.lms[i, 0:2]
-            if np.linalg.norm(c_projected[i] - lm) < np.linalg.norm(o_projected[i] - lm):
-                can_update = False
-                if not self.limit_3d_adjustment or self.update_counts[i, update_type] < self.update_counts[i, abs(update_type - 1)] + self.update_count_delta:
-                    can_update = True
-                    self.update_counts[i, update_type] += 1
-                if can_update:
-                    updated[i] = c[i]
+            if self.limit_3d_adjustment:
+                eligible = np.nonzero(self.update_counts[:, update_type] < self.update_counts[:, abs(update_type - 1)] + self.update_count_delta)[0]
+                if eligible.shape[0] <= 0:
+                    break
+
+            if runs == 0:
+                updated = copy.copy(self.face_3d[0:66])
+                o_projected = np.ones((66,2))
+                o_projected[eligible] = np.squeeze(np.array(cv2.projectPoints(self.face_3d[eligible], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
+            c = updated * r
+            c_projected = np.zeros((66,2))
+            c_projected[eligible] = np.squeeze(np.array(cv2.projectPoints(c[eligible], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
+            changed = False
+
+            d_o[eligible] = np.linalg.norm(o_projected[eligible] - self.lms[eligible, 0:2], axis=1)
+            d_c[eligible] = np.linalg.norm(c_projected[eligible] - self.lms[eligible, 0:2], axis=1)
+            indices = np.nonzero(d_c < d_o)[0]
+            if indices.shape[0] > 0:
+                if self.limit_3d_adjustment:
+                    indices = np.intersect1d(indices, eligible)
+                if indices.shape[0] > 0:
+                    self.update_counts[indices, update_type] += 1
+                    updated[indices] = c[indices]
+                    o_projected[indices] = c_projected[indices]
                     changed = True
+            changed_any = changed_any or changed
 
-        if changed:
+            if not changed:
+                break
+
+        if changed_any:
             # Update weighted by point confidence
             weights = np.zeros((66,3))
             weights[:, :] = self.lms[0:66, 2:3]
             weights[weights > 0.7] = 1.0
             weights = 1.0 - weights
-            if self.limit_3d_adjustment:
-                # And by update count
-                weights[:, 0:2] *= self.update_counts[:, 0:1] / self.update_count_max
-                weights[:, 2] *= self.update_counts[:, 1] / self.update_count_max
-                weights = 1 - 1 / (1 + np.power(1 / (weights / self.update_count_max) - 1, -3))
-                weights[weights > 0.975] = 0.975
             self.face_3d[0:66] = self.face_3d[0:66] * weights + updated[0:66] * (1. - weights)
-
             self.update_contour()
-
 
 class Tracker():
     def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False):
@@ -475,8 +483,16 @@ class Tracker():
             pt_3d = inverse_rotation.dot(pt_3d)
             pts_3d[i,:] = pt_3d[:]
 
+        pnp_error = np.sqrt(pnp_error / (2.0 * image_pts.shape[0]))
+        if pnp_error > 50:
+            # Something went wrong with adjusting the 3D model
+            face_info.face_3d = self.face_3d
+            face_info.rotation = np.array([0.0, 0.0, 0.0], np.float32)
+            face_info.translation = np.array([0.0, 0.0, 0.0], np.float32)
+            face_info.update_counts = np.zeros((66,2))
+
         euler = cv2.RQDecomp3x3(rmat)[0]
-        return True, matrix_to_quaternion(rmat), euler, np.sqrt(pnp_error / (2.0 * image_pts.shape[0])), pts_3d, lms
+        return True, matrix_to_quaternion(rmat), euler, pnp_error, pts_3d, lms
 
     def preprocess(self, im, crop):
         x1, y1, x2, y2 = crop
