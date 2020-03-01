@@ -102,7 +102,7 @@ public class OpenSeeExpression : MonoBehaviour
         private PointSelection pointSelection;
         private bool newModel = false;
 
-        static public void LoadSerialized(byte[] modelBytes, out Dictionary<string, List<float[]>> expressions, out SVMModel model, out string[] classLabels, out int[] indices, out PointSelection pointSelection) {
+        static public void LoadSerialized(byte[] modelBytes, out Dictionary<string, List<float[]>> expressions, out SVMModel model, out string[] classLabels, out int[] indices, ref PointSelection pointSelection) {
             IFormatter formatter = new BinaryFormatter();
             MemoryStream memoryStream = new MemoryStream(modelBytes);
             memoryStream.Position = 0;
@@ -114,7 +114,7 @@ public class OpenSeeExpression : MonoBehaviour
             model = new SVMModel(oser.modelBytes);
             classLabels = oser.classLabels;
             indices = oser.indices;
-            pointSelection = oser.pointSelection;
+            //pointSelection = oser.pointSelection;
             if (indices == null) {
                 indices = new int[1 + 1 + 3 + 4 + 3 + 3 * 66];
                 for (int i = 0; i < 1 + 1 + 3 + 4 + 3 + 3 * 66; i++)
@@ -325,7 +325,6 @@ public class OpenSeeExpression : MonoBehaviour
     }
 
     public bool TrainModel() {
-        Debug.Log("Training model");
         Debug.Log("---------------------");
         train = false;
         if (openSee == null) {
@@ -394,10 +393,10 @@ public class OpenSeeExpression : MonoBehaviour
             for (int j = 0; j < train_split_current; j++) {
                 float factor = 1f;
                 float adder = 0f;
-                if (j > train_split || j > list.Count) {
+                /*if (j > train_split || j > list.Count) {
                     factor = UnityEngine.Random.Range(0.98f, 1.02f);
                     adder = UnityEngine.Random.Range(-0.02f, 0.02f);
-                }
+                }*/
                 for (int k = 0; k < cols; k++) {
                     float v = list[j % local_train_split][indices[k]] * factor + adder;
                     X_train[i_train * cols + k] = v;
@@ -417,7 +416,7 @@ public class OpenSeeExpression : MonoBehaviour
         int probability = 0;
         if (enableProbabilityTraining)
             probability = 1;
-        model.TrainModel(X_train, y_train, rows_train, cols, probability, C);
+        model.TrainModel(X_train, y_train, i_train, cols, probability, C);
         confusionMatrix = model.ConfusionMatrix(X_test, y_test, i_test, out accuracy);
         confusionMatrixString = SVMModel.FormatMatrix(confusionMatrix, classLabels);
         for (int label = 0; label < classes; label++) {
@@ -535,7 +534,7 @@ public class OpenSeeExpression : MonoBehaviour
             ResetInfo();
             return;
         }
-        OpenSeeExpressionRepresentation.LoadSerialized(data, out expressions, out model, out classLabels, out indices, out pointSelection);
+        OpenSeeExpressionRepresentation.LoadSerialized(data, out expressions, out model, out classLabels, out indices, ref pointSelection);
         cols = indices.Length;
         if (model.Ready())
             modelReady = true;
