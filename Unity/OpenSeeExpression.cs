@@ -120,10 +120,10 @@ public class OpenSeeExpression : MonoBehaviour
                 for (int i = 0; i < 1 + 1 + 3 + 4 + 3 + 3 * 66; i++)
                     indices[i] = i;
             }
-            if (pointSelection == null)
+            /*if (pointSelection == null)
                 pointSelection = new PointSelection();
             if (!oser.newModel)
-                pointSelection.features = true;
+                pointSelection.features = true;*/
         }
 
         static public byte[] ToSerialized(Dictionary<string, List<float[]>> expressions, SVMModel model, string[] classLabels, int[] indices, PointSelection pointSelection) {
