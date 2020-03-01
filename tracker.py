@@ -311,6 +311,13 @@ class FaceInfo():
         if self.conf < 0.4 or self.pnp_error > 300:
             return
 
+        norm = np.array([
+            ((self.pts_3d[0, 0] - self.pts_3d[16, 0]) + (self.pts_3d[1, 0] - self.pts_3d[15, 0])) / 2.0,
+            ((self.pts_3d[27, 1] - self.pts_3d[28, 1]) + (self.pts_3d[28, 1] - self.pts_3d[29, 1])) / 2.0,
+            np.max(self.pts_3d[0:66, 2]) - np.min(self.pts_3d[0:66, 2])
+        ])
+        self.pts_3d = (self.pts_3d / norm) * self.tracker.norm
+
         self.current_features = self.features.update(self.pts_3d[:, 0:2])
         self.eye_blink = []
         self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
@@ -524,6 +531,12 @@ class Tracker():
             [0.25799, 0.27608, -0.24967],
             [-0.25799, 0.27608, -0.24967],
         ], np.float32) * np.array([1.0, 1.0, 1.3])
+
+        self.norm = np.array([
+            ((self.face_3d[0, 0] - self.face_3d[16, 0]) + (self.face_3d[1, 0] - self.face_3d[15, 0])) / 2.0,
+            ((self.face_3d[27, 1] - self.face_3d[28, 1]) + (self.face_3d[28, 1] - self.face_3d[29, 1])) / 2.0,
+            np.max(self.face_3d[0:66, 2]) - np.min(self.face_3d[0:66, 2])
+        ])
 
         self.camera = np.array([[width, 0, width/2], [0, width, height/2], [0, 0, 1]], np.float32)
         self.inverse_camera = np.linalg.inv(self.camera)
