@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using UnityEngine;
 using OpenSee;
@@ -9,6 +10,12 @@ using VRM;
 // No other OVR related components are required.
 
 public class OpenSeeVRMDriver : MonoBehaviour {
+    #region DllImport
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static private extern bool GetKeyboardState(byte [] lpKeyState);
+    #endregion
+    
     [Header("Settings")]
     [Tooltip("This is the OpenSeeExpression module used for expression prediction.")]
     public OpenSeeExpression openSeeExpression;
@@ -38,12 +45,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
     public OpenSeeVRMExpression[] expressions = new OpenSeeVRMExpression[]{
-        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, true, true),
-        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, true, true),
-        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, true, true),
-        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true),
-        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true),
-        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, true, true)
+        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, true, true, 0x70),
+        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, true, true, 0x71),
+        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, true, true, 0x72),
+        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true, 0x73),
+        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true, 0x74),
+        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, true, true, 0x75)
     };
     [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
     public bool reloadExpressions = false;
@@ -94,6 +101,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float currentLookLeftRight = 0f;
     private int interpolationCount = 0;
     private int interpolationState = 0;
+    private bool overridden = false;
+    private int continuedPress = -1;
 
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
@@ -174,25 +183,29 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         public bool enableVisemes = true;
         [Tooltip("If the expression is not compatible with blinking, it can be turned off here.")]
         public bool enableBlinking = true;
+        [Tooltip("This can be set to a virtual key value. If this key is pressed together with shift and control, the expression will trigger as an override.")]
+        public int hotkey = -1;
         [HideInInspector]
         public BlendShapeKey blendShapeKey;
 
-        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, bool visemes, bool blinking) {
+        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, bool visemes, bool blinking, int hotkey) {
             this.trigger = trigger;
             this.blendShapePreset = preset;
             this.weight = weight;
             this.visemeFactor = factor;
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
+            this.hotkey = hotkey;
         }
 
-        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, bool visemes, bool blinking) {
+        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, bool visemes, bool blinking, int hotkey) {
             this.trigger = trigger;
             this.customBlendShapeName = name;
             this.weight = weight;
             this.visemeFactor = factor;
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
+            this.hotkey = hotkey;
         }
     }
 
@@ -223,11 +236,40 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             currentExpression = null;
             return;
         }
-        if (openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
-            currentExpression = null;
-            return;
+        
+        byte[] keys = new byte[256];
+        GetKeyboardState(keys);
+        bool anyPressed = false;
+        if ((keys[0x10] & 0x80) != 0 && (keys[0x11] & 0x80) != 0) {
+            foreach (var expression in expressionMap.Values) {
+                if (expression.hotkey >= 0 && expression.hotkey < 256 && (keys[expression.hotkey] & 0x80) != 0) {
+                    anyPressed = true;
+                    if (continuedPress != expression.hotkey && overridden && currentExpression == expression) {
+                        overridden = false;
+                        currentExpression = null;
+                        continuedPress = expression.hotkey;
+                        break;
+                    }
+                    if (continuedPress != expression.hotkey) {
+                        overridden = true;
+                        currentExpression = expression;
+                        continuedPress = expression.hotkey;
+                        break;
+                    }
+                }
+            }
         }
-        currentExpression = expressionMap[openSeeExpression.expression];
+        if (!anyPressed)
+            continuedPress = -1;
+        
+        if (!overridden) {
+            if (openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
+                currentExpression = null;
+                return;
+            }
+            currentExpression = expressionMap[openSeeExpression.expression];
+        }
+        
         vrmBlendShapeProxy.ImmediatelySetValue(currentExpression.blendShapeKey, currentExpression.weight);
     }
     
