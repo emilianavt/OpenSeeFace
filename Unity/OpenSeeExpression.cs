@@ -27,6 +27,8 @@ public class OpenSeeExpression : MonoBehaviour
     public string filename = "";
     [Tooltip("When enabled, training will be done in such a way that the model can output probabilities. This is a lot slower!")]
     public bool enableProbabilityTraining = false;
+    [Tooltip("This is the SVM training C value.")]
+    public float C = 2f;
     [Header("Toggles")]
     [Tooltip("When enabled, calibration data will be collected from the given OpenSee component.")]
     public bool recording = false;
@@ -88,6 +90,8 @@ public class OpenSeeExpression : MonoBehaviour
         public bool pointsLipUpper = true;
         [Tooltip("When enabled, the points of the lower lip will be used to determine the expression.")]
         public bool pointsLipLower = true;
+        [Tooltip("When enabled, certain manually designed features will be used to determine the expression.")]
+        public bool features = true;
     }
     [Serializable]
     private class OpenSeeExpressionRepresentation {
@@ -96,6 +100,7 @@ public class OpenSeeExpression : MonoBehaviour
         private string[] classLabels = null;
         private int[] indices = null;
         private PointSelection pointSelection;
+        private bool newModel = false;
 
         static public void LoadSerialized(byte[] modelBytes, out Dictionary<string, List<float[]>> expressions, out SVMModel model, out string[] classLabels, out int[] indices, out PointSelection pointSelection) {
             IFormatter formatter = new BinaryFormatter();
@@ -117,6 +122,8 @@ public class OpenSeeExpression : MonoBehaviour
             }
             if (pointSelection == null)
                 pointSelection = new PointSelection();
+            if (!oser.newModel)
+                pointSelection.features = true;
         }
 
         static public byte[] ToSerialized(Dictionary<string, List<float[]>> expressions, SVMModel model, string[] classLabels, int[] indices, PointSelection pointSelection) {
@@ -126,6 +133,7 @@ public class OpenSeeExpression : MonoBehaviour
             oser.classLabels = classLabels;
             oser.indices = indices;
             oser.pointSelection = pointSelection;
+            oser.newModel = true;
 
             IFormatter formatter = new BinaryFormatter();
             MemoryStream memoryStream = new MemoryStream();
@@ -141,9 +149,9 @@ public class OpenSeeExpression : MonoBehaviour
     private Dictionary<string, List<float[]>> expressions;
     private SVMModel model = null;
     private string[] classLabels = null;
-    private int maxSamples = 1000; // Allows 10 expressions without exceeding 10000 rows in total for SVM training, which is a commonly seen upper limit.
-    // rightEyeOpen, leftEyeOpen, translation, rawQuaternion, rawEuler, confidence, points/(width, height), points3D
-    private int colsFull = 1 + 1 + 3 + 4 + 3 + /*66 + 2 * 66  +*/ 3 * 66;
+    private int maxSamples = 1666;
+    // rightEyeOpen, leftEyeOpen, translation, rawQuaternion, rawEuler, confidence, points/(width, height), points3D, features
+    private int colsFull = 1 + 1 + 3 + 4 + 3 + /*66 + 2 * 66  +*/ 3 * 66 + 14;
     private int colsBase = 1 + 1 + 3 + 4 + 3;
     private int cols;
     private double lastCapture = 0.0;
@@ -235,6 +243,11 @@ public class OpenSeeExpression : MonoBehaviour
                 indexList.Add(colsBase + i * 3 + 2);
                 cols += 3;
             }
+        if (pointSelection.features)
+            for (int i = 0; i < 14; i++) {
+                indexList.Add(colsBase + 66 * 3 + i);
+                cols++;
+            }
         indices = indexList.ToArray();
     }
 
@@ -294,10 +307,26 @@ public class OpenSeeExpression : MonoBehaviour
             data[12 + /*66 + 2 * 66 +*/ 3 * i + 1] = t.points3D[i].y;
             data[12 + /*66 + 2 * 66 +*/ 3 * i + 2] = t.points3D[i].z;
         }
+        data[12 + 66 * 3 + 0] = t.features.EyeLeft;
+        data[12 + 66 * 3 + 1] = t.features.EyeRight;
+        data[12 + 66 * 3 + 2] = t.features.EyebrowSteepnessLeft;
+        data[12 + 66 * 3 + 3] = t.features.EyebrowUpDownLeft;
+        data[12 + 66 * 3 + 4] = t.features.EyebrowQuirkLeft;
+        data[12 + 66 * 3 + 5] = t.features.EyebrowSteepnessRight;
+        data[12 + 66 * 3 + 6] = t.features.EyebrowUpDownRight;
+        data[12 + 66 * 3 + 7] = t.features.EyebrowQuirkRight;
+        data[12 + 66 * 3 + 8] = t.features.MouthCornerUpDownLeft;
+        data[12 + 66 * 3 + 9] = t.features.MouthCornerInOutLeft;
+        data[12 + 66 * 3 + 10] = t.features.MouthCornerUpDownRight;
+        data[12 + 66 * 3 + 11] = t.features.MouthCornerInOutRight;
+        data[12 + 66 * 3 + 12] = t.features.MouthOpen;
+        data[12 + 66 * 3 + 13] = t.features.MouthWide;
         return data;
     }
 
     public bool TrainModel() {
+        Debug.Log("Training model");
+        Debug.Log("---------------------");
         train = false;
         if (openSee == null) {
             ResetInfo();
@@ -310,7 +339,8 @@ public class OpenSeeExpression : MonoBehaviour
         List<string> accuracyWarnings = new List<string>();
         int samples = 0;
         foreach (string key in expressions.Keys) {
-            List<float[]> list = expressions[key];
+            List<float[]> list = new List<float[]>(expressions[key]);
+            list.RemoveAll(x => x.Length != colsFull);
             if (list != null && list.Count == maxSamples) {
                 keys.Add(key);
                 samples += maxSamples;
@@ -337,7 +367,7 @@ public class OpenSeeExpression : MonoBehaviour
         classLabels = keys.ToArray();
         int train_split = maxSamples * 3 / 4;
         int test_split = maxSamples - train_split;
-        int rows_train = classes * train_split;
+        int rows_train = (classes + 2) * train_split;
         int rows_test = classes * test_split;
         float[] X_train = new float[rows_train * cols];
         float[] X_test = new float[rows_test * cols];
@@ -347,7 +377,8 @@ public class OpenSeeExpression : MonoBehaviour
         int i_test = 0;
         System.Random rnd = new System.Random();
         for (int i = 0; i < classes; i++) {
-            List<float[]> list = expressions[keys[i]];
+            List<float[]> list = new List<float[]>(expressions[keys[i]]);
+            list.RemoveAll(x => x.Length != colsFull);
             int local_train_split = list.Count * 3 / 4;
             test_split = list.Count - local_train_split;
             for (int j = list.Count; j > 1;) {
@@ -357,16 +388,28 @@ public class OpenSeeExpression : MonoBehaviour
                 list[k] = list[j];
                 list[j]= tmp;
             }
-            for (int j = 0; j < train_split; j++) {
+            int train_split_current = train_split;
+            if (classLabels[i] == "neutral")
+                train_split_current *= 3;
+            for (int j = 0; j < train_split_current; j++) {
+                float factor = 1f;
+                float adder = 0f;
+                if (j > train_split || j > list.Count) {
+                    factor = UnityEngine.Random.Range(0.98f, 1.02f);
+                    adder = UnityEngine.Random.Range(-0.02f, 0.02f);
+                }
                 for (int k = 0; k < cols; k++) {
-                    X_train[i_train * cols + k] = list[j % local_train_split][indices[k]];
+                    float v = list[j % local_train_split][indices[k]] * factor + adder;
+                    X_train[i_train * cols + k] = v;
                 }
                 y_train[i_train] = i;
                 i_train++;
             }
             for (int j = local_train_split; j < local_train_split + test_split; j++) {
-                for (int k = 0; k < cols; k++)
-                    X_test[i_test * cols + k] = list[j][indices[k]];
+                for (int k = 0; k < cols; k++) {
+                    float v = list[j][indices[k]];
+                    X_test[i_test * cols + k] = v;
+                }
                 y_test[i_test] = i;
                 i_test++;
             }
@@ -374,7 +417,7 @@ public class OpenSeeExpression : MonoBehaviour
         int probability = 0;
         if (enableProbabilityTraining)
             probability = 1;
-        model.TrainModel(X_train, y_train, rows_train, cols, probability);
+        model.TrainModel(X_train, y_train, rows_train, cols, probability, C);
         confusionMatrix = model.ConfusionMatrix(X_test, y_test, i_test, out accuracy);
         confusionMatrixString = SVMModel.FormatMatrix(confusionMatrix, classLabels);
         for (int label = 0; label < classes; label++) {

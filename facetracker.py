@@ -79,6 +79,8 @@ tracking_time = 0.0
 tracking_frames = 0
 frame_count = 0
 
+features = ["eye_l", "eye_r", "eyebrow_steepness_l", "eyebrow_updown_l", "eyebrow_quirk_l", "eyebrow_steepness_r", "eyebrow_updown_r", "eyebrow_quirk_r", "mouth_corner_updown_l", "mouth_corner_inout_l", "mouth_corner_updown_r", "mouth_corner_inout_r", "mouth_open", "mouth_wide"]
+
 if args.log_data != "":
     log = open(args.log_data, "w")
     log.write("Frame,Time,Width,Height,FPS,Face,FaceID,RightOpen,LeftOpen,AverageConfidence,Success3D,PnPError,RotationQuat.X,RotationQuat.Y,RotationQuat.Z,RotationQuat.W,Euler.X,Euler.Y,Euler.Z,RVec.X,RVec.Y,RVec.Z,TVec.X,TVec.Y,TVec.Z")
@@ -86,6 +88,8 @@ if args.log_data != "":
         log.write(f",Landmark[{i}].X,Landmark[{i}].Y,Landmark[{i}].Confidence")
     for i in range(66):
         log.write(f",Point3D[{i}].X,Point3D[{i}].Y,Point3D[{i}].Z")
+    for feature in features:
+        log.write(f",{feature}")
     log.write("\r\n")
     log.flush()
 
@@ -120,8 +124,10 @@ try:
         for face_num, f in enumerate(faces):
             f = copy.copy(f)
             f.id += args.face_id_offset
-            right_state = "O" if f.eye_blink[0] > 0.8 else "-"
-            left_state = "O" if f.eye_blink[1] > 0.8 else "-"
+            if f.eye_blink is None:
+                f.eye_blink = [1, 1]
+            right_state = "O" if f.eye_blink[0] > 0.30 else "-"
+            left_state = "O" if f.eye_blink[1] > 0.30 else "-"
             if args.silent == 0:
                 print(f"Confidence[{f.id}]: {f.conf:.4f} / 3D fitting error: {f.pnp_error:.4f} / Eyes: {left_state}, {right_state}")
             detected = True
@@ -154,9 +160,9 @@ try:
                 packet.extend(bytearray(struct.pack("f", x)))
                 if not log is None:
                     log.write(f",{y},{x},{c}")
-                if pt_num == 66 and f.eye_blink[0] < 0.5:
+                if pt_num == 66 and f.eye_blink[0] < 0.30:
                     continue
-                if pt_num == 67 and f.eye_blink[0] < 0.5:
+                if pt_num == 67 and f.eye_blink[1] < 0.30:
                     continue
                 x = int(x + 0.5)
                 y = int(y + 0.5)
@@ -179,9 +185,9 @@ try:
                     x -= 1
                     if not (x < 0 or y < 0 or x >= height or y >= width):
                         frame[int(x), int(y)] = color
-            if args.pnp_points != 0 and (args.visualize != 0 or not out is None):
+            if args.pnp_points != 0 and (args.visualize != 0 or not out is None) and f.rotation is not None:
                 if args.pnp_points > 1:
-                    projected = cv2.projectPoints(f.face_3d, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
+                    projected = cv2.projectPoints(f.face_3d[0:66], f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
                 else:
                     projected = cv2.projectPoints(f.contour, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
                 for [(x,y)] in projected[0]:
@@ -204,6 +210,14 @@ try:
                 packet.extend(bytearray(struct.pack("f", -z)))
                 if not log is None:
                     log.write(f",{x},{-y},{-z}")
+            if f.current_features is None:
+                f.current_features = {}
+            for feature in features:
+                if not feature in f.current_features:
+                    f.current_features[feature] = 0
+                packet.extend(bytearray(struct.pack("f", f.current_features[feature])))
+                if not log is None:
+                    log.write(f",{f.current_features[feature]}")
             if not log is None:
                 log.write("\r\n")
                 log.flush()

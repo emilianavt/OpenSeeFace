@@ -16,7 +16,7 @@ public class OpenSee : MonoBehaviour {
     public int listenPort = 11573;
 
     private const int nPoints = 68;
-    private const int packetFrameSize = 8 + 4 + 2 * 4 + 2 * 4 + 1 + 4 + 3 * 4 + 3 * 4 + 4 * 4 + 4 * 68 + 4 * 2 * 68 + 4 * 3 * 70;
+    private const int packetFrameSize = 8 + 4 + 2 * 4 + 2 * 4 + 1 + 4 + 3 * 4 + 3 * 4 + 4 * 4 + 4 * 68 + 4 * 2 * 68 + 4 * 3 * 70 + 4 * 14;
 
     [Header("Tracking data")]
     [Tooltip("This is an informational property that tells you how many packets have been received")]
@@ -58,6 +58,40 @@ public class OpenSee : MonoBehaviour {
         public Vector2[] points;
         [Tooltip("These are 3D points estimated from the 2D points. The should be rotation and translation compensated. There are 70 points with guesses for the eyeball center positions being added at the end of the 68 2D points.")]
         public Vector3[] points3D;
+        [Tooltip("This field contains a number of action unit like features.")]
+        public OpenSeeFeatures features;
+        
+        [System.Serializable]
+        public class OpenSeeFeatures {
+            [Tooltip("This field indicates whether the left eye is opened(0) or closed (-1). A value of 1 means open wider than normal.")]
+            public float EyeLeft;
+            [Tooltip("This field indicates whether the right eye is opened(0) or closed (-1). A value of 1 means open wider than normal.")]
+            public float EyeRight;
+            [Tooltip("This field indicates how steep the left eyebrow is, compared to the median steepness.")]
+            public float EyebrowSteepnessLeft;
+            [Tooltip("This field indicates how far up or down the left eyebrow is, compared to its median position.")]
+            public float EyebrowUpDownLeft;
+            [Tooltip("This field indicates how quirked the left eyebrow is, compared to its median quirk.")]
+            public float EyebrowQuirkLeft;
+            [Tooltip("This field indicates how steep the right eyebrow is, compared to the average steepness.")]
+            public float EyebrowSteepnessRight;
+            [Tooltip("This field indicates how far up or down the right eyebrow is, compared to its median position.")]
+            public float EyebrowUpDownRight;
+            [Tooltip("This field indicates how quirked the right eyebrow is, compared to its median quirk.")]
+            public float EyebrowQuirkRight;
+            [Tooltip("This field indicates how far up or down the left mouth corner is, compared to its median position.")]
+            public float MouthCornerUpDownLeft;
+            [Tooltip("This field indicates how far in or out the left mouth corner is, compared to its median position.")]
+            public float MouthCornerInOutLeft;
+            [Tooltip("This field indicates how far up or down the right mouth corner is, compared to its median position.")]
+            public float MouthCornerUpDownRight;
+            [Tooltip("This field indicates how far in or out the right mouth corner is, compared to its median position.")]
+            public float MouthCornerInOutRight;
+            [Tooltip("This field indicates how open or closed the mouth is, compared to its median pose.")]
+            public float MouthOpen;
+            [Tooltip("This field indicates how wide the mouth is, compared to its median pose.")]
+            public float MouthWide;
+        }
 
         public OpenSeeData() {
             confidence = new float[nPoints];
@@ -139,6 +173,22 @@ public class OpenSee : MonoBehaviour {
             
             rightGaze = Quaternion.LookRotation(swapX(points3D[66]) - swapX(points3D[68])) * Quaternion.AngleAxis(180, Vector3.right) * Quaternion.AngleAxis(180, Vector3.forward);
             leftGaze = Quaternion.LookRotation(swapX(points3D[67]) - swapX(points3D[69])) * Quaternion.AngleAxis(180, Vector3.right) * Quaternion.AngleAxis(180, Vector3.forward);
+            
+            features = new OpenSeeFeatures();
+            features.EyeLeft = readFloat(b, ref o);
+            features.EyeRight = readFloat(b, ref o);
+            features.EyebrowSteepnessLeft = readFloat(b, ref o);
+            features.EyebrowUpDownLeft = readFloat(b, ref o);
+            features.EyebrowQuirkLeft = readFloat(b, ref o);
+            features.EyebrowSteepnessRight = readFloat(b, ref o);
+            features.EyebrowUpDownRight = readFloat(b, ref o);
+            features.EyebrowQuirkRight = readFloat(b, ref o);
+            features.MouthCornerUpDownLeft = readFloat(b, ref o);
+            features.MouthCornerInOutLeft = readFloat(b, ref o);
+            features.MouthCornerUpDownRight = readFloat(b, ref o);
+            features.MouthCornerInOutRight = readFloat(b, ref o);
+            features.MouthOpen = readFloat(b, ref o);
+            features.MouthWide = readFloat(b, ref o);
         }
     }
 

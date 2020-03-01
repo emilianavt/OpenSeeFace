@@ -118,10 +118,10 @@ public class SVMModel {
     }
 
     // features is a rows*cols long float array with rows written one after another. labels is a rows long float array with the corresponding classes as integral numbers from 0 to num_classes-1, where all classes have to exist. Training on more than 10000 rows is disabled.
-    public bool TrainModel(float[] features, float[] labels, int rows, int cols, int probability) {
+    public bool TrainModel(float[] features, float[] labels, int rows, int cols, int probability, float C) {
         DestroyModel();
-        if (rows > 10000)
-            return false;
+        //if (rows > 10000)
+        //    return false;
         if (cols < 1 || rows < 1 || features.Length < rows * cols || labels.Length < rows)
             return false;
 
@@ -143,7 +143,7 @@ public class SVMModel {
 
         maxClasses = max + 1;
         this.cols = cols;
-        model = trainModel(features, labels, rows, cols, maxClasses, probability, 2f);
+        model = trainModel(features, labels, rows, cols, maxClasses, probability, C);
         haveModel = true;
 
         return true;
