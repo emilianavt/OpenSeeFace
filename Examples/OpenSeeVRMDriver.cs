@@ -12,8 +12,7 @@ using VRM;
 public class OpenSeeVRMDriver : MonoBehaviour {
     #region DllImport
     [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    static private extern bool GetKeyboardState(byte [] lpKeyState);
+    static extern ushort GetAsyncKeyState(int vKey); 
     #endregion
     
     [Header("Settings")]
@@ -237,12 +236,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         }
         
-        byte[] keys = new byte[256];
-        GetKeyboardState(keys);
         bool anyPressed = false;
-        if ((keys[0x10] & 0x80) != 0 && (keys[0x11] & 0x80) != 0) {
+        bool modifiers = (GetAsyncKeyState(0x10) & 0x8000U) != 0;
+        modifiers = ((GetAsyncKeyState(0x11) & 0x8000U) != 0) || modifiers;
+        if (modifiers) {
             foreach (var expression in expressionMap.Values) {
-                if (expression.hotkey >= 0 && expression.hotkey < 256 && (keys[expression.hotkey] & 0x80) != 0) {
+                if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0) {
                     anyPressed = true;
                     if (continuedPress != expression.hotkey && overridden && currentExpression == expression) {
                         overridden = false;
