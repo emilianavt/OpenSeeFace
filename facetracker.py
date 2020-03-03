@@ -94,6 +94,10 @@ if args.log_data != "":
     log.flush()
 
 try:
+    frame_time = time.perf_counter()
+    target_duration = 0
+    if fps > 0:
+        target_duration = 1. / float(fps)
     while input_reader.is_open():
         if not input_reader.is_ready():
             time.sleep(0.001)
@@ -232,6 +236,12 @@ try:
             cv2.imshow('OpenSeeFace Visualization', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+
+        duration = time.perf_counter() - frame_time
+        while duration < target_duration:
+            time.sleep(target_duration - duration)
+            duration = time.perf_counter() - frame_time
+        frame_time = time.perf_counter()
 except KeyboardInterrupt:
     if args.silent == 0:
         print("Quitting")
