@@ -26,8 +26,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     //public bool fixedUpdate = true;
     [Tooltip("When enabled, the avatar will blink automatically. Otherwise, blinks will be applied according to the face tracking's blink detection, allowing it to wink. Even for tracked eye blinks, the eye blink setting of the current expression is used.")]
     public bool autoBlink = true;
-    [Tooltip("When automatic eye blinks are disabled, this sets the threshold for how closed the eyes have to be to be registered as closed. At 0 the eyes will never close.")]
-    public float eyeClosedThreshold = 0.3f;
+    [Tooltip("When automatic eye blinks are disabled, this sets the threshold for how closed the eyes have to be to be registered as fully closed. At 0 the eyes will never fully close.")]
+    [Range(0, 1)]
+    public float eyeClosedThreshold = 0.2f;
+    [Tooltip("When automatic eye blinks are disabled, this sets the threshold for how open the eyes have to be to be registered as fully open. At 1 the eyes will never fully open.")]
+    [Range(0, 1)]
+    public float eyeOpenedThreshold = 0.65f;
     [Tooltip("When enabled, the avatar's eye will move according to the face tracker's gaze tracking.")]
     public bool gazeTracking = true;
     [Tooltip("This is the right eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
@@ -42,6 +46,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float gazeStabilizer = 0.1f;
     [Tooltip("For bone based gaze tracking, the conversion factor from [-1, 1] to degrees should be entered here. For blendshapes, sometimes gaze tracking does not follow the gaze strongly enough. With these factors, its effect can be strengthened, but usually it should be set to 1.")]
     public Vector2 gazeFactor = new Vector2(5f, 10f);
+    [Tooltip("This factor is applied on top of the gazeFactor field.")]
+    [Range(0, 5)]
+    public float gazeStrength = 1f;
     [Tooltip("This component lets you customize the automatic eye blinking.")]
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
@@ -365,7 +372,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             rightEye.localRotation = Quaternion.identity;
             leftEye.localRotation = Quaternion.identity;
             if (gazeTracking) {
-                Quaternion rotation = Quaternion.AngleAxis(-gazeFactor.x * lookUpDown, Vector3.right) * Quaternion.AngleAxis(-gazeFactor.y * lookLeftRight, Vector3.up);
+                Quaternion rotation = Quaternion.AngleAxis(-gazeFactor.x * gazeStrength * lookUpDown, Vector3.right) * Quaternion.AngleAxis(-gazeFactor.y * gazeStrength * lookLeftRight, Vector3.up);
                 rightEye.localRotation = rotation;
                 leftEye.localRotation = rotation;
             }
@@ -384,17 +391,25 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
             }
         } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
-            if (openSeeData == null || !currentExpression.enableBlinking) {
+            if (openSeeData == null || currentExpression == null || !currentExpression.enableBlinking) {
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
                 return;
             }
             float right = 1f;
-            if (openSeeData.rightEyeOpen > eyeClosedThreshold)
+            if (openSeeData.rightEyeOpen > eyeOpenedThreshold)
                 right = 0f;
+            else if (openSeeData.rightEyeOpen < eyeClosedThreshold)
+                right = 1f;
+            else
+                right = 1f - (openSeeData.rightEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
             float left = 1f;
-            if (openSeeData.leftEyeOpen > eyeClosedThreshold)
+            if (openSeeData.leftEyeOpen > eyeOpenedThreshold)
                 left = 0f;
+            else if (openSeeData.leftEyeOpen < eyeClosedThreshold)
+                left = 1f;
+            else
+                left = 1f - (openSeeData.leftEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), left);
         }

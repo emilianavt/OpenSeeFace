@@ -102,7 +102,7 @@ public class OpenSeeExpression : MonoBehaviour
         private string[] classLabels = null;
         private int[] indices = null;
         private PointSelection pointSelection;
-        private bool newModel = false;
+        //private bool newModel = false;
 
         static public void LoadSerialized(byte[] modelBytes, out Dictionary<string, List<float[]>> expressions, out SVMModel model, out string[] classLabels, out int[] indices, ref PointSelection pointSelection) {
             IFormatter formatter = new BinaryFormatter();
@@ -135,7 +135,7 @@ public class OpenSeeExpression : MonoBehaviour
             oser.classLabels = classLabels;
             oser.indices = indices;
             oser.pointSelection = pointSelection;
-            oser.newModel = true;
+            //oser.newModel = true;
 
             IFormatter formatter = new BinaryFormatter();
             MemoryStream memoryStream = new MemoryStream();
