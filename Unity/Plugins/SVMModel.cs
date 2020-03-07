@@ -12,7 +12,7 @@ namespace OpenSee {
 public class SVMModel {
 	#region DllImport
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern System.IntPtr trainModel(float[] features, float[] labels, int rows, int cols, int classes, int probability, float C);
+	private static extern System.IntPtr trainModel(float[] features, float[] labels, float[] weights, int rows, int cols, int classes, int probability, float C);
 
 	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
 	private static extern void predict(System.IntPtr model, float[] features, [Out] float[] predictions, [Out] double[] probabilities, int rows);
@@ -118,7 +118,7 @@ public class SVMModel {
     }
 
     // features is a rows*cols long float array with rows written one after another. labels is a rows long float array with the corresponding classes as integral numbers from 0 to num_classes-1, where all classes have to exist. Training on more than 10000 rows is disabled.
-    public bool TrainModel(float[] features, float[] labels, int rows, int cols, int probability, float C) {
+    public bool TrainModel(float[] features, float[] labels, float[] weights, int rows, int cols, int probability, float C) {
         DestroyModel();
         //if (rows > 10000)
         //    return false;
@@ -143,7 +143,7 @@ public class SVMModel {
 
         maxClasses = max + 1;
         this.cols = cols;
-        model = trainModel(features, labels, rows, cols, maxClasses, probability, C);
+        model = trainModel(features, labels, weights, rows, cols, maxClasses, probability, C);
         haveModel = true;
 
         return true;

@@ -26,6 +26,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     //public bool fixedUpdate = true;
     [Tooltip("When enabled, the avatar will blink automatically. Otherwise, blinks will be applied according to the face tracking's blink detection, allowing it to wink. Even for tracked eye blinks, the eye blink setting of the current expression is used.")]
     public bool autoBlink = true;
+    [Tooltip("When automatic eye blinks are disabled, this sets the threshold for how closed the eyes have to be to be registered as closed. At 0 the eyes will never close.")]
+    public float eyeClosedThreshold = 0.3f;
     [Tooltip("When enabled, the avatar's eye will move according to the face tracker's gaze tracking.")]
     public bool gazeTracking = true;
     [Tooltip("This is the right eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
@@ -44,12 +46,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
     public OpenSeeVRMExpression[] expressions = new OpenSeeVRMExpression[]{
-        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, true, true, 0x70),
-        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, true, true, 0x71),
-        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, true, true, 0x72),
-        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true, 0x73),
-        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true, 0x74),
-        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, true, true, 0x75)
+        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, true, true, 0x70, 50f),
+        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, true, true, 0x71, 1f),
+        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, true, true, 0x72, 1f),
+        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true, 0x73, 1f),
+        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true, 0x74, 1f),
+        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, true, true, 0x75, 1f)
     };
     [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
     public bool reloadExpressions = false;
@@ -184,10 +186,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         public bool enableBlinking = true;
         [Tooltip("This can be set to a virtual key value. If this key is pressed together with shift and control, the expression will trigger as an override.")]
         public int hotkey = -1;
+        [Tooltip("This is the weight for this class's error when training the model.")]
+        public float errorWeight = 1f;
         [HideInInspector]
         public BlendShapeKey blendShapeKey;
 
-        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, bool visemes, bool blinking, int hotkey) {
+        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, bool visemes, bool blinking, int hotkey, float errorWeight) {
             this.trigger = trigger;
             this.blendShapePreset = preset;
             this.weight = weight;
@@ -195,9 +199,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
             this.hotkey = hotkey;
+            this.errorWeight = errorWeight;
         }
 
-        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, bool visemes, bool blinking, int hotkey) {
+        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, bool visemes, bool blinking, int hotkey, float errorWeight) {
             this.trigger = trigger;
             this.customBlendShapeName = name;
             this.weight = weight;
@@ -205,12 +210,15 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
             this.hotkey = hotkey;
+            this.errorWeight = errorWeight;
         }
     }
 
     public void InitExpressionMap() {
         expressionMap = new Dictionary<string, OpenSeeVRMExpression>();
+        openSeeExpression.weightMap = new Dictionary<string, float>();
         foreach (var expression in expressions) {
+            openSeeExpression.weightMap.Add(expression.trigger, expression.errorWeight);
             if (expression.customBlendShapeName != "")
                 expression.blendShapeKey = new BlendShapeKey(expression.customBlendShapeName);
             else
@@ -382,10 +390,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 return;
             }
             float right = 1f;
-            if (openSeeData.rightEyeOpen > 0.5f)
+            if (openSeeData.rightEyeOpen > eyeClosedThreshold)
                 right = 0f;
             float left = 1f;
-            if (openSeeData.leftEyeOpen > 0.5f)
+            if (openSeeData.leftEyeOpen > eyeClosedThreshold)
                 left = 0f;
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), left);

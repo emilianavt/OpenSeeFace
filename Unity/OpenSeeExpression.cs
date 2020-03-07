@@ -29,6 +29,8 @@ public class OpenSeeExpression : MonoBehaviour
     public bool enableProbabilityTraining = false;
     [Tooltip("This is the SVM training C value.")]
     public float C = 2f;
+    [Tooltip("This map allows you to set weights for different classes.")]
+    public Dictionary<string, float> weightMap = null;
     [Header("Toggles")]
     [Tooltip("When enabled, calibration data will be collected from the given OpenSee component.")]
     public bool recording = false;
@@ -341,12 +343,13 @@ public class OpenSeeExpression : MonoBehaviour
             List<float[]> list = new List<float[]>(expressions[key]);
             list.RemoveAll(x => x.Length != colsFull);
             if (list != null && list.Count == maxSamples) {
+                Debug.Log("[Training info] Adding expression " + key + " to training data.");
                 keys.Add(key);
-                samples += maxSamples;
+                samples += list.Count;
             } else {
                 if (list != null && list.Count > 20) {
-                    //Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate.");
-                    //accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate.");
+                    Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate.");
+                    accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate.");
                     samples += list.Count;
                     keys.Add(key);
                 } else {
@@ -364,9 +367,19 @@ public class OpenSeeExpression : MonoBehaviour
         }
         keys.Sort();
         classLabels = keys.ToArray();
+        
+        float[] weights = null;
+        if (weightMap != null) {
+            weights = new float[classLabels.Length];
+            for (int i = 0; i < classLabels.Length; i++) {
+                weights[i] = weightMap[classLabels[i]];
+                Debug.Log("[Training info] Adding weight " + weights[i] + " for " + classLabels[i] + ".");
+            }
+        }
+        
         int train_split = maxSamples * 3 / 4;
         int test_split = maxSamples - train_split;
-        int rows_train = (classes + 2) * train_split;
+        int rows_train = classes * train_split;
         int rows_test = classes * test_split;
         float[] X_train = new float[rows_train * cols];
         float[] X_test = new float[rows_test * cols];
@@ -389,7 +402,7 @@ public class OpenSeeExpression : MonoBehaviour
             }
             int train_split_current = train_split;
             if (classLabels[i] == "neutral")
-                train_split_current *= 3;
+                train_split_current *= 1;
             for (int j = 0; j < train_split_current; j++) {
                 float factor = 1f;
                 float adder = 0f;
@@ -416,7 +429,7 @@ public class OpenSeeExpression : MonoBehaviour
         int probability = 0;
         if (enableProbabilityTraining)
             probability = 1;
-        model.TrainModel(X_train, y_train, i_train, cols, probability, C);
+        model.TrainModel(X_train, y_train, weights, i_train, cols, probability, C);
         confusionMatrix = model.ConfusionMatrix(X_test, y_test, i_test, out accuracy);
         confusionMatrixString = SVMModel.FormatMatrix(confusionMatrix, classLabels);
         for (int label = 0; label < classes; label++) {

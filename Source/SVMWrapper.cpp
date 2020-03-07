@@ -87,7 +87,7 @@ void destroy_problem(struct svm_problem *problem) {
 }
 
 extern "C" {
-    __declspec(dllexport) void *__cdecl trainModel(float features[], float labels[], int rows, int cols, int classes, int probability, float C) {
+    __declspec(dllexport) void *__cdecl trainModel(float features[], float labels[], float weights[], int rows, int cols, int classes, int probability, float C) {
         if (!(rows > 0 && cols > 0))
             return NULL;
 
@@ -115,9 +115,24 @@ extern "C" {
         sw->param.weight_label = NULL;
         sw->param.weight = NULL;
 
+        if (weights != NULL) {
+            sw->param.nr_weight = classes;
+            sw->param.weight_label = new int[classes];
+            sw->param.weight = new double[classes];
+            for (int i = 0; i < classes; i++) {
+                sw->param.weight_label[i] = i;
+                sw->param.weight[i] = (double)weights[i];
+            }
+        }
+
         sw->problem = new struct svm_problem();
         make_problem(sw->problem, features, labels, rows, cols, sw->means, sw->sdevs);
         sw->model = svm_train(sw->problem, &sw->param);
+
+        if (weights != NULL) {
+            delete sw->param.weight_label;
+            delete sw->param.weight;
+        }
 
         return sw;
     }
