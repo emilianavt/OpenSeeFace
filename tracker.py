@@ -307,21 +307,26 @@ class FaceInfo():
     def update_contour(self):
         self.contour = np.array(self.face_3d[self.contour_pts])
 
+    def normalize_pts3d(self, pts_3d):
+        # Calculate angle using nose
+        pts_3d[:, 0:2] -= pts_3d[30, 0:2]
+        alpha = angle(pts_3d[30, 0:2], pts_3d[27, 0:2])
+        alpha -= np.deg2rad(90)
+
+        R = np.matrix([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
+        pts_3d[:, 0:2] = (pts_3d - pts_3d[30])[:, 0:2].dot(R) + pts_3d[30, 0:2]
+
+        # Vertical scale
+        pts_3d[:, 1] /= np.mean((pts_3d[27:30, 1] - pts_3d[28:31, 1]) / (self.tracker.face_3d[27:30, 1] - self.tracker.face_3d[28:31, 1]))
+
+        # Horizontal scale
+        pts_3d[:, 0] /= np.mean(np.abs(pts_3d[[0, 36, 42], 0] - pts_3d[[16, 39, 45], 0]) / np.abs(self.tracker.face_3d[[0, 36, 42], 0] - self.tracker.face_3d[[16, 39, 45], 0]))
+
+        return pts_3d
+
     def adjust_3d(self):
         if self.conf < 0.4 or self.pnp_error > 300:
             return
-
-        norm = np.array([
-            ((self.pts_3d[0, 0] - self.pts_3d[16, 0]) + (self.pts_3d[1, 0] - self.pts_3d[15, 0])) / 2.0,
-            ((self.pts_3d[27, 1] - self.pts_3d[28, 1]) + (self.pts_3d[28, 1] - self.pts_3d[29, 1])) / 2.0,
-            np.max(self.pts_3d[0:66, 2]) - np.min(self.pts_3d[0:66, 2])
-        ])
-        self.pts_3d = (self.pts_3d / norm) * self.tracker.norm
-
-        self.current_features = self.features.update(self.pts_3d[:, 0:2])
-        self.eye_blink = []
-        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
-        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
 
         max_runs = 1
         eligible = np.arange(0, 66)
@@ -391,6 +396,13 @@ class FaceInfo():
                 update_indices = np.nonzero(self.update_counts[:, update_type] <= self.update_count_max)[0]
             self.face_3d[update_indices] = self.face_3d[update_indices] * weights[update_indices] + updated[update_indices] * (1. - weights[update_indices])
             self.update_contour()
+
+        self.pts_3d = self.normalize_pts3d(self.pts_3d)
+        self.current_features = self.features.update(self.pts_3d[:, 0:2])
+        self.eye_blink = []
+        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
+        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
+
 
 class Tracker():
     def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False):
@@ -531,12 +543,6 @@ class Tracker():
             [0.25799, 0.27608, -0.24967],
             [-0.25799, 0.27608, -0.24967],
         ], np.float32) * np.array([1.0, 1.0, 1.3])
-
-        self.norm = np.array([
-            ((self.face_3d[0, 0] - self.face_3d[16, 0]) + (self.face_3d[1, 0] - self.face_3d[15, 0])) / 2.0,
-            ((self.face_3d[27, 1] - self.face_3d[28, 1]) + (self.face_3d[28, 1] - self.face_3d[29, 1])) / 2.0,
-            np.max(self.face_3d[0:66, 2]) - np.min(self.face_3d[0:66, 2])
-        ])
 
         self.camera = np.array([[width, 0, width/2], [0, width, height/2], [0, 0, 1]], np.float32)
         self.inverse_camera = np.linalg.inv(self.camera)

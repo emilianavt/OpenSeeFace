@@ -94,6 +94,8 @@ public class OpenSeeExpression : MonoBehaviour
         public bool pointsLipLower = true;
         [Tooltip("When enabled, certain manually designed features will be used to determine the expression.")]
         public bool features = true;
+        [Tooltip("When enabled, the depth value of points is also used for training.")]
+        public bool includeDepth = false;
     }
     [Serializable]
     private class OpenSeeExpressionRepresentation {
@@ -171,7 +173,7 @@ public class OpenSeeExpression : MonoBehaviour
     private int[] indicesBrowLeft = new int[] {22, 23, 24, 25, 26};
     private int[] indicesEyeRight = new int[] {36, 37, 38, 39, 40, 41};
     private int[] indicesEyeLeft = new int[] {42, 43, 44, 45, 46, 47};
-    private int[] indicesNose = new int[] {27, 28, 29, 30, 31, 32, 33, 34, 35};
+    private int[] indicesNose = new int[] {27, 28, 29, /*30, */31, 32, 33, 34, 35};
     private int[] indicesMouthCorner = new int[] {58, 62};
     private int[] indicesLipUpper = new int[] {48, 49, 50, 51, 52, 59, 60, 61};
     private int[] indicesLipLower = new int[] {53, 54, 55, 56, 57, 63, 64, 65};
@@ -186,64 +188,91 @@ public class OpenSeeExpression : MonoBehaviour
             foreach (int i in indicesFaceContour) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsBrowRight)
             foreach (int i in indicesBrowRight) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsBrowLeft)
             foreach (int i in indicesBrowLeft) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsEyeRight)
             foreach (int i in indicesEyeRight) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsEyeLeft)
             foreach (int i in indicesEyeLeft) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsNose)
             foreach (int i in indicesNose) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsNose)
             foreach (int i in indicesMouthCorner) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsLipUpper)
             foreach (int i in indicesLipUpper) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.pointsLipLower)
             foreach (int i in indicesLipLower) {
                 indexList.Add(colsBase + i * 3);
                 indexList.Add(colsBase + i * 3 + 1);
-                indexList.Add(colsBase + i * 3 + 2);
-                cols += 3;
+                cols += 2;
+                if (pointSelection.includeDepth) {
+                    indexList.Add(colsBase + i * 3 + 2);
+                    cols++;
+                }
             }
         if (pointSelection.features)
             for (int i = 0; i < 14; i++) {
