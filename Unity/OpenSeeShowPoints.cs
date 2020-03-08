@@ -12,23 +12,34 @@ public class OpenSeeShowPoints : MonoBehaviour {
     public bool applyRotation = false;
     [Range(0, 1)]
     public float minConfidence = 0.20f;
+    public bool showGaze = true;
+    public Material material;
     private OpenSee.OpenSeeData openSeeData;
     private GameObject[] gameObjects;
     private GameObject centerBall;
     private double updated = 0.0;
+    private int total = 70;
 
 	void Start () {
         if (openSee == null) {
             openSee = GetComponent<OpenSee>();
         }
         gameObjects = new GameObject[70];
-        for (int i = 0; i < 70; i++) {
+        if (!showGaze)
+            total = 66;
+        for (int i = 0; i < total; i++) {
             gameObjects[i] = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             gameObjects[i].name = "Point " + (i + 1);
+            if (material != null)
+                gameObjects[i].GetComponent<Renderer>().material = material;
+            gameObjects[i].layer = gameObject.layer;
             gameObjects[i].transform.SetParent(transform);
             gameObjects[i].transform.localScale = new Vector3(0.025f, 0.025f, 0.025f);
             if (i >= 68) {
                 GameObject cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                if (material != null)
+                    cylinder.GetComponent<Renderer>().material = material;
+                cylinder.layer = gameObject.layer;
                 cylinder.transform.SetParent(gameObjects[i].transform);
                 cylinder.transform.localEulerAngles = new Vector3(90f, 0f, 0f);
                 cylinder.transform.localPosition = new Vector3(0f, 0f, -4f);
@@ -57,7 +68,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
         }
         if (show3DPoints) {
             centerBall.gameObject.SetActive(false);
-            for (int i = 0; i < 70; i++) {
+            for (int i = 0; i < total; i++) {
                 if (openSeeData.got3DPoints && (i >= 68 || openSeeData.confidence[i] > minConfidence)) {
                     Renderer renderer = gameObjects[i].GetComponent<Renderer>();
                     Vector3 pt = openSeeData.points3D[i];

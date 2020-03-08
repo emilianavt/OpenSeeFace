@@ -31,7 +31,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float eyeClosedThreshold = 0.2f;
     [Tooltip("When automatic eye blinks are disabled, this sets the threshold for how open the eyes have to be to be registered as fully open. At 1 the eyes will never fully open.")]
     [Range(0, 1)]
-    public float eyeOpenedThreshold = 0.65f;
+    public float eyeOpenedThreshold = 0.55f;
+    [Tooltip("This is the blink smoothing factor for camera based blink tracking, with 0 being no smoothing and 1 being a fixed blink state.")]
+    [Range(0, 1)]
+    public float blinkSmoothing = 0.75f;
     [Tooltip("When enabled, the avatar's eye will move according to the face tracker's gaze tracking.")]
     public bool gazeTracking = true;
     [Tooltip("This is the right eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
@@ -63,6 +66,22 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
     public bool reloadExpressions = false;
     [Header("Lip sync settings")]
+    [Tooltip("This allows you to enable and disable lip sync. When disabled, mouth tracking is used instead.")]
+    public bool lipSync = true;
+    [Tooltip("This is the mouth tracking smoothing factor, with 0 being no smoothing and 1 being a fixed mouth.")]
+    [Range(0, 1)]
+    public float mouthSmoothing = 0.6f;
+    [Tooltip("This is the mouth tracking stabilization factor, with 0 being no stabilization and 1 being a fixed mouth.")]
+    [Range(0, 1)]
+    public float mouthStabilizer = 0.2f;
+    [Tooltip("This is the mouth tracking stabilization factor used for wide mouth expressions, with 0 being no stabilization and 1 being a fixed mouth.")]
+    [Range(0, 1)]
+    public float mouthStabilizerWide = 0.3f;
+    [Tooltip("When the detected audio volume is lower than this, the mouth will be considered closed for camera based mouth tracking.")]
+    [Range(0, 1)]
+    public float mouthSquelch = 0.01f;
+    [Tooltip("With this, the squelch threshold above can be disabled.")]
+    public bool mouthUseSquelch = false;
     [Tooltip("This allows you to select the OVRLipSync provider.")]
     public OVRLipSync.ContextProviders provider = OVRLipSync.ContextProviders.Enhanced;
     [Tooltip("When enabled, audio will be read from the given audio source, otherwise it will be read from the given mic.")]
@@ -84,6 +103,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Header("Lip sync information")]
     [Tooltip("This shows if the lip sync system is currently active.")]
     public bool active = false;
+    [Tooltip("This shows the current audio volume.")]
+    public float audioVolume = 0f;
 
     private OVRLipSync.Frame visemeData = new OVRLipSync.Frame();
     private float volume;
@@ -102,6 +123,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private Dictionary<string, OpenSeeVRMExpression> expressionMap;
     private OpenSeeVRMExpression currentExpression = null;
     private OpenSee.OpenSee.OpenSeeData openSeeData = null;
+    
     private double lastGaze = 0f;
     private float lastLookUpDown = 0f;
     private float lastLookLeftRight = 0f;
@@ -109,6 +131,21 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float currentLookLeftRight = 0f;
     private int interpolationCount = 0;
     private int interpolationState = 0;
+    
+    private double lastMouth = 0f;
+    private float[] lastMouthStates;
+    private float[] currentMouthStates;
+    private int mouthInterpolationCount = 0;
+    private int mouthInterpolationState = 0;
+    
+    private double lastBlink = 0f;
+    private float lastBlinkLeft = 0f;
+    private float lastBlinkRight = 0f;
+    private float currentBlinkLeft = 0f;
+    private float currentBlinkRight = 0f;
+    private int blinkInterpolationCount = 0;
+    private int blinkInterpolationState = 0;
+    
     private bool overridden = false;
     private int continuedPress = -1;
 
@@ -157,11 +194,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (vrmBlendShapeProxy == null || catsData == null)
             return;
         float expressionFactor = 1f;
+        if (currentExpression != null)
+            expressionFactor = currentExpression.visemeFactor;
         if (currentExpression != null && !currentExpression.enableVisemes) {
             for (int i = 0; i < 5; i++) {
                 vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], 0f);
             }
-            expressionFactor = currentExpression.visemeFactor;
             return;
         }
         float weight;
@@ -170,6 +208,93 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         float[] values = catsData[current];
         for (int i = 0; i < 5; i++) {
             vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], values[i] * visemeFactor * expressionFactor * weight);
+        }
+    }
+    
+    void ApplyMouthShape() {
+        if (vrmBlendShapeProxy == null)
+            return;
+        if (visemePresetMap == null)
+            InitCatsData();
+        for (int i = 0; i < 5; i++) {
+            vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], 0f);
+        }
+        if (openSeeData == null || openSeeData.features == null)
+            return;
+        
+        if (lastMouth < openSeeData.time) {
+            lastMouth = openSeeData.time;
+            float open = openSeeData.features.MouthOpen;
+            float wide = openSeeData.features.MouthWide;
+            float[] mouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+
+            do {
+                if (mouthUseSquelch && audioVolume < mouthSquelch)
+                    break;
+                if (open < mouthStabilizer && Mathf.Abs(wide) < mouthStabilizer)
+                    break;
+                if (wide > mouthStabilizer && open < mouthStabilizerWide)
+                    break;
+                if (open > 0.5f) {
+                    // O
+                    mouthStates[4] = open;
+                } else if (open >= 0f) {
+                    // A
+                    mouthStates[0] = open * 1f;
+                }
+                if (wide >= 0f) {
+                    if (wide > 0.5f) {
+                        // I
+                        mouthStates[1] = wide;
+                    } else {
+                        // E
+                        mouthStates[3] = wide * 1f;
+                    }
+                } else if (wide < Mathf.Clamp(mouthStabilizerWide * 1.5f, 0f, 0.8f)) {
+                    // U
+                    mouthStates[2] = -wide;
+                }
+                float total = 0f;
+                float max = 0f;
+                for (int i = 0; i < 5; i++) {
+                    total += mouthStates[i];
+                    if (mouthStates[i] > max)
+                        max = mouthStates[i];
+                }
+                max = Mathf.Clamp(max * 3f, 0f, 1f);
+                if (total < 0.0001f)
+                    break;
+                for (int i = 0; i < 5; i++) {
+                    mouthStates[i] = max * (mouthStates[i] / total);
+                }
+            } while (false);
+            
+            if (mouthInterpolationState == 2) {
+                for (int i = 0; i < 5; i++) {
+                    mouthStates[i] = Mathf.Lerp(currentMouthStates[i], mouthStates[i], 1f - mouthSmoothing);
+                }
+            }
+            
+            lastMouthStates = currentMouthStates;
+            currentMouthStates = mouthStates;
+            if (mouthInterpolationState < 2)
+                mouthInterpolationState++;
+            mouthInterpolationCount = 0;
+        }
+        
+        if (mouthInterpolationState < 2)
+            return;
+        
+        float t = Mathf.Clamp((float)mouthInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
+        mouthInterpolationCount++;
+        
+        float expressionFactor = 1f;
+        if (currentExpression != null)
+            expressionFactor = currentExpression.visemeFactor;
+
+        for (int i = 0; i < 5; i++) {
+            float interpolated = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
+            vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], interpolated * expressionFactor * visemeFactor);
         }
     }
 
@@ -382,34 +507,70 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void BlinkEyes() {
         if (vrmBlendShapeProxy == null || eyeBlinker == null)
             return;
+        vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
+        vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
         if (autoBlink) {
             if (eyeBlinker.Blink() && (currentExpression == null || currentExpression.enableBlinking)) {
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 1f);
                 vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 1f);
-            } else {
-                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
-                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
             }
         } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
-            if (openSeeData == null || currentExpression == null || !currentExpression.enableBlinking) {
-                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
-                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
+            if (currentExpression != null && !currentExpression.enableBlinking)
                 return;
-            }
+
             float right = 1f;
-            if (openSeeData.rightEyeOpen > eyeOpenedThreshold)
-                right = 0f;
-            else if (openSeeData.rightEyeOpen < eyeClosedThreshold)
-                right = 1f;
-            else
-                right = 1f - (openSeeData.rightEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
             float left = 1f;
-            if (openSeeData.leftEyeOpen > eyeOpenedThreshold)
-                left = 0f;
-            else if (openSeeData.leftEyeOpen < eyeClosedThreshold)
-                left = 1f;
-            else
-                left = 1f - (openSeeData.leftEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
+            
+            if (openSeeData != null && lastBlink < openSeeData.time) {
+                lastBlink = openSeeData.time;
+                
+                if (openSeeData.rightEyeOpen > eyeOpenedThreshold)
+                    right = 0f;
+                else if (openSeeData.rightEyeOpen < eyeClosedThreshold)
+                    right = 1f;
+                else
+                    right = 1f - (openSeeData.rightEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
+
+                if (openSeeData.leftEyeOpen > eyeOpenedThreshold)
+                    left = 0f;
+                else if (openSeeData.leftEyeOpen < eyeClosedThreshold)
+                    left = 1f;
+                else
+                    left = 1f - (openSeeData.leftEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
+                
+                lastBlinkLeft = currentBlinkLeft;
+                lastBlinkRight = currentBlinkRight;
+                currentBlinkLeft = Mathf.Lerp(currentBlinkLeft, left, 1f - blinkSmoothing);
+                currentBlinkRight = Mathf.Lerp(currentBlinkRight, right, 1f - blinkSmoothing);
+                
+                if (left == 0f)
+                    currentBlinkLeft = 0f;
+                if (right == 0f)
+                    currentBlinkRight = 0f;
+                if (left == 1f)
+                    currentBlinkLeft = 1f;
+                if (right == 1f)
+                    currentBlinkRight = 1f;
+                
+                if (blinkInterpolationState < 2)
+                    blinkInterpolationState++;
+            }
+            
+            if (blinkInterpolationState < 2)
+                return;
+            
+            float t = Mathf.Clamp((float)blinkInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
+            blinkInterpolationCount++;
+            
+            left = Mathf.Lerp(lastBlinkLeft, currentBlinkLeft, t);
+            right = Mathf.Lerp(lastBlinkRight, currentBlinkRight, t);
+            
+            if (openSeeIKTarget.mirrorMotion) {
+                float tmp = left;
+                left = right;
+                right = tmp;
+            }
+            
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
             vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), left);
         }
@@ -554,6 +715,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void ProcessBuffer(float[] buffer) {
         if (buffer == null)
             return;
+        
+        audioVolume = 0f;
+        foreach (float v in buffer)
+            audioVolume += Mathf.Abs(v);
+        audioVolume /= buffer.Length;
+
         int totalLen = partialPos + buffer.Length;
         int bufferPos = 0;
         if (totalLen >= 1024 * channels) {
@@ -605,7 +772,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 this.channels = channels;
                 partialAudio = new float[1024 * channels];
             }
-            ProcessBuffer(buffer);
+            if (isCanned)
+                ProcessBuffer(buffer);
         }
     }
 
@@ -619,7 +787,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         float[] buffer = ReadMic();
         if (buffer == null)
             return;
-        ProcessBuffer(buffer);
+        if (!isCanned)
+            ProcessBuffer(buffer);
     }
 
     void CreateContext() {
@@ -648,7 +817,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         UpdateGaze();
         BlinkEyes();
         ReadAudio();
-        ApplyVisemes();
+        if (lipSync) {
+            ApplyVisemes();
+        } else {
+            ApplyMouthShape();
+        }
     }
 
     void FixedUpdate() {
