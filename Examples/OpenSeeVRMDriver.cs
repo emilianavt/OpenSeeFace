@@ -124,6 +124,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private OpenSeeVRMExpression currentExpression = null;
     private OpenSee.OpenSee.OpenSeeData openSeeData = null;
     
+    private float turnLeftBoundaryAngle = -30f;
+    private float turnRightBoundaryAngle = 20f;
+    
     private double lastGaze = 0f;
     private float lastLookUpDown = 0f;
     private float lastLookLeftRight = 0f;
@@ -227,13 +230,20 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             float open = openSeeData.features.MouthOpen;
             float wide = openSeeData.features.MouthWide;
             float[] mouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+            float stabilizer = mouthStabilizer;
+            float stabilizerWide = mouthStabilizerWide;
+            
+            if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle) {
+                stabilizer *= 2.5f;
+                stabilizerWide *= 2.5f;
+            }
 
             do {
                 if (mouthUseSquelch && audioVolume < mouthSquelch)
                     break;
-                if (open < mouthStabilizer && Mathf.Abs(wide) < mouthStabilizer)
+                if (open < stabilizer && Mathf.Abs(wide) < stabilizer)
                     break;
-                if (wide > mouthStabilizer && open < mouthStabilizerWide)
+                if (wide > stabilizer && open < stabilizerWide)
                     break;
                 if (open > 0.5f) {
                     // O
@@ -242,7 +252,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     // A
                     mouthStates[0] = open * 1f;
                 }
-                if (wide >= 0f) {
+                if (wide >= 0f && open > stabilizer * 0.5f) {
                     if (wide > 0.5f) {
                         // I
                         mouthStates[1] = wide;
@@ -250,7 +260,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                         // E
                         mouthStates[3] = wide * 1f;
                     }
-                } else if (wide < Mathf.Clamp(mouthStabilizerWide * 1.5f, 0f, 0.8f)) {
+                } else if (wide < Mathf.Clamp(stabilizerWide * 1.5f, 0f, 0.8f) && open > stabilizer) {
                     // U
                     mouthStates[2] = -wide;
                 }
@@ -523,20 +533,29 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             
             if (openSeeData != null && lastBlink < openSeeData.time) {
                 lastBlink = openSeeData.time;
+                float openThreshold = eyeOpenedThreshold;
                 
-                if (openSeeData.rightEyeOpen > eyeOpenedThreshold)
+                if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle)
+                    openThreshold = Mathf.Lerp(openThreshold, eyeClosedThreshold, 0.4f);
+                
+                if (openSeeData.rightEyeOpen > openThreshold)
                     right = 0f;
                 else if (openSeeData.rightEyeOpen < eyeClosedThreshold)
                     right = 1f;
                 else
-                    right = 1f - (openSeeData.rightEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
+                    right = 1f - (openSeeData.rightEyeOpen - eyeClosedThreshold) / (openThreshold - eyeClosedThreshold);
 
-                if (openSeeData.leftEyeOpen > eyeOpenedThreshold)
+                if (openSeeData.leftEyeOpen > openThreshold)
                     left = 0f;
                 else if (openSeeData.leftEyeOpen < eyeClosedThreshold)
                     left = 1f;
                 else
-                    left = 1f - (openSeeData.leftEyeOpen - eyeClosedThreshold) / (eyeOpenedThreshold - eyeClosedThreshold);
+                    left = 1f - (openSeeData.leftEyeOpen - eyeClosedThreshold) / (openThreshold - eyeClosedThreshold);
+                
+                if (openSeeData.rawEuler.y < turnLeftBoundaryAngle)
+                    left = right;
+                if (openSeeData.rawEuler.y > turnRightBoundaryAngle)
+                    right = left;
                 
                 lastBlinkLeft = currentBlinkLeft;
                 lastBlinkRight = currentBlinkRight;
