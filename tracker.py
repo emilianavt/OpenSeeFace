@@ -264,7 +264,7 @@ class FaceInfo():
         self.id = id
         self.frame_count = -1
         self.tracker = tracker
-        self.contour_pts = [0,1,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45]
+        self.contour_pts = [0,1,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45, 49,50,51]
         self.face_3d = copy.copy(self.tracker.face_3d)
         self.reset()
         self.alive = False
@@ -458,6 +458,7 @@ class Tracker():
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
         self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
+        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options)
 
         self.faceCascade = cv2.CascadeClassifier()
         self.faceCascade.load(os.path.join(model_base_path, "haarcascade_frontalface_alt2.xml"))
@@ -568,8 +569,34 @@ class Tracker():
         self.face_info = [FaceInfo(id, self) for id in range(max_faces)]
         self.fail_count = 0
 
+    def detect_faces(self, frame):
+        im = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_LINEAR)[:,:,::-1] / self.std - self.mean
+        im = np.expand_dims(im, 0)
+        im = np.transpose(im, (0,3,1,2))
+        outputs, maxpool = self.detection.run([], {'input': im})
+        outputs = np.array(outputs)
+        maxpool = np.array(maxpool)
+        outputs[0, 0, outputs[0, 0] != maxpool[0, 0]] = 0
+        detections = np.flip(np.argsort(outputs[0,0].flatten()))
+        results = []
+        for det in detections[0:self.max_faces]:
+            y, x = det // 56, det % 56
+            c = outputs[0, 0, y, x]
+            r = outputs[0, 1, y, x] * 112.
+            x *= 4
+            y *= 4
+            r *= 1.0
+            if c < self.threshold:
+                break
+            results.append((x - r, y - r, 2 * r, 2 * r * 1.0))
+        results = np.array(results).astype(np.float32)
+        if results.shape[0] > 0:
+            results[:, [0,2]] *= frame.shape[1] / 224.
+            results[:, [1,3]] *= frame.shape[0] / 224.
+        return results
+
     def landmarks(self, tensor, crop_info):
-        crop_x1, crop_y1, scale_x, scale_y = crop_info
+        crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
         avg_conf = 0
         lms = []
         for i in range(0, 66):
@@ -810,9 +837,12 @@ class Tracker():
 
     def assign_face_info(self, results):
         result_coords = []
-        for conf, (lms, eye_state) in results:
+        adjusted_results = []
+        for conf, (lms, eye_state), conf_adjust in results:
+            adjusted_results.append((conf - conf_adjust, (lms, eye_state)))
             result_coords.append(np.array(lms)[:, 0:2].mean(0))
-        candidates = [[]] * 4
+        results = adjusted_results
+        candidates = [[]] * self.max_faces
         max_dist = 2 * np.linalg.norm(np.array([self.width, self.height]))
         for i, face_info in enumerate(self.face_info):
             for j, coord in enumerate(result_coords):
@@ -855,12 +885,16 @@ class Tracker():
 
         new_faces = []
         new_faces.extend(self.faces)
+        bonus_cutoff = len(self.faces)
         new_faces.extend(additional_faces)
         self.wait_count += 1
         if self.detected == 0:
             start_fd = time.perf_counter()
-            retinaface_detections = self.retinaface.detect_retina(frame)
-            new_faces.extend(retinaface_detections)
+            if self.use_retinaface > 0:
+                retinaface_detections = self.retinaface.detect_retina(frame)
+                new_faces.extend(retinaface_detections)
+            else:
+                new_faces.extend(self.detect_faces(frame))
             duration_fd = 1000 * (time.perf_counter() - start_fd)
             self.wait_count = 0
         elif self.detected < self.max_faces:
@@ -871,8 +905,9 @@ class Tracker():
                     self.retinaface_scan.background_detect(frame)
                 else:
                     start_fd = time.perf_counter()
-                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    new_faces.extend(list(self.faceCascade.detectMultiScale(gray, 1.3, 4, 0 | cv2.CASCADE_SCALE_IMAGE, (50, 50))))
+                    #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    #new_faces.extend(list(self.faceCascade.detectMultiScale(gray, 1.3, 4, 0 | cv2.CASCADE_SCALE_IMAGE, (50, 50))))
+                    new_faces.extend(self.detect_faces(frame))
                     duration_fd = 1000 * (time.perf_counter() - start_fd)
                     self.wait_count = 0
         else:
@@ -906,7 +941,7 @@ class Tracker():
             crop = self.preprocess(im, (crop_x1, crop_y1, crop_x2, crop_y2))
             duration_pp += 1000 * (time.perf_counter() - start_pp)
             crops.append(crop)
-            crop_info.append((crop_x1, crop_y1, scale_x, scale_y))
+            crop_info.append((crop_x1, crop_y1, scale_x, scale_y, 0.0 if j >= bonus_cutoff else 0.1))
             num_crops += 1
 
         groups = group_rects(new_faces)
@@ -942,10 +977,11 @@ class Tracker():
                 continue;
             group_id = groups[str(new_faces[i])][0]
             if not group_id in best_results:
-                best_results[group_id] = [-1, []]
-            if conf > self.threshold and best_results[group_id][0] < conf:
-                best_results[group_id][0] = conf
+                best_results[group_id] = [-1, [], 0]
+            if conf > self.threshold and best_results[group_id][0] < conf + crop[4]:
+                best_results[group_id][0] = conf + crop[4]
                 best_results[group_id][1] = (lms, eye_state)
+                best_results[group_id][2] = crop[4]
 
         sorted_results = sorted(best_results.values(), key=lambda x: x[0], reverse=True)[:self.max_faces]
         self.assign_face_info(sorted_results)
