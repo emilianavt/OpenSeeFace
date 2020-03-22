@@ -264,7 +264,7 @@ class FaceInfo():
         self.id = id
         self.frame_count = -1
         self.tracker = tracker
-        self.contour_pts = [0,1,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45, 49,50,51]
+        self.contour_pts = [0,1,8,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45]
         self.face_3d = copy.copy(self.tracker.face_3d)
         self.reset()
         self.alive = False
