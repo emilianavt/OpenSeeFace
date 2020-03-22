@@ -298,6 +298,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         float t = Mathf.Clamp((float)mouthInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
         mouthInterpolationCount++;
         
+        if (currentExpression != null && !currentExpression.enableVisemes)
+            return;
+        
         float expressionFactor = 1f;
         if (currentExpression != null)
             expressionFactor = currentExpression.visemeFactor;
