@@ -141,7 +141,7 @@ For all training after the first model, a modified version of [Adaptive Wing Los
 
 For expression detection, [LIBSVM](https://www.csie.ntu.edu.tw/~cjlin/libsvm/) is used.
 
-Face detection is done using OpenCV's Haar Cascade classifier or RetinaFace.
+Face detection is done using a custom heatmap regression based face detection model or RetinaFace.
 
     @inproceedings{deng2019retinaface,
       title={RetinaFace: Single-stage Dense Face Localisation in the Wild},

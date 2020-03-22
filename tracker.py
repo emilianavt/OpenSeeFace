@@ -458,10 +458,8 @@ class Tracker():
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
         self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
-        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options)
 
-        self.faceCascade = cv2.CascadeClassifier()
-        self.faceCascade.load(os.path.join(model_base_path, "haarcascade_frontalface_alt2.xml"))
+        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options)
         self.faces = []
 
         # Image normalization constants
@@ -905,8 +903,6 @@ class Tracker():
                     self.retinaface_scan.background_detect(frame)
                 else:
                     start_fd = time.perf_counter()
-                    #gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                    #new_faces.extend(list(self.faceCascade.detectMultiScale(gray, 1.3, 4, 0 | cv2.CASCADE_SCALE_IMAGE, (50, 50))))
                     new_faces.extend(self.detect_faces(frame))
                     duration_fd = 1000 * (time.perf_counter() - start_fd)
                     self.wait_count = 0
