@@ -80,26 +80,20 @@ class RetinaFaceDetector():
     def detect_retina(self, frame, is_background=False):
         h, w, _ = frame.shape
         im = None
-        if h > w:
-            resize = h / self.res_h
-            im = cv2.resize(frame, (int(w / resize), self.res_h), interpolation=cv2.INTER_LINEAR)
-            resize = 1 / resize
-        else:
-            resize = w / self.res_w
-            im = cv2.resize(frame, (self.res_w, int(h / resize)), interpolation=cv2.INTER_LINEAR)
-            resize = 1 / resize
-        pad_h = self.res_h - im.shape[0]
-        pad_w = self.res_w - im.shape[1]
-        im = cv2.copyMakeBorder(im, 0, pad_h, 0, pad_w, cv2.BORDER_CONSTANT, (0, 0, 0))
+        im = cv2.resize(frame, (self.res_w, self.res_h), interpolation=cv2.INTER_LINEAR)
+        resize_w = w / self.res_w
+        resize_w = 1 / resize_w
+        resize_h = h / self.res_h
+        resize_h = 1 / resize_h
         im = np.float32(im)
-        scale = np.array((self.res_w, self.res_h, self.res_w, self.res_h))
+        scale = np.array((self.res_w / resize_w, self.res_h / resize_h, self.res_w / resize_w, self.res_h / resize_h))
         im -= (104, 117, 123)
         im = im.transpose(2, 0, 1)
         im = np.expand_dims(im, 0)
         output = self.session.run([], {"input0": im})
         loc, conf = output[0][0], output[1][0]
         boxes = decode(loc, self.priorbox, [0.1, 0.2])
-        boxes = boxes * scale / resize
+        boxes = boxes * scale
         scores = conf[:, 1]
 
         inds = np.where(scores > self.min_conf)[0]
@@ -142,9 +136,14 @@ class RetinaFaceDetector():
             return []
 
 if __name__== "__main__":
-    retina = RetinaFaceDetector(top_k=4)
+    retina = RetinaFaceDetector(top_k=40, min_conf=0.2)
     im = cv2.imread(sys.argv[1], cv2.IMREAD_COLOR)
     start = time.perf_counter()
     faces = retina.detect_retina(im)
     end = 1000 * (time.perf_counter() - start)
     print(f"Runtime: {end:.3f}ms")
+    for (x,y,w,h) in faces:
+        im = cv2.rectangle(im, (int(x),int(y)), (int(x+w),int(y+w)), (0,0,255), 1)
+    cv2.imshow("Frame", im)
+    while cv2.waitKey(0) & 0xff != ord('q'):
+        ""
