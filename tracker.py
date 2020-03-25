@@ -53,14 +53,33 @@ def rotate_image(image, a, center):
     rotated = cv2.warpAffine(image, M, (w, h))
     return rotated
 
-def intersects(r1, r2):
-    r1_x1, r1_y1, r1_x2, r1_y2 = r1
-    r1_x2 += r1_x1
-    r1_y2 += r1_y1
-    r2_x1, r2_y1, r2_x2, r2_y2 = r2
-    r2_x2 += r2_x1
-    r2_y2 += r2_y1
-    return not (r1_x1 > r2_x2 or r1_x2 < r2_x1 or r1_y1 > r2_y2 or r1_y2 < r2_y1)
+def intersects(r1, r2, amount=0.5):
+    area1 = r1[2] * r1[3]
+    area2 = r2[2] * r2[3]
+    inter = 0.0
+    total = area1 + area2
+    
+    r1_x1, r1_y1, w, h = r1
+    r1_x2 = r1_x1 + w
+    r1_y2 = r1_y1 + h
+    r2_x1, r2_y1, w, h = r2
+    r2_x2 = r2_x1 + w
+    r2_y2 = r2_y1 + h
+
+    left = max(r1_x1, r2_x1)
+    right = min(r1_x2, r2_x2)
+    top = max(r1_y1, r2_y1)
+    bottom = min(r1_y2, r2_y2)
+    if left < right and top < bottom:
+        inter = (right - left) * (bottom - top)
+        total -= inter
+
+    if inter / total >= amount:
+        return True
+
+    return False
+
+    #return not (r1_x1 > r2_x2 or r1_x2 < r2_x1 or r1_y1 > r2_y2 or r1_y2 < r2_y1)
 
 def group_rects(rects):
     rect_groups = {}
@@ -612,7 +631,7 @@ class Tracker():
             lm_y = crop_x1 + scale_x * (res * (float(y) / 27.) + off_y)
             lms.append((lm_x,lm_y,conf))
         avg_conf = avg_conf / 66.
-        return (avg_conf, lms)
+        return (avg_conf, np.array(lms))
 
     def estimate_depth(self, face_info):
         lms = np.concatenate((face_info.lms, np.array([[face_info.eye_state[0][1], face_info.eye_state[0][2], face_info.eye_state[0][3]], [face_info.eye_state[1][1], face_info.eye_state[1][2], face_info.eye_state[1][3]]], np.float)), 0)
@@ -941,8 +960,6 @@ class Tracker():
             crop_info.append((crop_x1, crop_y1, scale_x, scale_y, 0.0 if j >= bonus_cutoff else 0.1))
             num_crops += 1
 
-        groups = group_rects(new_faces)
-
         start_model = time.perf_counter()
         outputs = {}
         if num_crops == 1:
@@ -966,13 +983,27 @@ class Tracker():
                     started += 1
                     thread.start()
 
-        best_results = {}
+        actual_faces = []
+        good_crops = []
         for crop in crop_info:
             conf, lms, i = outputs[crop]
-            eye_state = self.get_eye_state(frame, lms)
+            if conf <= self.threshold:
+                continue
+            x1, y1, _ = lms.min(0)
+            x2, y2, _ = lms.max(0)
+            bb = (x1, y1, x2 - x1, y2 - y1)
+            outputs[crop] = (conf, lms, i, bb)
+            actual_faces.append(bb)
+            good_crops.append(crop)
+        groups = group_rects(actual_faces)
+
+        best_results = {}
+        for crop in good_crops:
+            conf, lms, i, bb = outputs[crop]
             if conf < self.threshold:
                 continue;
-            group_id = groups[str(new_faces[i])][0]
+            eye_state = self.get_eye_state(frame, lms)
+            group_id = groups[str(bb)][0]
             if not group_id in best_results:
                 best_results[group_id] = [-1, [], 0]
             if conf > self.threshold and best_results[group_id][0] < conf + crop[4]:
