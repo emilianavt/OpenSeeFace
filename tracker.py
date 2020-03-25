@@ -53,7 +53,7 @@ def rotate_image(image, a, center):
     rotated = cv2.warpAffine(image, M, (w, h))
     return rotated
 
-def intersects(r1, r2, amount=0.5):
+def intersects(r1, r2, amount=0.3):
     area1 = r1[2] * r1[3]
     area2 = r2[2] * r2[3]
     inter = 0.0
