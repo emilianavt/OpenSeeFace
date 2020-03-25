@@ -8,6 +8,6 @@ set /p width=Select the width:
 set /p height=Select the height:
 set /p fps=Select the FPS:
 
-facetracker -c %cameraNum% -W %width% -H %height% -F %fps% -v 1 -P 1
+facetracker -c %cameraNum% -W %width% -H %height% -F %fps% -v 3 -P 1
 
 pause

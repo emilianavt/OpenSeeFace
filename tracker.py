@@ -405,10 +405,10 @@ class FaceInfo():
 
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, threshold=0.4, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False):
+    def __init__(self, width, height, model_type=3, threshold=0.6, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
-        options.intra_op_num_threads = max_threads
+        options.intra_op_num_threads = max(max_threads,4)
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
@@ -427,7 +427,7 @@ class Tracker():
         else:
             model_base_path = model_dir
 
-        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=max_threads, top_k=max_faces, res=(640, 640))
+        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=max(max_threads,4), top_k=max_faces, res=(640, 640))
         self.retinaface_scan = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=2, top_k=max_faces, res=(640, 640))
         self.use_retinaface = use_retinaface
 
@@ -453,7 +453,7 @@ class Tracker():
 
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
-        options.intra_op_num_threads = max_threads
+        options.intra_op_num_threads = max(max_threads,4)
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
@@ -597,18 +597,19 @@ class Tracker():
         crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
         avg_conf = 0
         lms = []
+        res = self.res - 1 if self.model_type == 3 else self.res
         for i in range(0, 66):
             m = int(tensor[i].argmax())
             x = m // 28
             y = m % 28
             conf = float(tensor[i][x,y])
             avg_conf = avg_conf + conf
-            off_x = self.res * ((1. * logit(tensor[66 + i][x, y])) - 0.0)
-            off_y = self.res * ((1. * logit(tensor[66 * 2 + i][x, y])) - 0.0)
+            off_x = res * ((1. * logit(tensor[66 + i][x, y])) - 0.0)
+            off_y = res * ((1. * logit(tensor[66 * 2 + i][x, y])) - 0.0)
             off_x = math.floor(off_x + 0.5)
             off_y = math.floor(off_y + 0.5)
-            lm_x = crop_y1 + scale_y * (self.res * (float(x) / 28.) + off_x)
-            lm_y = crop_x1 + scale_x * (self.res * (float(y) / 28.) + off_y)
+            lm_x = crop_y1 + scale_y * (res * (float(x) / 27.) + off_x)
+            lm_y = crop_x1 + scale_x * (res * (float(y) / 27.) + off_y)
             lms.append((lm_x,lm_y,conf))
         avg_conf = avg_conf / 66.
         return (avg_conf, lms)
