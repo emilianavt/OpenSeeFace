@@ -31,6 +31,8 @@ parser.add_argument("--model", type=int, help="This can be used to select the tr
 parser.add_argument("--model-dir", help="This can be used to specify the path to the directory containing the .onnx model files", default=None)
 parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experimental blink detection and gaze tracking are enabled, which makes things slightly slower", default=1)
 parser.add_argument("--face-id-offset", type=int, help="When set, this offset is added to all face ids, which can be useful for mixing tracking data from multiple network sources", default=0)
+parser.add_argument("--repeat-video", type=int, help="When set to 1 and a video file was specified with -c, the tracker will loop the video until interrupted", default=0)
+parser.add_argument("--dump-points", type=str, help="When set to a filename, the current face 3D points are made symmetric and dumped to the given file when quitting the visualization with the \"q\" key", default="")
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -54,7 +56,7 @@ import time
 import cv2
 import socket
 import struct
-from input_reader import InputReader, list_cameras
+from input_reader import InputReader, VideoReader, list_cameras
 from tracker import Tracker
 
 target_ip = args.ip
@@ -98,15 +100,27 @@ try:
     target_duration = 0
     if fps > 0:
         target_duration = 1. / float(fps)
-    while input_reader.is_open():
+    repeat = args.repeat_video != 0 and type(input_reader.reader) == VideoReader
+    need_reinit = 0
+    while repeat or input_reader.is_open():
+        if not input_reader.is_open() or need_reinit == 1:
+            input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps)
+            need_reinit = 2
+            time.sleep(0.001)
+            continue
         if not input_reader.is_ready():
             time.sleep(0.001)
             continue
 
         ret, frame = input_reader.read()
         if not ret:
+            if repeat:
+                if need_reinit == 0:
+                    need_reinit = 1
+                continue
             break
 
+        need_reinit = 0
         frame_count += 1
         now = time.time()
 
@@ -237,6 +251,51 @@ try:
         if args.visualize != 0:
             cv2.imshow('OpenSeeFace Visualization', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                if args.dump_points != "" and not faces is None and len(faces) > 0:
+                    np.set_printoptions(threshold=sys.maxsize, precision=15)
+                    pairs = [
+                        (0, 16),
+                        (1, 15),
+                        (2, 14),
+                        (3, 13),
+                        (4, 12),
+                        (5, 11),
+                        (6, 10),
+                        (7, 9),
+                        (17, 26),
+                        (18, 25),
+                        (19, 24),
+                        (20, 23),
+                        (21, 22),
+                        (31, 35),
+                        (32, 34),
+                        (36, 45),
+                        (37, 44),
+                        (38, 43),
+                        (39, 42),
+                        (40, 47),
+                        (41, 46),
+                        (48, 52),
+                        (49, 51),
+                        (56, 54),
+                        (57, 53),
+                        (58, 62),
+                        (59, 61),
+                        (65, 63)
+                    ]
+                    points = copy.copy(faces[0].face_3d)
+                    for a, b in pairs:
+                        x = (points[a, 0] - points[b, 0]) / 2.0
+                        y = (points[a, 1] + points[b, 1]) / 2.0
+                        z = (points[a, 2] + points[b, 2]) / 2.0
+                        points[a, 0] = x
+                        points[b, 0] = -x
+                        points[[a, b], 1] = y
+                        points[[a, b], 2] = z
+                    points[[8, 27, 28, 29, 33, 50, 55, 60, 64], 0] = 0.0
+                    points[30, :] = 0.0
+                    with open(args.dump_points, "w") as fh:
+                        fh.write(repr(points))
                 break
 
         duration = time.perf_counter() - frame_time
