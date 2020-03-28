@@ -130,10 +130,14 @@ def matrix_to_quaternion(m):
     q = np.array(q, np.float32) * 0.5 / np.sqrt(t)
     return q
 
-def worker_thread(session, input, crop_info, queue, input_name, idx, tracker):
+def worker_thread(session, frame, input, crop_info, queue, input_name, idx, tracker):
     output = session.run([], {input_name: input})[0]
     conf, lms = tracker.landmarks(output[0], crop_info)
-    queue.put((session, conf, lms, crop_info, idx))
+    if conf > tracker.threshold:
+        eye_state = tracker.get_eye_state(frame, lms, single=True)
+        queue.put((session, conf, (lms, eye_state), crop_info, idx))
+    else:
+        queue.put((session,))
 
 class Feature():
     def __init__(self, threshold=0.15, alpha=0.2, hard_factor=0.15, decay=0.001):
@@ -288,6 +292,8 @@ class FaceInfo():
         self.reset()
         self.alive = False
         self.coord = None
+        self.base_scale_v = self.tracker.face_3d[27:30, 1] - self.tracker.face_3d[28:31, 1]
+        self.base_scale_h = np.abs(self.tracker.face_3d[[0, 36, 42], 0] - self.tracker.face_3d[[16, 39, 45], 0])
 
         self.limit_3d_adjustment = True
         self.update_count_delta = 75.
@@ -337,10 +343,10 @@ class FaceInfo():
         pts_3d[:, 0:2] = (pts_3d - pts_3d[30])[:, 0:2].dot(R) + pts_3d[30, 0:2]
 
         # Vertical scale
-        pts_3d[:, 1] /= np.mean((pts_3d[27:30, 1] - pts_3d[28:31, 1]) / (self.tracker.face_3d[27:30, 1] - self.tracker.face_3d[28:31, 1]))
+        pts_3d[:, 1] /= np.mean((pts_3d[27:30, 1] - pts_3d[28:31, 1]) / self.base_scale_v)
 
         # Horizontal scale
-        pts_3d[:, 0] /= np.mean(np.abs(pts_3d[[0, 36, 42], 0] - pts_3d[[16, 39, 45], 0]) / np.abs(self.tracker.face_3d[[0, 36, 42], 0] - self.tracker.face_3d[[16, 39, 45], 0]))
+        pts_3d[:, 0] /= np.mean(np.abs(pts_3d[[0, 36, 42], 0] - pts_3d[[16, 39, 45], 0]) / self.base_scale_h)
 
         return pts_3d
 
@@ -479,6 +485,8 @@ class Tracker():
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
         self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
+        options.intra_op_num_threads = 1
+        self.gaze_model_single = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
 
         self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options)
         self.faces = []
@@ -791,7 +799,7 @@ class Tracker():
         frame = frame[y1:y2, x1:x2]
         return frame, lms, offset
 
-    def get_eye_state(self, frame, lms):
+    def get_eye_state(self, frame, lms, single=False):
         if self.no_gaze:
             return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         lms = np.array(lms)
@@ -806,7 +814,11 @@ class Tracker():
         if right_eye is None or left_eye is None:
             return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         both_eyes = np.concatenate((right_eye, left_eye))
-        results = self.gaze_model.run([], {self.input_name: both_eyes})
+        results = None
+        if single:
+            results = self.gaze_model_single.run([], {self.input_name: both_eyes})
+        else:
+            results = self.gaze_model.run([], {self.input_name: both_eyes})
         open = [0, 0]
         open[0] = 1#results[1][0].argmax()
         open[1] = 1#results[1][1].argmax()
@@ -964,32 +976,38 @@ class Tracker():
         if num_crops == 1:
             output = self.session.run([], {self.input_name: crops[0]})[0]
             conf, lms = self.landmarks(output[0], crop_info[0])
-            outputs[crop_info[0]] = (conf, lms, 0)
+            if conf > self.threshold:
+                eye_state = self.get_eye_state(frame, lms)
+                outputs[crop_info[0]] = (conf, (lms, eye_state), 0)
         else:
             started = 0
             results = queue.Queue()
             for i in range(min(num_crops, self.max_workers)):
-                thread = threading.Thread(target=worker_thread, args=(self.sessions[started], crops[started], crop_info[started], results, self.input_name, started, self))
+                thread = threading.Thread(target=worker_thread, args=(self.sessions[started], frame, crops[started], crop_info[started], results, self.input_name, started, self))
                 started += 1
                 thread.start()
             returned = 0
             while returned < num_crops:
-                session, conf, lms, sample_crop_info, idx = results.get(True)
-                outputs[sample_crop_info] = (conf, lms, idx)
+                result = results.get(True)
+                if len(result) != 1:
+                    session, conf, lms, sample_crop_info, idx = result
+                    outputs[sample_crop_info] = (conf, lms, idx)
+                else:
+                    session = result[0]
                 returned += 1
                 if started < num_crops:
-                    thread = threading.Thread(target=worker_thread, args=(session, crops[started], crop_info[started], results, self.input_name, started, self))
+                    thread = threading.Thread(target=worker_thread, args=(session, frame, crops[started], crop_info[started], results, self.input_name, started, self))
                     started += 1
                     thread.start()
 
         actual_faces = []
         good_crops = []
         for crop in crop_info:
-            conf, lms, i = outputs[crop]
-            if conf <= self.threshold:
+            if crop not in outputs:
                 continue
-            x1, y1, _ = lms.min(0)
-            x2, y2, _ = lms.max(0)
+            conf, lms, i = outputs[crop]
+            x1, y1, _ = lms[0].min(0)
+            x2, y2, _ = lms[0].max(0)
             bb = (x1, y1, x2 - x1, y2 - y1)
             outputs[crop] = (conf, lms, i, bb)
             actual_faces.append(bb)
@@ -1001,13 +1019,12 @@ class Tracker():
             conf, lms, i, bb = outputs[crop]
             if conf < self.threshold:
                 continue;
-            eye_state = self.get_eye_state(frame, lms)
             group_id = groups[str(bb)][0]
             if not group_id in best_results:
                 best_results[group_id] = [-1, [], 0]
             if conf > self.threshold and best_results[group_id][0] < conf + crop[4]:
                 best_results[group_id][0] = conf + crop[4]
-                best_results[group_id][1] = (lms, eye_state)
+                best_results[group_id][1] = lms
                 best_results[group_id][2] = crop[4]
 
         sorted_results = sorted(best_results.values(), key=lambda x: x[0], reverse=True)[:self.max_faces]
@@ -1016,32 +1033,19 @@ class Tracker():
 
         results = []
         detected = []
+        start_pnp = time.perf_counter()
         for face_info in self.face_info:
             if face_info.alive and face_info.conf > self.threshold:
-                start_pnp = time.perf_counter()
                 face_info.success, face_info.quaternion, face_info.euler, face_info.pnp_error, face_info.pts_3d, face_info.lms = self.estimate_depth(face_info)
                 face_info.adjust_3d()
-                duration_pnp += 1000 * (time.perf_counter() - start_pnp)
-                min_x = 10000
-                max_x = -1
-                min_y = 10000
-                max_y = -1
-                for (x,y,c) in face_info.lms[0:66]:
-                    if x > max_x:
-                        max_x = x
-                    if y > max_y:
-                        max_y = y
-                    if x < min_x:
-                        min_x = x
-                    if y < min_y:
-                        min_y = y
-                w = max_x - min_x
-                y = max_y - min_y
-                bbox = (min_y, min_x, max_y - min_y, max_x - min_x)
-                detected.append(bbox)
+                lms = face_info.lms[:, 0:2]
+                x1, y1 = tuple(lms.min(0))
+                x2, y2 = tuple(lms.max(0))
+                bbox = (y1, x1, y2 - y1, x2 - x1)
                 face_info.bbox = bbox
-                #face_info.eye_blink = (eye_state[0][0], eye_state[1][0])
+                detected.append(bbox)
                 results.append(face_info)
+        duration_pnp += 1000 * (time.perf_counter() - start_pnp)
 
         if len(detected) > 0:
             self.detected = len(detected)
