@@ -313,6 +313,7 @@ class FaceInfo():
         self.contour = np.zeros((21,3))
         self.update_counts = np.zeros((66,2))
         self.update_contour()
+        self.fail_count = 0
 
     def update(self, result, coord, frame_count):
         self.frame_count = frame_count
@@ -434,7 +435,7 @@ class Tracker():
         options.log_severity_level = 3
         self.model_type = model_type
         self.models = [
-            "snv2_opt_fast.onnx",
+            "mnv3_opt_very_fast.onnx",
             "mnv3_opt_fast.onnx",
             "snv2_opt_b.onnx",
             "mnv3_opt_b.onnx"
@@ -580,7 +581,7 @@ class Tracker():
         self.scan_every = scan_every
         self.bbox_growth = bbox_growth
         self.silent = silent
-        self.res = 224. if self.model_type != 0 else 112.
+        self.res = 224.
         self.res_i = int(self.res)
         self.no_gaze = no_gaze
         self.debug_gaze = False
@@ -617,7 +618,7 @@ class Tracker():
         crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
         avg_conf = 0
         lms = []
-        res = self.res - 1 if self.model_type == 3 else self.res
+        res = self.res - 1 if self.model_type != 2 else self.res
         for i in range(0, 66):
             m = int(tensor[i].argmax())
             x = m // 28
@@ -707,8 +708,8 @@ class Tracker():
 
         pnp_error = np.sqrt(pnp_error / (2.0 * image_pts.shape[0]))
         if pnp_error > 300:
-            self.fail_count += 1
-            if self.fail_count > 5:
+            face_info.fail_count += 1
+            if face_info.fail_count > 5:
                 # Something went wrong with adjusting the 3D model
                 if not self.silent:
                     print(f"Detected anomaly when 3D fitting face {face_info.id}. Resetting.")
@@ -718,7 +719,7 @@ class Tracker():
                 face_info.update_counts = np.zeros((66,2))
                 face_info.update_contour()
         else:
-            self.fail_count = 0
+            face_info.fail_count = 0
 
         euler = cv2.RQDecomp3x3(rmat)[0]
         return True, matrix_to_quaternion(rmat), euler, pnp_error, pts_3d, lms
@@ -731,9 +732,6 @@ class Tracker():
         #im = (im - mean) / std
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,1,2))
-        if self.model_type == 0:
-            im = im.mean(1)
-            im = np.expand_dims(im, 1)
         return im
 
     def equalize(self, im):

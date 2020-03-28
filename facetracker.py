@@ -69,6 +69,8 @@ fps = 0
 if os.name == 'nt':
     fps = args.fps
 input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps)
+if type(input_reader.reader) == VideoReader:
+    fps = 0
 
 log = None
 out = None
