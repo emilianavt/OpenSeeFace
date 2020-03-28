@@ -46,6 +46,10 @@ public class OpenSeeIKTarget : MonoBehaviour
     private Quaternion currentR;
     private Vector3 currentT;
     private bool lastMirror = false;
+    
+    public void Calibrate() {
+        calibrate = true;
+    }
 
     void Interpolate() {
         if (!interpolate || interpolateState < 2)
