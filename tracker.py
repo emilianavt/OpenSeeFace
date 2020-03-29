@@ -443,7 +443,7 @@ class Tracker():
         self.models = [
             "mnv3_opt_very_fast.onnx",
             "mnv3_opt_fast.onnx",
-            "snv2_opt_b.onnx",
+            "mnv3_opt_medium.onnx",
             "mnv3_opt_b.onnx"
         ]
         model = self.models[self.model_type]
@@ -626,7 +626,7 @@ class Tracker():
         crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
         avg_conf = 0
         lms = []
-        res = self.res - 1 if self.model_type != 2 else self.res
+        res = self.res - 1
         for i in range(0, 66):
             m = int(tensor[i].argmax())
             x = m // 28

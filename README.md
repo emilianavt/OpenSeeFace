@@ -1,22 +1,24 @@
 # Overview
 
-This project implements a facial landmark detection model based on ShuffleNetV2.
+This project implements a facial landmark detection model based on MobileNetV3.
 
-As Pytorch 1.3 CPU inference speed on Windows is very low, the model was converted to ONNX format. Using [onnxruntime](https://github.com/microsoft/onnxruntime) it can run at 30 - 60 fps tracking a single face. A third and smaller model runs at over 60 fps tracking a single face on a single CPU core.
+As Pytorch 1.3 CPU inference speed on Windows is very low, the model was converted to ONNX format. Using [onnxruntime](https://github.com/microsoft/onnxruntime) it can run at 30 - 60 fps tracking a single face. There are four models, with different speed to tracking quality trade-offs.
 
 If anyone is curious, the name is a silly pun on the open seas and seeing faces. There's no deeper meaning.
 
-Thanks to [@Virtual_Deat](https://twitter.com/Virtual_Deat) for helping me test everything.
+Thanks to [@Virtual_Deat](https://twitter.com/Virtual_Deat) and [@ENiwatori](https://twitter.com/eniwatori) for helping me test things. Additional thanks to [@ArgamaWitch](https://twitter.com/ArgamaWitch) for further testing.
 
-[Unity sample video](https://twitter.com/emiliana_vt/status/1210622149314203648) | [Sample video](https://www.youtube.com/watch?v=AOPHiAp9DBE) | [Sample video](https://www.youtube.com/watch?v=-cBSuHGdBWQ)
+[Unity sample video](https://twitter.com/emiliana_vt/status/1210622149314203648) | [Sample video](https://www.youtube.com/watch?v=AOPHiAp9DBE) | [Sample video](https://www.youtube.com/watch?v=-cBSuHGdBWQ) | [Model comparison](https://www.youtube.com/watch?v=yMcJszUy7FA)
+
+These sample videos use older versions of the tracking models.
 
 # Usage
 
 The face tracking itself is done by the `facetracker.py` Python 3.7 script. It is a commandline program, so you should start it manually from cmd or write a batch file to start it.
 
-The script will perform the tracking on a webcam or video file and send the tracking data over UDP. This design also allows tracking to be done on a separate PC from the one who uses the tracking information. This can be useful to enhance performance and to avoid accidentially revealing camera footage.
+The script will perform the tracking on webcam input or video file and send the tracking data over UDP. This design also allows tracking to be done on a separate PC from the one who uses the tracking information. This can be useful to enhance performance and to avoid accidentially revealing camera footage.
 
-The provided `OpenSee` Unity component can receive these UDP packets and provides the received information through a public field called `trackingData`. The `OpenSeeShowPoints` component can visualize the landmark points of the first detected face. It also serves as an example. Please look at it to see how to properly make use of the `OpenSee` component. The UDP packets are received in a separate thread, so any components using the `trackingData` field of the `OpenSee` component should first copy the field and access this copy, because otherwise the information may get overwritten during processing.
+The provided `OpenSee` Unity component can receive these UDP packets and provides the received information through a public field called `trackingData`. The `OpenSeeShowPoints` component can visualize the landmark points of a detected face. It also serves as an example. Please look at it to see how to properly make use of the `OpenSee` component. Further examples are included in the `Examples` folder. The UDP packets are received in a separate thread, so any components using the `trackingData` field of the `OpenSee` component should first copy the field and access this copy, because otherwise the information may get overwritten during processing. This design also means that the field will keep updating, even if the `OpenSee` component is disabled.
 
 Run the python script with `--help` to learn about the possible options you can set.
 
@@ -24,7 +26,7 @@ Run the python script with `--help` to learn about the possible options you can 
 
 A simple demonstration can be achieved by creating a new scene in Unity, adding an empty game object and both the `OpenSee` and `OpenSeeShowPoints` components to it. While the scene is playing, run the face tracker on a video file:
 
-    python facetracker.py --visualize 1 --max-threads 2 -c video.mp4
+    python facetracker.py --visualize 3 --pnp-points 1 --max-threads 4 -c video.mp4
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
@@ -34,15 +36,17 @@ The included `OpenSeeLauncher` component allows starting the face tracker progra
 * `public bool StartTracker()` will start the tracker. If it is already running, it will shut down the running instance and start a new one with the current settings.
 * `public void StopTracker()` will stop the tracker. The tracker is stopped automatically when the application is terminated or the `OpenSeeLauncher` object is destroyed.
 
-The `OpenSeeLauncher` component uses WinAPI job objects to ensure that the tracker child process is terminated if the application crashes.
+The `OpenSeeLauncher` component uses WinAPI job objects to ensure that the tracker child process is terminated if the application crashes or closes without terminating the tracker process first.
 
 Additional custom commandline arguments should be added one by one into elements of `commandlineArguments` array. For example `-v 1` should be added as two elements, one element containing `-v` and one containing `1`, not a single one containing both parts.
+
+The included `OpenSeeIKTarget` component can be used in conjunction with FinalIK or other IK solutions to animate head motion.
 
 ## Expression detection
 
 The `OpenSeeExpression` component can be added to the same component as the `OpenSeeFace` component to detect specific facial expressions. It has to be calibrated on a per-user basis. It can be controlled either through the checkboxes in the Unity Editor or through the equivalent public methods that can be found in its source code.
 
-To calibrate this system, you have to gather example data for each expression. The way `OpenSeeExpression` is set up, it requires 400 examples of each expression, which should take around 30 seconds to capture. If capture is too fast, you can use the `recordingSkip` option to slow it down.
+To calibrate this system, you have to gather example data for each expression. If the capture process is going too fast, you can use the `recordingSkip` option to slow it down.
 
 The general process is as follows:
 
@@ -50,30 +54,37 @@ The general process is as follows:
 * Make the expression and hold it, then tick the recording box.
 * Keep holding the expression and move your head around and turn it in various directions.
 * After a short while, start talking while doing so if the expression should be compatible with talking.
-* When the "Percent Recorded" field is at around 50, untick the recording box and work on capturing another expression.
-* When you have them all at around 50, go back to the first and go through them again to bring all the way to 100%.
-* Then tick the train box and you should get some statistics in the lower part.
-* Tick the predict box and it will show you which expression you are making.
+* After doing this for a while, untick the recording box and work on capturing another expression.
+* Tick the train box and see if the expressions you gathered data for are detected accurately.
+* You should also get some statistics in the lower part of the component.
+* If there are issues with any expression being detected, keep adding data to it.
 
-To delete the captured data for an expression, type in its name and tick the "Clear" box. To save both the trained model and the captured training data, type in a filename including its full path in the "Filename" field and tick the "Save" box. To load it, enter the filename and tick the "Load" box.
+To delete the captured data for an expression, type in its name and tick the "Clear" box.
 
-Up to 25 expressions are supported, but a more reasonable number is 5-6.
+To save both the trained model and the captured training data, type in a filename including its full path in the "Filename" field and tick the "Save" box. To load it, enter the filename and tick the "Load" box.
+
+### Hints
+
+* A reasonable number of expressions is six, including the neutral one.
+* Before starting to capture expressions, make some faces and wiggle your eyebrows around, to warm up the feature detection part of the tracker.
+* Once you have a detection model that works decently, when using it take a moment to check all the expressions work as intended and add a little data if not.
 
 # General notes
 
 * The tracking seems to be quite robust even with partial occlusion of the face, glasses or bad lighting conditions.
-* There is now an experimental gaze tracking model.
-* Depending on the frame rate, face tracking can easily use up a whole CPU core. At 30fps for a single face, it should still use less than 100% of one core on a decent CPU.
-* When setting the number of faces to track to a higher number than the number of faces actually in view, the OpenCV face detection will attempt to find new faces every `--scan-every` frames. It can be quite slow, so try to set `--faces` no higher than the actual number of faces you are tracking.
+* The highest quality model is selected with `--model 3`, the fastest model with the lowest tracking quality is `--model 0`.
+* Lower tracking quality mainly means more rigid tracking, making it harder to detect blinking and eyebrow motion.
+* Depending on the frame rate, face tracking can easily use up a whole CPU core. At 30fps for a single face, it should still use less than 100% of one core on a decent CPU. If tracking uses too much CPU, try lowering the frame rate. A frame rate of 20 is probably fine and anything above 30 should rarely be necessary.
+* When setting the number of faces to track to a higher number than the number of faces actually in view, the face detection model will run every `--scan-every` frames. This can slow things down, so try to set `--faces` no higher than the actual number of faces you are tracking.
 
 # Models
 
-Four pretrained models are included. Using the `--model` switch, it is possible to select them for tracking.
+Four pretrained models are included. Using the `--model` switch, it is possible to select them for tracking. The given fps values are for running the model on a single face video on a single CPU core. Lowering the frame rate would reduce CPU usage by a corresponding degree.
 
-* Model **0**: This is a very fast, low accuracy model based on ShuffleNetV2. (67fps)
-* Model **1**: This is a slightly slower model with better accuracy based on MobileNetV3. (62fps)
-* Model **2**: This is a slower model with good accuracy based on ShuffleNetV2. (45fps)
-* Model **3** (default): This is the slowest and highest accuracy model. It is based on MobileNetV3. (42fps)
+* Model **0**: This is a very fast, low accuracy model. (68fps)
+* Model **1**: This is a slightly slower model with better accuracy based on MobileNetV3. (59fps)
+* Model **2**: This is a slower model with good accuracy based on ShuffleNetV2. (50fps)
+* Model **3** (default): This is the slowest and highest accuracy model. It is based on MobileNetV3. (44fps)
 
 FPS measurements are from running on one core of my CPU.
 
@@ -81,9 +92,11 @@ FPS measurements are from running on one core of my CPU.
 
 The builds in the release section of this repository contain a `facetracker.exe` inside a `Binary` folder that was built using `pyinstaller` and contains all required dependencies.
 
-To run it, at least the `models` and `escapi` folders have to be placed in the same folder as `facetracker.exe`.
+To run it, at least the `models` folder has to be placed in the same folder as `facetracker.exe`. Placing it in a common parent folder should work too.
 
 When distributing it, you should also distribute the `Licenses` folder along with it to make sure you conform to requirements set forth by some of the third party libraries. Unused models can be removed from redistributed packages without issue.
+
+The release builds contain a custom build of ONNX Runtime without telemetry.
 
 # Dependencies
 
@@ -130,10 +143,9 @@ The algorithm is inspired by:
 * [Real-time Human Pose Estimation in the Browser with TensorFlow.js](https://blog.tensorflow.org/2018/05/real-time-human-pose-estimation-in.html)
 * [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/) by Olaf Ronneberger, Philipp Fischer, Thomas Brox
 * [MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://arxiv.org/abs/1704.04861) by Andrew G. Howard, Menglong Zhu, Bo Chen, Dmitry Kalenichenko, Weijun Wang, Tobias Weyand, Marco Andreetto, Hartwig Adam
-* [ShuffleNet V2: Practical Guidelines for Efficient CNN Architecture Design](https://arxiv.org/abs/1807.11164) by Ningning Ma, Xiangyu Zhang, Hai-Tao Zheng, Jian Sun
 * [Searching for MobileNetV3](https://arxiv.org/abs/1905.02244) by Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam
 
-The ShuffleNet V2 code is taken from `torchvision`. The MobileNetV3 code was taken from [here](https://github.com/rwightman/gen-efficientnet-pytorch).
+The MobileNetV3 code was taken from [here](https://github.com/rwightman/gen-efficientnet-pytorch).
 
 For all training after the first model, a modified version of [Adaptive Wing Loss](https://github.com/tankrant/Adaptive-Wing-Loss) was used.
 
@@ -156,5 +168,5 @@ RetinaFace detection is based on [this](https://github.com/biubug6/Pytorch_Retin
 
 The code and models are distributed under the BSD 2-clause license. 
 
-`models/haarcascade_frontalface_alt2.xml` is distributed under its own license. You can find licenses of third party libraries used for binary builds in the `Licenses` folder.
+You can find licenses of third party libraries used for binary builds in the `Licenses` folder.
 

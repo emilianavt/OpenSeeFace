@@ -1,4 +1,4 @@
-# This file is not used by the tracking application
+# This file is not used by the tracking application and currently outdated
 import torch
 import torch.nn as nn
 
