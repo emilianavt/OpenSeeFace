@@ -829,8 +829,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void RunUpdates() {
-        if (openSeeExpression != null && openSeeExpression.openSee != null)
+        if (openSeeExpression != null && openSeeExpression.openSee != null) {
             openSeeData = openSeeExpression.openSee.GetOpenSeeData(openSeeExpression.faceId);
+            if (openSeeData.fit3DError > openSeeExpression.openSee.maxFit3DError)
+                openSeeData = null;
+        }
         if (initializeLipSync) {
             InitializeLipSync();
             initializeLipSync = false;

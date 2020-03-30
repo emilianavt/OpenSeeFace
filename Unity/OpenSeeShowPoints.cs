@@ -59,7 +59,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
         if (openSeeData == null || openSeeData.Length < 1)
             return;*/
         openSeeData = openSee.GetOpenSeeData(faceId);
-        if (openSeeData == null)
+        if (openSeeData == null || (show3DPoints && openSeeData.fit3DError > openSee.maxFit3DError))
             return;
         if (openSeeData.time > updated) {
             updated = openSeeData.time;

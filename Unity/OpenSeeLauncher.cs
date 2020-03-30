@@ -134,8 +134,6 @@ public class OpenSeeLauncher : MonoBehaviour {
     }
     
     public string[] ListCameras() {
-        if (!CheckSetup(false))
-            return null;
         if (usePinvoke || usePinvokeListCameras) {
             if (Environment.Is64BitProcess)
                 return EscapiListCameras_x64();
@@ -143,6 +141,9 @@ public class OpenSeeLauncher : MonoBehaviour {
                 return EscapiListCameras_x86();
         }
         
+        if (!CheckSetup(false))
+            return null;
+
         StringBuilder stringBuilder;
         ProcessStartInfo processStartInfo;
         Process process;

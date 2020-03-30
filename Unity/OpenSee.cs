@@ -23,6 +23,9 @@ public class OpenSee : MonoBehaviour {
     public int receivedPackets = 0;
     [Tooltip("This contains the actual tracking data")]
     public OpenSeeData[] trackingData = null;
+    
+    [HideInInspector]
+    public float maxFit3DError = 100f;
 
     [System.Serializable]
     public class OpenSeeData {

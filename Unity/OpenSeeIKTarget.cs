@@ -70,7 +70,7 @@ public class OpenSeeIKTarget : MonoBehaviour
 
     void RunUpdate() {
         var openSeeData = openSee.GetOpenSeeData(faceId);
-        if (openSeeData == null)
+        if (openSeeData == null || openSeeData.fit3DError > openSee.maxFit3DError)
             return;
         if (openSeeData.time > updated) {
             updated = openSeeData.time;
