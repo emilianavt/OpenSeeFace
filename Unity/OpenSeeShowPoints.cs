@@ -14,17 +14,27 @@ public class OpenSeeShowPoints : MonoBehaviour {
     public float minConfidence = 0.20f;
     public bool showGaze = true;
     public Material material;
+    public bool showLines = false;
+    public float lineWidth = 0.01f;
+    public Material lineMaterial;
+    
     private OpenSee.OpenSeeData openSeeData;
     private GameObject[] gameObjects;
+    private LineRenderer[] lineRenderers;
     private GameObject centerBall;
     private double updated = 0.0;
     private int total = 70;
+    
+    private int[] lines = new int[]{/* Contour */ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, -1, /* Eyebrows */ 18, 19, 20, 21, -1, 23, 24, 25, 26, -1, 28, 29, 30, 33, 32, 33, 34, 35, -1, /* Eye */ 37, 38, 39, 40, 41, 36, /* Eye */ 43, 44, 45, 46, 47, 42, /* Mouth */ 49, 50, 51, 52, 62, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 58, 58, 62};
 
 	void Start () {
         if (openSee == null) {
             openSee = GetComponent<OpenSee>();
         }
         gameObjects = new GameObject[70];
+        lineRenderers = new LineRenderer[68];
+        if (lineMaterial == null)
+            showLines = false;
         if (!showGaze)
             total = 66;
         for (int i = 0; i < total; i++) {
@@ -45,6 +55,26 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 cylinder.transform.localPosition = new Vector3(0f, 0f, -4f);
                 cylinder.transform.localScale = new Vector3(1f, 4f, 1f);
             }
+        }
+        for (int i = 0; i < 68; i++) {
+                if (i == 66) {
+                    GameObject lineGameObject = new GameObject("LineGameObject");
+                    lineGameObject.transform.SetParent(gameObjects[48].transform);
+                    lineGameObject.layer = gameObject.layer;
+                    lineRenderers[i] = lineGameObject.AddComponent(typeof(LineRenderer)) as LineRenderer;
+                } else if (i == 67) {
+                    GameObject lineGameObject = new GameObject("LineGameObject");
+                    lineGameObject.transform.SetParent(gameObjects[53].transform);
+                    lineGameObject.layer = gameObject.layer;
+                    lineRenderers[i] = lineGameObject.AddComponent(typeof(LineRenderer)) as LineRenderer;
+                }
+                else
+                    lineRenderers[i] = gameObjects[i].AddComponent(typeof(LineRenderer)) as LineRenderer;
+                lineRenderers[i].useWorldSpace = true;
+                lineRenderers[i].generateLightingData = true;
+                lineRenderers[i].material = lineMaterial;
+                lineRenderers[i].widthMultiplier = lineWidth;
+                lineRenderers[i].positionCount = 2;
         }
         centerBall = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         centerBall.name = "Center";
@@ -139,6 +169,29 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 position.x = position.x / (maxX - minX);
                 position.y = position.y / (maxX - minX);
                 gameObjects[i].transform.localPosition = position;
+            }
+        }
+        for (int i = 0; i < 68; i++) {
+            if (lines[i] == -1)
+                continue;
+            if (!showLines || lineMaterial == null) {
+                lineRenderers[i].enabled = false;
+            } else {
+                int a = i;
+                int b = lines[i];
+                if (i == 66)
+                    a = 48;
+                if (i == 67)
+                    a = 53;
+                Color color = Color.Lerp(Color.red, Color.green, Mathf.Lerp(0.5f, openSeeData.confidence[a], openSeeData.confidence[b]));
+                lineRenderers[i].enabled = true;
+                lineRenderers[i].widthMultiplier = lineWidth;
+                lineRenderers[i].material = lineMaterial;
+                lineRenderers[i].material.SetColor("_Color", color);
+                lineRenderers[i].startColor = color;
+                lineRenderers[i].endColor = color;
+                lineRenderers[i].SetPosition(0, gameObjects[a].transform.position);
+                lineRenderers[i].SetPosition(1, gameObjects[b].transform.position);
             }
         }
 	}
