@@ -187,9 +187,9 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 lineRenderers[i].enabled = true;
                 lineRenderers[i].widthMultiplier = lineWidth;
                 lineRenderers[i].material = lineMaterial;
-                lineRenderers[i].material.SetColor("_Color", color);
                 lineRenderers[i].startColor = color;
                 lineRenderers[i].endColor = color;
+                lineRenderers[i].material.SetColor("_Color", color);
                 lineRenderers[i].SetPosition(0, gameObjects[a].transform.position);
                 lineRenderers[i].SetPosition(1, gameObjects[b].transform.position);
             }
