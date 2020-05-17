@@ -342,6 +342,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         public BlendShapeKey blendShapeKey;
         [HideInInspector]
         public float maxWeight = 0f;
+        [HideInInspector]
+        public float lastTimeWeightOld = 0f;
 
         public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
             this.trigger = trigger;
@@ -444,6 +446,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             foreach (var expression in expressionMap.Values) {
                 if (expression != currentExpression) {
                     expression.maxWeight = 0f;
+                    expression.lastTimeWeightOld = 0f;
                     vrmBlendShapeProxy.ImmediatelySetValue(expression.blendShapeKey, 0f);
                 }
             }
@@ -453,14 +456,19 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     float timeWeightOld = 1f;
                     if (expression.transitionTime > 0f)
                         timeWeightOld = Mathf.Max(Mathf.Clamp((Time.time - expressionChangeTime) / (expression.transitionTime * 0.001f), 0f, 1f), timeWeight);
-                    vrmBlendShapeProxy.ImmediatelySetValue(expression.blendShapeKey, expression.maxWeight * (1f - timeWeightOld));
+                    if (expression.lastTimeWeightOld >= timeWeightOld)
+                        expression.lastTimeWeightOld = timeWeightOld;
+                    expression.maxWeight = Mathf.Clamp(expression.maxWeight - (timeWeightOld - expression.lastTimeWeightOld), 0f, 1f);
+                    expression.lastTimeWeightOld = timeWeightOld;
+                    vrmBlendShapeProxy.ImmediatelySetValue(expression.blendShapeKey, expression.weight * expression.maxWeight);
                 }
             }
         }
         
-        currentExpression.maxWeight = currentExpression.weight * timeWeight;
+        currentExpression.maxWeight = timeWeight;
+        currentExpression.lastTimeWeightOld = 0f;
         if (currentExpression != null)
-            vrmBlendShapeProxy.ImmediatelySetValue(currentExpression.blendShapeKey, currentExpression.maxWeight);
+            vrmBlendShapeProxy.ImmediatelySetValue(currentExpression.blendShapeKey, currentExpression.weight * currentExpression.maxWeight);
     }
     
     void GetLookParameters(ref float lookLeftRight, ref float lookUpDown, bool update, int gazePoint, int right, int left, int topRight, int topLeft, int bottomRight, int bottomLeft) {
