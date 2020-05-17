@@ -10,7 +10,7 @@ Thanks to [@Virtual_Deat](https://twitter.com/Virtual_Deat) and [@ENiwatori](htt
 
 [Unity sample video](https://twitter.com/emiliana_vt/status/1210622149314203648) | [Sample video](https://www.youtube.com/watch?v=AOPHiAp9DBE) | [Sample video](https://www.youtube.com/watch?v=-cBSuHGdBWQ) | [Model comparison](https://www.youtube.com/watch?v=yMcJszUy7FA)
 
-These sample videos use older versions of the tracking models.
+These sample videos use older versions of the tracking models. Tracking accuracy of the current models is better.
 
 # Usage
 
@@ -82,9 +82,9 @@ To save both the trained model and the captured training data, type in a filenam
 Four pretrained models are included. Using the `--model` switch, it is possible to select them for tracking. The given fps values are for running the model on a single face video on a single CPU core. Lowering the frame rate would reduce CPU usage by a corresponding degree.
 
 * Model **0**: This is a very fast, low accuracy model. (68fps)
-* Model **1**: This is a slightly slower model with better accuracy based on MobileNetV3. (59fps)
-* Model **2**: This is a slower model with good accuracy based on ShuffleNetV2. (50fps)
-* Model **3** (default): This is the slowest and highest accuracy model. It is based on MobileNetV3. (44fps)
+* Model **1**: This is a slightly slower model with better accuracy. (59fps)
+* Model **2**: This is a slower model with good accuracy. (50fps)
+* Model **3** (default): This is the slowest and highest accuracy model. (44fps)
 
 FPS measurements are from running on one core of my CPU.
 
@@ -135,6 +135,15 @@ Additional training has been done on the WFLW dataset after reducing it to 66 po
 
 For the training the gaze and blink detection model, the [MPIIGaze](https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/gaze-based-human-computer-interaction/appearance-based-gaze-estimation-in-the-wild/) dataset was used. Additionally, around 125000 synthetic eyes generated with [UnityEyes](https://www.cl.cam.ac.uk/research/rainbow/projects/unityeyes/) were used during training.
 
+The heatmap regression based face detection model was trained on random 224x224 crops from the WIDER FACE dataset.
+
+	@inproceedings{yang2016wider,
+	  Author = {Yang, Shuo and Luo, Ping and Loy, Chen Change and Tang, Xiaoou},
+	  Booktitle = {IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+	  Title = {WIDER FACE: A Face Detection Benchmark},
+	  Year = {2016}
+    }
+
 ## Algorithm
 
 The algorithm is inspired by:
@@ -147,7 +156,7 @@ The algorithm is inspired by:
 
 The MobileNetV3 code was taken from [here](https://github.com/rwightman/gen-efficientnet-pytorch).
 
-For all training after the first model, a modified version of [Adaptive Wing Loss](https://github.com/tankrant/Adaptive-Wing-Loss) was used.
+For all training a modified version of [Adaptive Wing Loss](https://github.com/tankrant/Adaptive-Wing-Loss) was used.
 
 * [Adaptive Wing Loss for Robust Face Alignment via Heatmap Regression](https://arxiv.org/abs/1904.07399) by Xinyao Wang, Liefeng Bo, Li Fuxin
 
