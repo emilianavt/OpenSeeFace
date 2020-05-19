@@ -52,6 +52,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This factor is applied on top of the gazeFactor field.")]
     [Range(0, 5)]
     public float gazeStrength = 1f;
+    [Tooltip("This this adds an offset with values in the range of -1 to 1 to the gaze coordinates.")]
+    public Vector2 gazeCenter = Vector2.zero;
     [Tooltip("This component lets you customize the automatic eye blinking.")]
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
@@ -399,7 +401,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         
         bool anyPressed = false;
         bool modifiers = (GetAsyncKeyState(0x10) & 0x8000U) != 0;
-        modifiers = ((GetAsyncKeyState(0x11) & 0x8000U) != 0) || modifiers;
+        modifiers = ((GetAsyncKeyState(0x11) & 0x8000U) != 0) && modifiers;
         if (modifiers) {
             foreach (var expression in expressionMap.Values) {
                 if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0) {
@@ -482,8 +484,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         float verticalRadius = (Mathf.Abs(verticalCenter - borderTop) + Mathf.Abs(borderBottom - verticalCenter)) / 2.0f;
         float x = openSeeData.points3D[gazePoint].x;
         float y = openSeeData.points3D[gazePoint].y;
-        float newLookLeftRight = Mathf.Clamp((x - horizontalCenter) / horizontalRadius, -1f, 1f);
-        float newLookUpDown = Mathf.Clamp((y - verticalCenter) / verticalRadius, -1f, 1f);
+        float newLookLeftRight = Mathf.Clamp((x - horizontalCenter) / horizontalRadius + gazeCenter.x, -1f, 1f);
+        float newLookUpDown = Mathf.Clamp((y - verticalCenter) / verticalRadius + gazeCenter.y, -1f, 1f);
         if (!update) {
             lookLeftRight = newLookLeftRight;
             lookUpDown = newLookUpDown;
@@ -569,9 +571,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
         vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
         if (autoBlink) {
-            if (eyeBlinker.Blink() && (currentExpression == null || currentExpression.enableBlinking)) {
-                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), 1f);
-                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), 1f);
+            if (currentExpression == null || currentExpression.enableBlinking) {
+                float blink = eyeBlinker.Blink();
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_R), blink);
+                vrmBlendShapeProxy.ImmediatelySetValue(new BlendShapeKey(BlendShapePreset.Blink_L), blink);
             }
         } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
             if (currentExpression != null && !currentExpression.enableBlinking)
@@ -656,33 +659,51 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         public float rangeDurLower = 0.1f;
         [Tooltip("This is the maximum duration of eye blinks.")]
         public float rangeDurUpper = 0.2f;
+        [Tooltip("When set, blinks will be smooth instead of instantaneous.")]
+        public bool smoothBlink = true;
         private float blinkEyeRate;
         private float blinkEndTime = 1.0f;
         private float previousBlinkEyeRate;
         private float blinkEyeTime;
         private bool triggered = false;
-        private bool result = false;
+        private float blinkStart = 0f;
+        private float blinkDur = 0f;
+        
+        private float SmoothBlink() {
+            if (!smoothBlink)
+                return 1f;
+            float fourth = blinkDur / 3f;
+            float closeMax = blinkStart + fourth;
+            float openMin = blinkStart + 2f * fourth;
+            if (Time.time < closeMax)
+                return (Time.time - blinkStart) / fourth;
+            if (Time.time > openMin)
+                return 1f - Mathf.Min((Time.time - openMin) / fourth, 1f);
+            return 1f;
+        }
 
-        public bool Blink()
+        public float Blink()
         {
+            float result = 0f;
             if (triggered && Time.time > blinkEndTime) {
-                result = false;
                 triggered = false;
                 blinkEndTime = 0.0f;
                 if (UnityEngine.Random.Range(0f, 1f) < doubleProb) {
                     blinkEyeTime = Time.time + UnityEngine.Random.Range(0.075f, 0.125f);
                 }
             } else if (triggered) {
-                result = true;
+                result = SmoothBlink();
             }
             if (!triggered && Time.time > blinkEyeTime) {
                 previousBlinkEyeRate = blinkEyeRate;
                 blinkEyeTime = Time.time + blinkEyeRate;
-                if (blinkEndTime < 1.0f) {
-                    result = true;
-                }
                 triggered = true;
-                blinkEndTime = Time.time + UnityEngine.Random.Range(rangeDurLower, rangeDurUpper);
+                blinkStart = Time.time;
+                blinkDur = UnityEngine.Random.Range(rangeDurLower, rangeDurUpper);
+                if (blinkEndTime < 1.0f) {
+                    result = SmoothBlink();
+                }
+                blinkEndTime = blinkStart + blinkDur;
                 while (previousBlinkEyeRate == blinkEyeRate) {
                      blinkEyeRate = UnityEngine.Random.Range(rangeLower, rangeUpper);
                 }
