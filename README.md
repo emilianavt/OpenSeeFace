@@ -6,8 +6,6 @@ As Pytorch 1.3 CPU inference speed on Windows is very low, the model was convert
 
 If anyone is curious, the name is a silly pun on the open seas and seeing faces. There's no deeper meaning.
 
-Thanks to [@Virtual_Deat](https://twitter.com/Virtual_Deat) and [@ENiwatori](https://twitter.com/eniwatori) for helping me test things. Additional thanks to [@ArgamaWitch](https://twitter.com/ArgamaWitch) for further testing.
-
 [Unity sample video](https://twitter.com/emiliana_vt/status/1210622149314203648) | [Sample video](https://www.youtube.com/watch?v=AOPHiAp9DBE) | [Sample video](https://www.youtube.com/watch?v=-cBSuHGdBWQ) | [Model comparison](https://www.youtube.com/watch?v=yMcJszUy7FA)
 
 These sample videos use older versions of the tracking models. Tracking accuracy of the current models is better.
@@ -172,6 +170,15 @@ Face detection is done using a custom heatmap regression based face detection mo
     }
 
 RetinaFace detection is based on [this](https://github.com/biubug6/Pytorch_Retinaface) implementation. The pretrained model was modified to remove unnecessary landmark detection and converted to ONNX format for a resolution of 640x640.
+
+# Thanks!
+
+Many thanks to everyone who helped me test things!
+
+* [@Virtual_Deat](https://twitter.com/Virtual_Deat), who also inspired me to start working on this.
+* [@ENiwatori](https://twitter.com/eniwatori) and family.
+* [@ArgamaWitch](https://twitter.com/ArgamaWitch)
+* [@AngelVayuu](https://twitter.com/AngelVayuu)
 
 # License
 
