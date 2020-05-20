@@ -26,6 +26,11 @@ public class OpenSeeIKTarget : MonoBehaviour
     public bool driftBack = false;
     [Tooltip("This sets the strength of the drifting effect. At 0 there is now drifting, while the IK target will be static at 1.")]
     public float driftFactor = 0.005f;
+    [Tooltip("This sets the minimum angle difference between two poses after which the pose will be considered an outlier.")]
+    [Range(0, 360)]
+    public float outlierThresholdAngle = 35f;
+    [Tooltip("This sets the number of seconds for which outliers are ignored before being accepted. Setting this to zero will disable outlier skipping")]
+    public float outlierSkipPeriod = 0.4f;
     [Header("Information")]
     [Tooltip("This is the current rotation calibration value as euler angles.")]
     public Vector3 rotationOffset = new Vector3(0f, 0f, -90f);
@@ -33,6 +38,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     public Vector3 translationOffset = new Vector3(0f, 0f, 0f);
     [Tooltip("This is the average number of interpolated frames per received tracking data.")]
     public float averageInterpolations = 0f;
+    [Tooltip("This is the number of outlier skipped tracking data frames so far.")]
+    public int outlierSkips = 0;
 
     private double updated = 0.0f;
     private Quaternion dR = Quaternion.Euler(0f, 0f, -90f);
@@ -46,6 +53,11 @@ public class OpenSeeIKTarget : MonoBehaviour
     private Quaternion currentR;
     private Vector3 currentT;
     private bool lastMirror = false;
+
+    private bool gotAccepted = false;
+    private Quaternion lastAccepted;
+    private bool skipped = false;
+    private float skipStartTime = -1f;
     
     public void Calibrate() {
         calibrate = true;
@@ -84,6 +96,34 @@ public class OpenSeeIKTarget : MonoBehaviour
         t.x = -t.x;
         t.z = -t.z;
         Vector3 convertedTranslation = new Vector3(t.x, t.y, t.z);
+        
+        if (gotAccepted) {
+            float angularDifference = Quaternion.Angle(lastAccepted, convertedQuaternion);
+            if (angularDifference >= outlierThresholdAngle) {
+                if (!skipped) {
+                    if (outlierSkipPeriod >= 0.0000001f) {
+                        skipStartTime = Time.time;
+                        skipped = true;
+                    }
+                } else {
+                    if (Time.time > skipStartTime + outlierSkipPeriod) {
+                        lastAccepted = convertedQuaternion;
+                        skipped = false;
+                    }
+                }
+            } else {
+                skipped = false;
+                lastAccepted = convertedQuaternion;
+            }
+        } else {
+            lastAccepted = convertedQuaternion;
+            skipped = false;
+        }
+        gotAccepted = true;
+        if (skipped) {
+            outlierSkips += 1;
+            return;
+        }
 
         if (calibrate) {
             dR = convertedQuaternion;
