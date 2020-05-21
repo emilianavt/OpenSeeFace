@@ -77,7 +77,7 @@ To save both the trained model and the captured training data, type in a filenam
 
 # Models
 
-Four pretrained models are included. Using the `--model` switch, it is possible to select them for tracking. The given fps values are for running the model on a single face video on a single CPU core. Lowering the frame rate would reduce CPU usage by a corresponding degree.
+Four pretrained face landmark models are included. Using the `--model` switch, it is possible to select them for tracking. The given fps values are for running the model on a single face video on a single CPU core. Lowering the frame rate would reduce CPU usage by a corresponding degree.
 
 * Model **0**: This is a very fast, low accuracy model. (68fps)
 * Model **1**: This is a slightly slower model with better accuracy. (59fps)
@@ -85,6 +85,24 @@ Four pretrained models are included. Using the `--model` switch, it is possible 
 * Model **3** (default): This is the slowest and highest accuracy model. (44fps)
 
 FPS measurements are from running on one core of my CPU.
+
+Pytorch weights for use with `model.py` can be found [here](https://mega.nz/file/vvYXlYQT#h7FpEg4tmOCJNxjpsDEw0JomJIkVGKwrt4OUV0RNDDU).
+
+# Results
+
+## Landmarks
+
+![Results1.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/Results1.png)
+
+![Results2.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/Results2.png)
+
+More samples: [Results3.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/Results3.png), [Results4.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/Results4.png)
+
+## Face detection
+
+The landmark model is quite robust with respect to the size and orientation of the faces, so the custom face detection model gets away with rougher bounding boxes than other approaches. It has a favorable speed to accuracy ratio for the purposes of this project.
+
+![EmiFace.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/EmiFace.png)
 
 # Release builds
 
