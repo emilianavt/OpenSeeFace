@@ -806,8 +806,32 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         
         audioVolume = 0f;
-        foreach (float v in buffer)
-            audioVolume += Mathf.Abs(v);
+        float leftVolume = 0f;
+        float rightVolume = 0f;
+        bool channel = false;
+        foreach (float v in buffer) {
+            float sample = Mathf.Abs(v);
+            audioVolume += sample;
+            if (channels > 1) {
+                if (channel)
+                    rightVolume += sample;
+                channel = !channel;
+            }
+        }
+        if (channels > 1) {
+            leftVolume = audioVolume - rightVolume;
+            if (rightVolume < leftVolume / 3f) {
+                audioVolume = 2f * leftVolume;
+                for (int i = 0; i + 1 < buffer.Length; i += 2) {
+                    buffer[i + 1] = buffer[i];
+                }
+            } else if (leftVolume < rightVolume / 3f) {
+                audioVolume = 2f * rightVolume;
+                for (int i = 0; i + 1 < buffer.Length; i += 2) {
+                    buffer[i] = buffer[i + 1];
+                }
+            }
+        }
         audioVolume /= buffer.Length;
 
         int totalLen = partialPos + buffer.Length;
