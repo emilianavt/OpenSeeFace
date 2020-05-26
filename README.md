@@ -10,6 +10,8 @@ If anyone is curious, the name is a silly pun on the open seas and seeing faces.
 
 These sample videos use older versions of the tracking models. Tracking accuracy of the current models is better.
 
+An up to date sample video can be found [here](https://www.youtube.com/watch?v=AaNap_ud_3I&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
+
 # Usage
 
 The face tracking itself is done by the `facetracker.py` Python 3.7 script. It is a commandline program, so you should start it manually from cmd or write a batch file to start it.
