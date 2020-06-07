@@ -412,28 +412,21 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
         }
         
-        if (currentExpression != null && currentExpression.trigger != "neutral") {
-            if (browUpIndex > -1)
-                faceMesh.SetBlendShapeWeight(browUpIndex, 0f);
-            if (browDownIndex > -1)
-                faceMesh.SetBlendShapeWeight(browDownIndex, 0f);
-            if (browAngryIndex > -1)
-                faceMesh.SetBlendShapeWeight(browAngryIndex, 0f);
-            if (browSorrowIndex > -1)
-                faceMesh.SetBlendShapeWeight(browSorrowIndex, 0f);
-        }
-
         float t = Mathf.Clamp((float)mouthInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
         mouthInterpolationCount++;
         
+        float strength = eyebrowStrength;
+        if (currentExpression != null && currentExpression.trigger != "neutral")
+            strength = 0f;
+        
         if (browUpIndex > -1)
-            faceMesh.SetBlendShapeWeight(browUpIndex, Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+            faceMesh.SetBlendShapeWeight(browUpIndex, strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
         if (browDownIndex > -1)
-            faceMesh.SetBlendShapeWeight(browDownIndex, Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+            faceMesh.SetBlendShapeWeight(browDownIndex, strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
         if (browAngryIndex > -1)
-            faceMesh.SetBlendShapeWeight(browAngryIndex, Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
+            faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
         if (browSorrowIndex > -1)
-            faceMesh.SetBlendShapeWeight(browSorrowIndex, Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
+            faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
     }
     
     void FindFaceMesh() {
