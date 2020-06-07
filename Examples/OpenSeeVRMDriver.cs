@@ -41,6 +41,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public Transform rightEye;
     [Tooltip("This is the left eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
     public Transform leftEye;
+    [Tooltip("This is the eyebrow tracking strength, with 0 meaning no eyebrow tracking and 1 meaning full strength.")]
+    [Range(0, 1)]
+    public float eyebrowStrength = 1.0f;
     [Tooltip("This is the gaze smoothing factor, with 0 being no smoothing and 1 being a fixed gaze.")]
     [Range(0, 1)]
     public float gazeSmoothing = 0.6f;
@@ -94,9 +97,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public string mic = null;
     [Tooltip("When enabled, the lip sync function will be initialized or reinitialized in the next Update or FixedUpdate call, according to the IK target's fixedUpdate flag. This flag is reset to false afterwards. It is also possible to call InitializeLipSync instead.")]
     public bool initializeLipSync = false;
+    [Tooltip("This sets the viseme detection smoothing in a range from 1 to 100, where 1 means no smoothing and values above 90 mean pretty much no visemes.")]
     [Range(1, 100)]
-    [Tooltip("This sets the viseme smoothing in a range from 1 to 100, where 1 means no smoothing and values above 90 mean pretty much no visemes.")]
     public int smoothAmount = 50;
+    [Tooltip("This is the viseme animation smoothing factor, with 0 being no smoothing and 1 being no animation.")]
+    [Range(0, 1)]
+    public float visemeSmoothing = 0.75f;
     [Tooltip("Often, the A, I, U, E, O expressions are too strong, so you can scale them down using this value.")]
     [Range(0, 1)]
     public float visemeFactor = 0.6f;
@@ -127,7 +133,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private OpenSee.OpenSee.OpenSeeData openSeeData = null;
     private OpenSeeVRMExpression lastExpression = null;
     private float expressionChangeTime = -1f;
-    
+
     private float turnLeftBoundaryAngle = -30f;
     private float turnRightBoundaryAngle = 20f;
     
@@ -139,6 +145,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private int interpolationCount = 0;
     private int interpolationState = 0;
     
+    private float[] lastVisemeValues;
     private double lastMouth = 0f;
     private float[] lastMouthStates;
     private float[] currentMouthStates;
@@ -155,6 +162,20 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     
     private bool overridden = false;
     private int continuedPress = -1;
+    
+    private VRMBlendShapeProxy lastAvatar = null;
+    private double lastBrows = 0f;
+    private SkinnedMeshRenderer faceMesh;
+    private int faceType = -1;
+    private int browUpIndex = -1;
+    private int browDownIndex = -1;
+    private int browAngryIndex = -1;
+    private int browSorrowIndex = -1;
+    private float lastBrowUpDown = 0f;
+    private float[] lastBrowStates;
+    private float[] currentBrowStates;
+    private int browInterpolationCount = 0;
+    private int browInterpolationState = 0;
 
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
@@ -182,6 +203,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             new BlendShapeKey(BlendShapePreset.E),
             new BlendShapeKey(BlendShapePreset.O)
         };
+        lastVisemeValues = new float[5] {0f, 0f, 0f, 0f, 0f};
     }
 
     OVRLipSync.Viseme GetActiveViseme(out float bestValue) {
@@ -214,7 +236,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         weight = Mathf.Clamp(weight * 1.5f, 0f, 1f);
         float[] values = catsData[current];
         for (int i = 0; i < 5; i++) {
-            vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], values[i] * visemeFactor * expressionFactor * weight);
+            lastVisemeValues[i] = values[i] * weight * (1f - visemeSmoothing) + lastVisemeValues[i] * visemeSmoothing;
+            if (lastVisemeValues[i] < 0f) {
+                lastVisemeValues[i] = 0f;
+            }
+            if (lastVisemeValues[i] > 1f) {
+                lastVisemeValues[i] = 1f;
+            }
+            vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], lastVisemeValues[i] * visemeFactor * expressionFactor);
         }
     }
     
@@ -312,6 +341,151 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         for (int i = 0; i < 5; i++) {
             float interpolated = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
             vrmBlendShapeProxy.ImmediatelySetValue(visemePresetMap[i], interpolated * expressionFactor * visemeFactor);
+        }
+    }
+    
+    void UpdateBrows() {
+        if (faceMesh == null || faceType < 0 || openSeeData == null) {
+            return;
+        }
+        if (lastBrows < openSeeData.time) {
+            lastBrows = openSeeData.time;
+            float upDownStrength = (openSeeData.features.EyebrowUpDownLeft + openSeeData.features.EyebrowUpDownRight) / 2f;
+            float stabilizer = 0.3f;
+            float factor = 1f;
+            if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle) {
+                factor = 0.7f;
+                stabilizer *= 2;
+            }
+            if (upDownStrength > stabilizer) {
+                upDownStrength = factor * Mathf.Clamp(upDownStrength / 0.6f, 0f, 1f);
+            } else if (upDownStrength < -stabilizer / 1.5f) {
+                upDownStrength = -factor * Mathf.Clamp(upDownStrength / -0.2f, 0f, 1f);
+            } else
+                upDownStrength = 0f;
+            upDownStrength = Mathf.Lerp(lastBrowUpDown, upDownStrength, 0.2f);
+            lastBrowUpDown = upDownStrength;
+            
+            if (browInterpolationState < 2)
+                browInterpolationState++;
+            browInterpolationCount = 0;
+            
+            for (int i = 0; i < 4; i++)
+                lastBrowStates[i] = currentBrowStates[i];
+            
+            if (faceType == 0) {
+                if (browUpIndex == -1 || browAngryIndex == -1 || browSorrowIndex == -1)
+                    return;
+                if (upDownStrength > 0) {
+                    currentBrowStates[0] = upDownStrength * 100f;
+                    currentBrowStates[2] = 0f;
+                    currentBrowStates[3] = 0f;
+                } else if (upDownStrength < 0) {
+                    currentBrowStates[0] = 0f;
+                    currentBrowStates[2] = -upDownStrength * 25f;
+                    currentBrowStates[3] = -upDownStrength * 25f;
+                } else {
+                    currentBrowStates[0] = 0f;
+                    currentBrowStates[2] = 0f;
+                    currentBrowStates[3] = 0f;
+                }
+            }
+            if (faceType == 1) {
+                if (browUpIndex == -1 || browDownIndex == -1 || browAngryIndex == -1 || browSorrowIndex == -1)
+                    return;
+                if (upDownStrength > 0) {
+                    currentBrowStates[0] = upDownStrength * 100f;
+                    currentBrowStates[1] = 0f;
+                    currentBrowStates[2] = 0f;
+                    currentBrowStates[3] = 0f;
+                } else if (upDownStrength < 0) {
+                    currentBrowStates[0] = 0f;
+                    currentBrowStates[1] = -upDownStrength * 70f;
+                    currentBrowStates[2] = 0f;
+                    currentBrowStates[3] = 0f;
+                } else {
+                    currentBrowStates[0] = 0f;
+                    currentBrowStates[1] = 0f;
+                    currentBrowStates[2] = 0f;
+                    currentBrowStates[3] = 0f;
+                }
+            }
+        }
+        
+        if (currentExpression != null && currentExpression.trigger != "neutral") {
+            if (browUpIndex > -1)
+                faceMesh.SetBlendShapeWeight(browUpIndex, 0f);
+            if (browDownIndex > -1)
+                faceMesh.SetBlendShapeWeight(browDownIndex, 0f);
+            if (browAngryIndex > -1)
+                faceMesh.SetBlendShapeWeight(browAngryIndex, 0f);
+            if (browSorrowIndex > -1)
+                faceMesh.SetBlendShapeWeight(browSorrowIndex, 0f);
+        }
+
+        float t = Mathf.Clamp((float)mouthInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
+        mouthInterpolationCount++;
+        
+        if (browUpIndex > -1)
+            faceMesh.SetBlendShapeWeight(browUpIndex, Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+        if (browDownIndex > -1)
+            faceMesh.SetBlendShapeWeight(browDownIndex, Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+        if (browAngryIndex > -1)
+            faceMesh.SetBlendShapeWeight(browAngryIndex, Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
+        if (browSorrowIndex > -1)
+            faceMesh.SetBlendShapeWeight(browSorrowIndex, Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
+    }
+    
+    void FindFaceMesh() {
+        if (lastAvatar == vrmBlendShapeProxy)
+            return;
+        lastAvatar = vrmBlendShapeProxy;
+        
+        faceMesh = null;
+        faceType = -1;
+        browUpIndex = -1;
+        browDownIndex = -1;
+        browAngryIndex = -1;
+        browSorrowIndex = -1;
+        lastBrowStates = new float[] {0f, 0f, 0f, 0f};
+        currentBrowStates = new float[] {0f, 0f, 0f, 0f};
+        
+        if (vrmBlendShapeProxy == null)
+            return;
+
+        Component[] meshes = vrmBlendShapeProxy.gameObject.GetComponentsInChildren<SkinnedMeshRenderer>();
+        foreach (SkinnedMeshRenderer renderer in meshes) {
+            Mesh mesh = renderer.sharedMesh;
+            
+            for (int i = 0; i < mesh.blendShapeCount; i++) {
+                string bsName = mesh.GetBlendShapeName(i);
+                if (bsName.Contains("BRW") && bsName.Contains("Surprised")) {
+                    browUpIndex = i;
+                    faceType = 0;
+                } else if (bsName.Contains("BRW") && bsName.Contains("Angry")) {
+                    browAngryIndex = i;
+                    faceType = 0;
+                } else if (bsName.Contains("BRW") && bsName.Contains("Sorrow")) {
+                    browSorrowIndex = i;
+                    faceType = 0;
+                } else if (bsName == "Oko") {
+                    browAngryIndex = i;
+                    faceType = 1;
+                } else if (bsName == "Yowa") {
+                    browSorrowIndex = i;
+                    faceType = 1;
+                } else if (bsName == "Down") {
+                    browDownIndex = i;
+                    faceType = 1;
+                } else if (bsName == "Up") {
+                    browUpIndex = i;
+                    faceType = 1;
+                }
+            }
+            if (faceType > -1) {
+                faceMesh = renderer;
+                return;
+            }
         }
     }
 
@@ -929,8 +1103,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             InitializeLipSync();
             initializeLipSync = false;
         }
+        FindFaceMesh();
         UpdateExpression();
         UpdateGaze();
+        UpdateBrows();
         BlinkEyes();
         ReadAudio();
         if (lipSync) {
