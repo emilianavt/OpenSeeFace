@@ -197,6 +197,9 @@ Many thanks to everyone who helped me test things!
 * [@ENiwatori](https://twitter.com/eniwatori) and family.
 * [@ArgamaWitch](https://twitter.com/ArgamaWitch)
 * [@AngelVayuu](https://twitter.com/AngelVayuu)
+* [@DapperlyYours](https://twitter.com/DapperlyYours)
+* [@comdost_art](https://twitter.com/comdost_art)
+* [@Ponoki_Chan](https://twitter.com/Ponoki_Chan)
 
 # License
 
