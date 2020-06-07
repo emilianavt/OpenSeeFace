@@ -61,12 +61,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
     public OpenSeeVRMExpression[] expressions = new OpenSeeVRMExpression[]{
-        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, true, true, 0x70, 50f, 0f),
-        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, true, true, 0x71, 1f, 0f),
-        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, true, true, 0x72, 1f, 0f),
-        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, true, true, 0x73, 1f, 0f),
-        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, true, true, 0x74, 1f, 0f),
-        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, true, true, 0x75, 1f, 0f)
+        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, 1f, true, true, 0x70, 50f, 0f),
+        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, 1f, true, true, 0x71, 1f, 0f),
+        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, 1f, true, true, 0x72, 1f, 0f),
+        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, 0f, true, true, 0x73, 1f, 0f),
+        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, 0f, true, true, 0x74, 1f, 0f),
+        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, 0f, true, true, 0x75, 1f, 0f)
     };
     [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
     public bool reloadExpressions = false;
@@ -416,16 +416,16 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         mouthInterpolationCount++;
         
         float strength = eyebrowStrength;
-        if (currentExpression != null && currentExpression.trigger != "neutral")
-            strength = 0f;
+        if (currentExpression != null)
+            strength *= currentExpression.eyebrowWeight;
         
-        if (browUpIndex > -1)
+        if (browUpIndex > -1 && strength > 0f)
             faceMesh.SetBlendShapeWeight(browUpIndex, strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
-        if (browDownIndex > -1)
+        if (browDownIndex > -1 && strength > 0f)
             faceMesh.SetBlendShapeWeight(browDownIndex, strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
-        if (browAngryIndex > -1)
+        if (browAngryIndex > -1 && strength > 0f)
             faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
-        if (browSorrowIndex > -1)
+        if (browSorrowIndex > -1 && strength > 0f)
             faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
     }
     
@@ -496,6 +496,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         [Tooltip("Some expressions involving the mouth require visemes to be weakened, which can be set using this factor. Setting it to 0 is the same as turning enableVisemes off.")]
         [Range(0, 1)]
         public float visemeFactor = 1f;
+        [Tooltip("Some expressions involving the eyebrows require the eyebrow weight to be changed. Setting this weight to 0 will disable eyebrow tracking for this expression. Setting it to 1 enables it fully.")]
+        [Range(0, 1)]
+        public float eyebrowWeight = 1f;
         [Tooltip("This is the transition time for changing expressions. Setting it to 0 makes the transition instant.")]
         [Range(0, 1000)]
         public float transitionTime = 0f;
@@ -514,11 +517,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         [HideInInspector]
         public float lastTimeWeightOld = 0f;
 
-        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
+        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, float eyebrows, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
             this.trigger = trigger;
             this.blendShapePreset = preset;
             this.weight = weight;
             this.visemeFactor = factor;
+            this.eyebrowWeight = eyebrows;
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
             this.hotkey = hotkey;
@@ -526,11 +530,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.transitionTime = transitionTime;
         }
 
-        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
+        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, float eyebrows, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
             this.trigger = trigger;
             this.customBlendShapeName = name;
             this.weight = weight;
             this.visemeFactor = factor;
+            this.eyebrowWeight = eyebrows;
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
             this.hotkey = hotkey;
