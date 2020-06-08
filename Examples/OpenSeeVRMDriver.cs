@@ -44,6 +44,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This is the eyebrow tracking strength, with 0 meaning no eyebrow tracking and 1 meaning full strength.")]
     [Range(0, 1)]
     public float eyebrowStrength = 1.0f;
+    [Tooltip("This is the eyebrow smoothing factor, with 0 being no smoothing and 1 being fixed eyebrows.")]
+    public float eyebrowSmoothing = 0.65f;
     [Tooltip("This is the gaze smoothing factor, with 0 being no smoothing and 1 being a fixed gaze.")]
     [Range(0, 1)]
     public float gazeSmoothing = 0.6f;
@@ -176,6 +178,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float[] currentBrowStates;
     private int browInterpolationCount = 0;
     private int browInterpolationState = 0;
+    private BlendShapeKey[] browClips;
 
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
@@ -345,7 +348,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
     
     void UpdateBrows() {
-        if (faceMesh == null || faceType < 0 || openSeeData == null) {
+        if ((browClips == null && (faceMesh == null || faceType < 0)) || openSeeData == null) {
             return;
         }
         if (lastBrows < openSeeData.time) {
@@ -363,7 +366,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 upDownStrength = -factor * Mathf.Clamp(upDownStrength / -0.2f, 0f, 1f);
             } else
                 upDownStrength = 0f;
-            upDownStrength = Mathf.Lerp(lastBrowUpDown, upDownStrength, 0.2f);
+            upDownStrength = Mathf.Lerp(lastBrowUpDown, upDownStrength, 1f - eyebrowSmoothing);
             lastBrowUpDown = upDownStrength;
             
             if (browInterpolationState < 2)
@@ -373,7 +376,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             for (int i = 0; i < 4; i++)
                 lastBrowStates[i] = currentBrowStates[i];
             
-            if (faceType == 0) {
+            if (browClips != null) {
+                currentBrowStates[0] = upDownStrength;
+                currentBrowStates[1] = -upDownStrength;
+            } else if (faceType == 0) {
                 if (browUpIndex == -1 || browAngryIndex == -1 || browSorrowIndex == -1)
                     return;
                 if (upDownStrength > 0) {
@@ -389,8 +395,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     currentBrowStates[2] = 0f;
                     currentBrowStates[3] = 0f;
                 }
-            }
-            if (faceType == 1) {
+            } else if (faceType == 1) {
                 if (browUpIndex == -1 || browDownIndex == -1 || browAngryIndex == -1 || browSorrowIndex == -1)
                     return;
                 if (upDownStrength > 0) {
@@ -412,8 +417,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
         }
         
-        float t = Mathf.Clamp((float)mouthInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
-        mouthInterpolationCount++;
+        float t = Mathf.Clamp((float)browInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
+        browInterpolationCount++;
         
         float strength = eyebrowStrength;
         if (currentExpression != null)
@@ -427,6 +432,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
         if (browSorrowIndex > -1 && strength > 0f)
             faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
+        if (browClips != null && strength > 0f) {
+            if (lastBrowUpDown > 0f)
+                vrmBlendShapeProxy.ImmediatelySetValue(browClips[0], strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+            else if (lastBrowUpDown < 0f)
+                vrmBlendShapeProxy.ImmediatelySetValue(browClips[1], strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+        }
     }
     
     void FindFaceMesh() {
@@ -440,12 +451,33 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         browDownIndex = -1;
         browAngryIndex = -1;
         browSorrowIndex = -1;
+        browClips = null;
         lastBrowStates = new float[] {0f, 0f, 0f, 0f};
         currentBrowStates = new float[] {0f, 0f, 0f, 0f};
         
         if (vrmBlendShapeProxy == null)
             return;
+        
+        // Check if the model has set up blendshape clips. Thanks do Deat for this idea!
+        bool foundClipUp = false;
+        bool foundClipDown = false;
+        foreach (BlendShapeClip clip in vrmBlendShapeProxy.BlendShapeAvatar.Clips) {
+            if (clip.Preset == BlendShapePreset.Unknown) {
+                if (clip.BlendShapeName == "Brows up")
+                    foundClipUp = true;
+                if (clip.BlendShapeName == "Brows down")
+                    foundClipDown = true;
+            }
+        }
+        if (foundClipUp && foundClipDown) {
+            browClips =  new BlendShapeKey[2] {
+                new BlendShapeKey("Brows up"),
+                new BlendShapeKey("Brows down")
+            };
+            return;
+        }
 
+        // Otherwise try to find direct blendshapes for VRoid and Cecil Henshin models.
         Component[] meshes = vrmBlendShapeProxy.gameObject.GetComponentsInChildren<SkinnedMeshRenderer>();
         foreach (SkinnedMeshRenderer renderer in meshes) {
             Mesh mesh = renderer.sharedMesh;
