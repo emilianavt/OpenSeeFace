@@ -166,6 +166,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private int continuedPress = -1;
     
     private VRMBlendShapeProxy lastAvatar = null;
+    private int eyebrowIsMoving = 0;
     private double lastBrows = 0f;
     private SkinnedMeshRenderer faceMesh;
     private int faceType = -1;
@@ -355,17 +356,24 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             lastBrows = openSeeData.time;
             float upDownStrength = (openSeeData.features.EyebrowUpDownLeft + openSeeData.features.EyebrowUpDownRight) / 2f;
             float stabilizer = 0.3f;
+            float magnitude = Mathf.Abs(upDownStrength - lastBrowUpDown);
             float factor = 1f;
             if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle) {
                 factor = 0.7f;
                 stabilizer *= 2;
             }
-            if (upDownStrength > stabilizer) {
+            if (upDownStrength > 0 && (eyebrowIsMoving > 0 || magnitude > stabilizer)) {
                 upDownStrength = factor * Mathf.Clamp(upDownStrength / 0.6f, 0f, 1f);
-            } else if (upDownStrength < -stabilizer / 1.5f) {
+                if (magnitude > stabilizer)
+                    eyebrowIsMoving = 5;
+            } else if (upDownStrength < 0 && (eyebrowIsMoving > 0 || magnitude > stabilizer)) {
                 upDownStrength = -factor * Mathf.Clamp(upDownStrength / -0.2f, 0f, 1f);
+                if (magnitude > stabilizer)
+                    eyebrowIsMoving = 5;
             } else
-                upDownStrength = 0f;
+                upDownStrength = lastBrowUpDown;
+            if (eyebrowIsMoving > 0)
+                eyebrowIsMoving--;
             upDownStrength = Mathf.Lerp(lastBrowUpDown, upDownStrength, 1f - eyebrowSmoothing);
             lastBrowUpDown = upDownStrength;
             
