@@ -368,8 +368,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 upDownStrength = -factor * Mathf.Clamp(upDownStrength / -0.2f, 0f, 1f);
                 if (magnitude > stabilizer)
                     eyebrowIsMoving = 5;
-            } else
+            } else if (upDownStrength > stabilizer || upDownStrength < stabilizer) {
                 upDownStrength = lastBrowUpDown;
+            } else {
+                upDownStrength = 0f;
+            }
             if (eyebrowIsMoving > 0)
                 eyebrowIsMoving--;
             upDownStrength = Mathf.Lerp(lastBrowUpDown, upDownStrength, 1f - eyebrowSmoothing);
@@ -1139,6 +1142,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             InitializeLipSync();
             initializeLipSync = false;
         }
+        if (vrmBlendShapeProxy != null) {
+            foreach (var pair in vrmBlendShapeProxy.GetValues()) {
+                vrmBlendShapeProxy.ImmediatelySetValue(pair.Key, 0f);
+            }
+        }
         FindFaceMesh();
         UpdateExpression();
         UpdateGaze();
@@ -1149,10 +1157,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         } else {
             ApplyMouthShape();
         }
-        if (vrmBlendShapeProxy != null)
+        if (vrmBlendShapeProxy != null && browClips == null)
             vrmBlendShapeProxy.Apply();
         UpdateBrows();
-        if (vrmBlendShapeProxy != null)
+        if (vrmBlendShapeProxy != null && browClips != null)
             vrmBlendShapeProxy.Apply();
     }
 
