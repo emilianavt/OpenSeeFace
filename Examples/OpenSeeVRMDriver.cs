@@ -35,6 +35,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This is the blink smoothing factor for camera based blink tracking, with 0 being no smoothing and 1 being a fixed blink state.")]
     [Range(0, 1)]
     public float blinkSmoothing = 0.75f;
+    [Tooltip("When enabled, the blink state for both eyes is linked together.")]
+    public bool linkBlinks = true;
     [Tooltip("When enabled, the avatar's eye will move according to the face tracker's gaze tracking.")]
     public bool gazeTracking = true;
     [Tooltip("This is the right eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
@@ -853,6 +855,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 float tmp = left;
                 left = right;
                 right = tmp;
+            }
+            
+            if (linkBlinks) {
+                float v = Mathf.Max(left, right);
+                left = v;
+                right = v;
             }
             
             vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
