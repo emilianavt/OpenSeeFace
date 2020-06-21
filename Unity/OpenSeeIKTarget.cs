@@ -7,6 +7,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     [Header("Settings")]
     [Tooltip("This is the source of face tracking data.")]
     public OpenSee openSee;
+    [Tooltip("This can be used to skip the first few tracking frames.")]
+    public int skipFirst = 5;
     [Tooltip("When set to true, the next rotation and translation values will be set as zero rotation and zero translation.")]
     public bool calibrate = true;
     [Tooltip("This sets which face id to look for in the OpenSee data.")]
@@ -29,9 +31,15 @@ public class OpenSeeIKTarget : MonoBehaviour
     [Tooltip("This sets the minimum angle difference between two poses after which the pose will be considered an outlier.")]
     [Range(0, 360)]
     public float outlierThresholdAngle = 35f;
-    [Tooltip("This sets the number of seconds for which outliers are ignored before being accepted. Setting this to zero will disable outlier skipping")]
+    [Tooltip("This sets the number of seconds for which angle outliers are ignored before being accepted. Setting this to zero will disable outlier skipping.")]
     public float outlierSkipPeriod = 0.4f;
+    [Tooltip("This sets the minimum distance difference between two poses after which the pose will be considered an outlier.")]
+    public float outlierThresholdDistance = 2f;
+    [Tooltip("This sets the number of seconds for which distance outliers are ignored before being accepted. Once this period elapses, automatic recalibration is triggered. Setting this to zero will disable outlier skipping.")]
+    public float outlierSkipPeriodDistance = 0.4f;
     [Header("Information")]
+    [Tooltip("This is the number of received tracking frames.")]
+    public int trackingFrames = 0;
     [Tooltip("This is the current rotation calibration value as euler angles.")]
     public Vector3 rotationOffset = new Vector3(0f, 0f, -90f);
     [Tooltip("This is the current translation calibration.")]
@@ -40,6 +48,10 @@ public class OpenSeeIKTarget : MonoBehaviour
     public float averageInterpolations = 0f;
     [Tooltip("This is the number of outlier skipped tracking data frames so far.")]
     public int outlierSkips = 0;
+    [Tooltip("This is the number of distance outlier skipped tracking data frames so far.")]
+    public int outlierSkipsDistance = 0;
+    [Tooltip("This is the number of times a recalibration was triggered due to positional outliers.")]
+    public int outlierCalibrations = 0;
 
     private double updated = 0.0f;
     private Quaternion dR = Quaternion.Euler(0f, 0f, -90f);
@@ -58,6 +70,11 @@ public class OpenSeeIKTarget : MonoBehaviour
     private Quaternion lastAccepted;
     private bool skipped = false;
     private float skipStartTime = -1f;
+    
+    private bool gotAcceptedPosition = false;
+    private Vector3 lastAcceptedPosition;
+    private bool skippedPosition = false;
+    private float skipStartTimePosition = -1f;
     
     public void Calibrate() {
         calibrate = true;
@@ -86,6 +103,9 @@ public class OpenSeeIKTarget : MonoBehaviour
             return;
         if (openSeeData.time > updated) {
             updated = openSeeData.time;
+            trackingFrames++;
+            if (trackingFrames < skipFirst)
+                return;
         } else {
             Interpolate();
             return;
@@ -97,6 +117,7 @@ public class OpenSeeIKTarget : MonoBehaviour
         t.z = -t.z;
         Vector3 convertedTranslation = new Vector3(t.x, t.y, t.z);
         
+        // Check for angular outliers
         if (gotAccepted) {
             float angularDifference = Quaternion.Angle(lastAccepted, convertedQuaternion);
             if (angularDifference >= outlierThresholdAngle) {
@@ -124,6 +145,37 @@ public class OpenSeeIKTarget : MonoBehaviour
             outlierSkips += 1;
             return;
         }
+        
+        // Check for positional outliers
+        if (gotAcceptedPosition) {
+            float distance = Vector3.Distance(t, lastAcceptedPosition);
+            if (distance > outlierThresholdDistance) {
+                if (!skippedPosition) {
+                    if (outlierSkipPeriodDistance >= 0.0000001f) {
+                        skipStartTimePosition = Time.time;
+                        skippedPosition = true;
+                    }
+                } else {
+                    if (Time.time > skipStartTimePosition + outlierSkipPeriodDistance) {
+                        lastAcceptedPosition = t;
+                        skippedPosition = false;
+                        calibrate = true;
+                        outlierCalibrations += 1;
+                    }
+                }
+            } else {
+                skippedPosition = false;
+                lastAcceptedPosition = t;
+            }
+        } else {
+            skippedPosition = false;
+            lastAcceptedPosition = t;
+        }
+        gotAcceptedPosition = true;
+        if (skippedPosition) {
+            outlierSkipsDistance += 1;
+            return;
+        }
 
         if (calibrate) {
             dR = convertedQuaternion;
@@ -131,6 +183,8 @@ public class OpenSeeIKTarget : MonoBehaviour
             dT = t;
             rotationOffset = new Vector3(dR.eulerAngles.x, dR.eulerAngles.y, dR.eulerAngles.z);
             translationOffset = new Vector3(dT.x, dT.y, dT.z);
+            lastAcceptedPosition = translationOffset;
+            skippedPosition = false;
         }
 
         if (mirrorMotion != lastMirror || (mirrorMotion && calibrate)) {
