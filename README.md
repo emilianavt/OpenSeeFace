@@ -1,5 +1,7 @@
 # Overview
 
+**Note**: This is a tracking library, **not** a stand-alone avatar puppeteering program. I'm also working on [such](https://twitter.com/emiliana_vt/status/1273576135515951105) an application, which is currently in a semi-public beta, with releases being posted in the `#tech-dev` channel of [@Virtual_Deat](https://twitter.com/Virtual_Deat)'s Discord server.
+
 This project implements a facial landmark detection model based on MobileNetV3.
 
 As Pytorch 1.3 CPU inference speed on Windows is very low, the model was converted to ONNX format. Using [onnxruntime](https://github.com/microsoft/onnxruntime) it can run at 30 - 60 fps tracking a single face. There are four models, with different speed to tracking quality trade-offs.
