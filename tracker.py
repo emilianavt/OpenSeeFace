@@ -140,7 +140,7 @@ def worker_thread(session, frame, input, crop_info, queue, input_name, idx, trac
         queue.put((session,))
 
 class Feature():
-    def __init__(self, threshold=0.15, alpha=0.2, hard_factor=0.15, decay=0.001):
+    def __init__(self, threshold=0.15, alpha=0.2, hard_factor=0.15, decay=0.001, max_feature_updates=0):
         self.median = remedian()
         self.min = None
         self.max = None
@@ -151,44 +151,57 @@ class Feature():
         self.hard_factor = hard_factor
         self.decay = decay
         self.last = 0
+        self.current_median = 0
+        self.update_count = 0
+        self.max_feature_updates = max_feature_updates
 
     def update(self, x):
+        if self.max_feature_updates > 0:
+            self.update_count += 1
         new = self.update_state(x)
         filtered = self.last * self.alpha + new * (1 - self.alpha)
         self.last = filtered
         return filtered
 
     def update_state(self, x):
-        self.median + x
-        median = self.median.median()
+        updating = self.max_feature_updates < 1 or self.update_count < self.max_feature_updates
+        if updating:
+            self.median + x
+            self.current_median = self.median.median()
+        median = self.current_median
 
         if self.min is None:
             if x < median and (median - x) / median > self.threshold:
-                self.min = x
-                self.hard_min = self.min + self.hard_factor * (median - self.min)
+                if updating:
+                    self.min = x
+                    self.hard_min = self.min + self.hard_factor * (median - self.min)
                 return -1
             return 0
         else:
             if x < self.min:
-                self.min = x
-                self.hard_min = self.min + self.hard_factor * (median - self.min)
+                if updating:
+                    self.min = x
+                    self.hard_min = self.min + self.hard_factor * (median - self.min)
                 return -1
         if self.max is None:
             if x > median and (x - median) / median > self.threshold:
-                self.max = x
-                self.hard_max = self.max - self.hard_factor * (self.max - median)
+                if updating:
+                    self.max = x
+                    self.hard_max = self.max - self.hard_factor * (self.max - median)
                 return 1
             return 0
         else:
             if x > self.max:
-                self.max = x
-                self.hard_max = self.max - self.hard_factor * (self.max - median)
+                if updating:
+                    self.max = x
+                    self.hard_max = self.max - self.hard_factor * (self.max - median)
                 return 1
 
-        if self.min < self.hard_min:
-            self.min = self.hard_min * self.decay + self.min * (1 - self.decay)
-        if self.max > self.hard_max:
-            self.max = self.hard_max * self.decay + self.max * (1 - self.decay)
+        if updating:
+            if self.min < self.hard_min:
+                self.min = self.hard_min * self.decay + self.min * (1 - self.decay)
+            if self.max > self.hard_max:
+                self.max = self.hard_max * self.decay + self.max * (1 - self.decay)
 
         if x < median:
             return - (1 - (x - self.min) / (median - self.min))
@@ -198,21 +211,21 @@ class Feature():
         return 0
 
 class FeatureExtractor():
-    def __init__(self):
-        self.eye_l = Feature()
-        self.eye_r = Feature()
-        self.eyebrow_updown_l = Feature()
-        self.eyebrow_updown_r = Feature()
-        self.eyebrow_quirk_l = Feature(threshold=0.05)
-        self.eyebrow_quirk_r = Feature(threshold=0.05)
-        self.eyebrow_steepness_l = Feature(threshold=0.05)
-        self.eyebrow_steepness_r = Feature(threshold=0.05)
-        self.mouth_corner_updown_l = Feature()
-        self.mouth_corner_updown_r = Feature()
-        self.mouth_corner_inout_l = Feature(threshold=0.02)
-        self.mouth_corner_inout_r = Feature(threshold=0.02)
-        self.mouth_open = Feature()
-        self.mouth_wide = Feature(threshold=0.02)
+    def __init__(self, max_feature_updates=0):
+        self.eye_l = Feature(max_feature_updates=max_feature_updates)
+        self.eye_r = Feature(max_feature_updates=max_feature_updates)
+        self.eyebrow_updown_l = Feature(max_feature_updates=max_feature_updates)
+        self.eyebrow_updown_r = Feature(max_feature_updates=max_feature_updates)
+        self.eyebrow_quirk_l = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.eyebrow_quirk_r = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.eyebrow_steepness_l = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.eyebrow_steepness_r = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.mouth_corner_updown_l = Feature(max_feature_updates=max_feature_updates)
+        self.mouth_corner_updown_r = Feature(max_feature_updates=max_feature_updates)
+        self.mouth_corner_inout_l = Feature(threshold=0.02, max_feature_updates=max_feature_updates)
+        self.mouth_corner_inout_r = Feature(threshold=0.02, max_feature_updates=max_feature_updates)
+        self.mouth_open = Feature(max_feature_updates=max_feature_updates)
+        self.mouth_wide = Feature(threshold=0.02, max_feature_updates=max_feature_updates)
 
     def align_points(self, a, b, pts):
         a = tuple(a)
@@ -314,7 +327,7 @@ class FaceInfo():
         self.eye_blink = None
         self.bbox = None
         self.pnp_error = 0
-        self.features = FeatureExtractor()
+        self.features = FeatureExtractor(self.tracker.max_feature_updates)
         self.current_features = {}
         self.contour = np.zeros((21,3))
         self.update_counts = np.zeros((66,2))
@@ -354,75 +367,76 @@ class FaceInfo():
         if self.conf < 0.4 or self.pnp_error > 300:
             return
 
-        max_runs = 1
-        eligible = np.delete(np.arange(0, 66), [30])
-        changed_any = False
-        update_type = -1
-        d_o = np.ones((66,))
-        d_c = np.ones((66,))
-        for runs in range(max_runs):
-            r = 1.0 + np.random.random_sample((66,3)) * 0.02 - 0.01
-            r[30, :] = 1.0
-            if self.euler[0] > -165 and self.euler[0] < 145:
-                continue
-            elif self.euler[1] > -10 and self.euler[1] < 20:
-                r[:, 2] = 1.0
-                update_type = 0
-            else:
-                r[:, 0:2] = 1.0
-                if self.euler[2] > 120 or self.euler[2] < 60:
+        if not self.tracker.static_model:
+            max_runs = 1
+            eligible = np.delete(np.arange(0, 66), [30])
+            changed_any = False
+            update_type = -1
+            d_o = np.ones((66,))
+            d_c = np.ones((66,))
+            for runs in range(max_runs):
+                r = 1.0 + np.random.random_sample((66,3)) * 0.02 - 0.01
+                r[30, :] = 1.0
+                if self.euler[0] > -165 and self.euler[0] < 145:
                     continue
-                # Enable only one side of the points, depending on direction
-                elif self.euler[1] < -10:
-                    update_type = 1
-                    r[[0, 1, 2, 3, 4, 5, 6, 7, 17, 18, 19, 20, 21, 31, 32, 36, 37, 38, 39, 40, 41, 48, 49, 56, 57, 58, 59, 65], 2] = 1.0
-                    eligible = [8, 9, 10, 11, 12, 13, 14, 15, 16, 22, 23, 24, 25, 26, 27, 28, 29, 33, 34, 35, 42, 43, 44, 45, 46, 47, 50, 51, 52, 53, 54, 55, 60, 61, 62, 63, 64]
+                elif self.euler[1] > -10 and self.euler[1] < 20:
+                    r[:, 2] = 1.0
+                    update_type = 0
                 else:
-                    update_type = 1
-                    r[[9, 10, 11, 12, 13, 14, 15, 16, 22, 23, 24, 25, 26, 34, 35, 42, 43, 44, 45, 46, 47, 51, 52, 53, 54, 61, 62, 63], 2] = 1.0
-                    eligible = [0, 1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 27, 28, 29, 31, 32, 33, 36, 37, 38, 39, 40, 41, 48, 49, 50, 55, 56, 57, 58, 59, 60, 64, 65]
+                    r[:, 0:2] = 1.0
+                    if self.euler[2] > 120 or self.euler[2] < 60:
+                        continue
+                    # Enable only one side of the points, depending on direction
+                    elif self.euler[1] < -10:
+                        update_type = 1
+                        r[[0, 1, 2, 3, 4, 5, 6, 7, 17, 18, 19, 20, 21, 31, 32, 36, 37, 38, 39, 40, 41, 48, 49, 56, 57, 58, 59, 65], 2] = 1.0
+                        eligible = [8, 9, 10, 11, 12, 13, 14, 15, 16, 22, 23, 24, 25, 26, 27, 28, 29, 33, 34, 35, 42, 43, 44, 45, 46, 47, 50, 51, 52, 53, 54, 55, 60, 61, 62, 63, 64]
+                    else:
+                        update_type = 1
+                        r[[9, 10, 11, 12, 13, 14, 15, 16, 22, 23, 24, 25, 26, 34, 35, 42, 43, 44, 45, 46, 47, 51, 52, 53, 54, 61, 62, 63], 2] = 1.0
+                        eligible = [0, 1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 27, 28, 29, 31, 32, 33, 36, 37, 38, 39, 40, 41, 48, 49, 50, 55, 56, 57, 58, 59, 60, 64, 65]
 
-            if self.limit_3d_adjustment:
-                eligible = np.nonzero(self.update_counts[:, update_type] < self.update_counts[:, abs(update_type - 1)] + self.update_count_delta)[0]
-                if eligible.shape[0] <= 0:
+                if self.limit_3d_adjustment:
+                    eligible = np.nonzero(self.update_counts[:, update_type] < self.update_counts[:, abs(update_type - 1)] + self.update_count_delta)[0]
+                    if eligible.shape[0] <= 0:
+                        break
+
+                if runs == 0:
+                    updated = copy.copy(self.face_3d[0:66])
+                    o_projected = np.ones((66,2))
+                    o_projected[eligible] = np.squeeze(np.array(cv2.projectPoints(self.face_3d[eligible], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
+                c = updated * r
+                c_projected = np.zeros((66,2))
+                c_projected[eligible] = np.squeeze(np.array(cv2.projectPoints(c[eligible], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
+                changed = False
+
+                d_o[eligible] = np.linalg.norm(o_projected[eligible] - self.lms[eligible, 0:2], axis=1)
+                d_c[eligible] = np.linalg.norm(c_projected[eligible] - self.lms[eligible, 0:2], axis=1)
+                indices = np.nonzero(d_c < d_o)[0]
+                if indices.shape[0] > 0:
+                    if self.limit_3d_adjustment:
+                        indices = np.intersect1d(indices, eligible)
+                    if indices.shape[0] > 0:
+                        self.update_counts[indices, update_type] += 1
+                        updated[indices] = c[indices]
+                        o_projected[indices] = c_projected[indices]
+                        changed = True
+                changed_any = changed_any or changed
+
+                if not changed:
                     break
 
-            if runs == 0:
-                updated = copy.copy(self.face_3d[0:66])
-                o_projected = np.ones((66,2))
-                o_projected[eligible] = np.squeeze(np.array(cv2.projectPoints(self.face_3d[eligible], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
-            c = updated * r
-            c_projected = np.zeros((66,2))
-            c_projected[eligible] = np.squeeze(np.array(cv2.projectPoints(c[eligible], self.rotation, self.translation, self.tracker.camera, self.tracker.dist_coeffs)[0]), 1)
-            changed = False
-
-            d_o[eligible] = np.linalg.norm(o_projected[eligible] - self.lms[eligible, 0:2], axis=1)
-            d_c[eligible] = np.linalg.norm(c_projected[eligible] - self.lms[eligible, 0:2], axis=1)
-            indices = np.nonzero(d_c < d_o)[0]
-            if indices.shape[0] > 0:
+            if changed_any:
+                # Update weighted by point confidence
+                weights = np.zeros((66,3))
+                weights[:, :] = self.lms[0:66, 2:3]
+                weights[weights > 0.7] = 1.0
+                weights = 1.0 - weights
+                update_indices = np.arange(0, 66)
                 if self.limit_3d_adjustment:
-                    indices = np.intersect1d(indices, eligible)
-                if indices.shape[0] > 0:
-                    self.update_counts[indices, update_type] += 1
-                    updated[indices] = c[indices]
-                    o_projected[indices] = c_projected[indices]
-                    changed = True
-            changed_any = changed_any or changed
-
-            if not changed:
-                break
-
-        if changed_any:
-            # Update weighted by point confidence
-            weights = np.zeros((66,3))
-            weights[:, :] = self.lms[0:66, 2:3]
-            weights[weights > 0.7] = 1.0
-            weights = 1.0 - weights
-            update_indices = np.arange(0, 66)
-            if self.limit_3d_adjustment:
-                update_indices = np.nonzero(self.update_counts[:, update_type] <= self.update_count_max)[0]
-            self.face_3d[update_indices] = self.face_3d[update_indices] * weights[update_indices] + updated[update_indices] * (1. - weights[update_indices])
-            self.update_contour()
+                    update_indices = np.nonzero(self.update_counts[:, update_type] <= self.update_count_max)[0]
+                self.face_3d[update_indices] = self.face_3d[update_indices] * weights[update_indices] + updated[update_indices] * (1. - weights[update_indices])
+                self.update_contour()
 
         self.pts_3d = self.normalize_pts3d(self.pts_3d)
         self.current_features = self.features.update(self.pts_3d[:, 0:2])
@@ -432,7 +446,7 @@ class FaceInfo():
 
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, threshold=0.6, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False):
+    def __init__(self, width, height, model_type=3, threshold=0.6, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max(max_threads,4)
@@ -593,6 +607,8 @@ class Tracker():
         self.res_i = int(self.res)
         self.no_gaze = no_gaze
         self.debug_gaze = False
+        self.max_feature_updates = max_feature_updates
+        self.static_model = static_model
         self.face_info = [FaceInfo(id, self) for id in range(max_faces)]
         self.fail_count = 0
 
