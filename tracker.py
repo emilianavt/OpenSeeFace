@@ -154,20 +154,25 @@ class Feature():
         self.current_median = 0
         self.update_count = 0
         self.max_feature_updates = max_feature_updates
+        self.first_seen = -1
+        self.updating = True
 
-    def update(self, x):
+    def update(self, x, now=0):
         if self.max_feature_updates > 0:
-            self.update_count += 1
-        new = self.update_state(x)
+            if self.first_seen == -1:
+                self.first_seen = now;
+        new = self.update_state(x, now=now)
         filtered = self.last * self.alpha + new * (1 - self.alpha)
         self.last = filtered
         return filtered
 
-    def update_state(self, x):
-        updating = self.max_feature_updates < 1 or self.update_count < self.max_feature_updates
+    def update_state(self, x, now=0):
+        updating = self.updating and (self.max_feature_updates == 0 or now - self.first_seen < self.max_feature_updates)
         if updating:
             self.median + x
             self.current_median = self.median.median()
+        else:
+            self.updating = False
         median = self.current_median
 
         if self.min is None:
@@ -244,54 +249,55 @@ class FeatureExtractor():
 
     def update(self, pts):
         features = {}
+        now = time.perf_counter()
 
         norm_distance_x = np.mean([pts[0, 0] - pts[16, 0], pts[1, 0] - pts[15, 0]])
         norm_distance_y = np.mean([pts[27, 1] - pts[28, 1], pts[28, 1] - pts[29, 1], pts[29, 1] - pts[30, 1]])
 
         a1, f_pts = self.align_points(pts[42], pts[45], pts[[43, 44, 47, 46]])
         f = np.clip((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y, 0, None)
-        features["eye_l"] = self.eye_l.update(f)
+        features["eye_l"] = self.eye_l.update(f, now)
 
         a2, f_pts = self.align_points(pts[36], pts[39], pts[[37, 38, 41, 40]])
         f = np.clip((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y, 0, None)
-        features["eye_r"] = self.eye_r.update(f)
+        features["eye_r"] = self.eye_r.update(f, now)
 
         a3, _ = self.align_points(pts[0], pts[16], [])
         a4, _ = self.align_points(pts[31], pts[35], [])
         norm_angle = np.mean(list(map(np.rad2deg, [a1, a2, a3, a4])))
 
         a, f_pts = self.align_points(pts[22], pts[26], pts[[22, 23, 24, 25, 26]])
-        features["eyebrow_steepness_l"] = self.eyebrow_steepness_l.update(-np.rad2deg(a) - norm_angle)
+        features["eyebrow_steepness_l"] = self.eyebrow_steepness_l.update(-np.rad2deg(a) - norm_angle, now)
         f = (np.mean([pts[22, 1], pts[26, 1]]) - pts[27, 1]) / norm_distance_y
-        features["eyebrow_updown_l"] = self.eyebrow_updown_l.update(f)
+        features["eyebrow_updown_l"] = self.eyebrow_updown_l.update(f, now)
         f = np.max(np.abs(np.array(f_pts[1:4]) - f_pts[0, 1])) / norm_distance_y
-        features["eyebrow_quirk_l"] = self.eyebrow_quirk_l.update(f)
+        features["eyebrow_quirk_l"] = self.eyebrow_quirk_l.update(f, now)
 
         a, f_pts = self.align_points(pts[17], pts[21], pts[[17, 18, 19, 20, 21]])
-        features["eyebrow_steepness_r"] = self.eyebrow_steepness_r.update(np.rad2deg(a) - norm_angle)
+        features["eyebrow_steepness_r"] = self.eyebrow_steepness_r.update(np.rad2deg(a) - norm_angle, now)
         f = (np.mean([pts[17, 1], pts[21, 1]]) - pts[27, 1]) / norm_distance_y
-        features["eyebrow_updown_r"] = self.eyebrow_updown_r.update(f)
+        features["eyebrow_updown_r"] = self.eyebrow_updown_r.update(f, now)
         f = np.max(np.abs(np.array(f_pts[1:4]) - f_pts[0, 1])) / norm_distance_y
-        features["eyebrow_quirk_r"] = self.eyebrow_quirk_r.update(f)
+        features["eyebrow_quirk_r"] = self.eyebrow_quirk_r.update(f, now)
 
         upper_mouth_line = np.mean([pts[49, 1], pts[50, 1], pts[51, 1]])
         center_line = np.mean([pts[50, 0], pts[60, 0], pts[27, 0], pts[30, 0], pts[64, 0], pts[55, 0]])
 
         f = (upper_mouth_line - pts[62, 1]) / norm_distance_y
-        features["mouth_corner_updown_l"] = self.mouth_corner_updown_l.update(f)
+        features["mouth_corner_updown_l"] = self.mouth_corner_updown_l.update(f, now)
         f = abs(center_line - pts[62, 0]) / norm_distance_x
-        features["mouth_corner_inout_l"] = self.mouth_corner_inout_l.update(f)
+        features["mouth_corner_inout_l"] = self.mouth_corner_inout_l.update(f, now)
 
         f = (upper_mouth_line - pts[58, 1]) / norm_distance_y
-        features["mouth_corner_updown_r"] = self.mouth_corner_updown_r.update(f)
+        features["mouth_corner_updown_r"] = self.mouth_corner_updown_r.update(f, now)
         f = abs(center_line - pts[58, 0]) / norm_distance_x
-        features["mouth_corner_inout_r"] = self.mouth_corner_inout_r.update(f)
+        features["mouth_corner_inout_r"] = self.mouth_corner_inout_r.update(f, now)
 
         f = (np.mean([pts[59, 1], pts[60, 1], pts[61, 1]]) - np.mean([pts[65, 1], pts[64, 1], pts[63, 1]])) / norm_distance_y
-        features["mouth_open"] = self.mouth_open.update(f)
+        features["mouth_open"] = self.mouth_open.update(f, now)
 
         f = abs(pts[58, 0] - pts[62, 0]) / norm_distance_x
-        features["mouth_wide"] = self.mouth_wide.update(f)
+        features["mouth_wide"] = self.mouth_wide.update(f, now)
 
         return features
 
@@ -312,6 +318,9 @@ class FaceInfo():
         self.update_count_delta = 75.
         self.update_count_max = 7500.
 
+        if self.tracker.max_feature_updates > 0:
+            self.features = FeatureExtractor(self.tracker.max_feature_updates)
+
     def reset(self):
         self.alive = False
         self.conf = None
@@ -327,7 +336,8 @@ class FaceInfo():
         self.eye_blink = None
         self.bbox = None
         self.pnp_error = 0
-        self.features = FeatureExtractor(self.tracker.max_feature_updates)
+        if self.tracker.max_feature_updates < 1:
+            self.features = FeatureExtractor(0)
         self.current_features = {}
         self.contour = np.zeros((21,3))
         self.update_counts = np.zeros((66,2))
