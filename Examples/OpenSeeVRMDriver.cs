@@ -48,6 +48,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float eyebrowStrength = 1.0f;
     [Tooltip("This is the eyebrow smoothing factor, with 0 being no smoothing and 1 being fixed eyebrows.")]
     public float eyebrowSmoothing = 0.65f;
+    [Tooltip("This is the zero point of the eyebrow value. It can be used to offset the eyebrow tracking value.")]
+    [Range(-1, 1)]
+    public float eyebrowZero = 0.0f;
+    [Tooltip("This is the sensitivity of the eyebrow tracking, with 0 meaning no eyebrow movement.")]
+    [Range(0, 2)]
+    public float eyebrowSensitivity = 1.0f;
     [Tooltip("This is the gaze smoothing factor, with 0 being no smoothing and 1 being a fixed gaze.")]
     [Range(0, 1)]
     public float gazeSmoothing = 0.6f;
@@ -356,7 +362,19 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             lastBrows = openSeeData.time;
             float upDownStrength = (openSeeData.features.EyebrowUpDownLeft + openSeeData.features.EyebrowUpDownRight) / 2f;
             float stabilizer = 0.3f;
-            float magnitude = Mathf.Abs(upDownStrength - lastBrowUpDown);
+            if (eyebrowZero > 0) {
+                if (upDownStrength > eyebrowZero)
+                    upDownStrength = (upDownStrength - eyebrowZero) / (1f - eyebrowZero);
+                else
+                    upDownStrength = (upDownStrength - eyebrowZero) / (1f + eyebrowZero);
+            } else if (eyebrowZero < 0) {
+                if (upDownStrength < eyebrowZero)
+                    upDownStrength = (upDownStrength - eyebrowZero) / (1f + eyebrowZero);
+                else
+                    upDownStrength = (upDownStrength - eyebrowZero) / (1f - eyebrowZero);
+            }
+
+            float magnitude = Mathf.Clamp(Mathf.Abs(upDownStrength - lastBrowUpDown) * eyebrowSensitivity, -1f, 1f);
             float factor = 1f;
             if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle) {
                 factor = 0.7f;
