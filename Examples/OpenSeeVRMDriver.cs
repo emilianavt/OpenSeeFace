@@ -83,6 +83,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Header("Lip sync settings")]
     [Tooltip("This allows you to enable and disable lip sync. When disabled, mouth tracking is used instead.")]
     public bool lipSync = true;
+    [Tooltip("When enabled, camera based mouth tracking will be used when no viseme is detected.")]
+    public bool hybridLipSync = false;
     [Tooltip("This is the mouth tracking smoothing factor, with 0 being no smoothing and 1 being a fixed mouth.")]
     [Range(0, 1)]
     public float mouthSmoothing = 0.6f;
@@ -161,6 +163,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float[] currentMouthStates;
     private int mouthInterpolationCount = 0;
     private int mouthInterpolationState = 0;
+    
+    private double startedSilVisemes = -10;
+    private double silVisemeHybridThreshold = 0.3;
+    private bool wasSilViseme = true;
     
     private double lastBlink = 0f;
     private float lastBlinkLeft = 0f;
@@ -242,6 +248,23 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         float weight;
         OVRLipSync.Viseme current = GetActiveViseme(out weight);
+        if (current == OVRLipSync.Viseme.sil && weight > 0.9999f) {
+            if (wasSilViseme) {
+                if (hybridLipSync && Time.time - startedSilVisemes > silVisemeHybridThreshold) {
+                    ApplyMouthShape();
+                    return;
+                }
+            } else {
+                startedSilVisemes = Time.time;
+            }
+            wasSilViseme = true;
+        } else {
+            if (wasSilViseme)
+                startedSilVisemes = Time.time;
+            wasSilViseme = false;
+            if (hybridLipSync && Time.time - startedSilVisemes < silVisemeHybridThreshold)
+                ApplyMouthShape(true);
+        }
         weight = Mathf.Clamp(weight * 1.5f, 0f, 1f);
         float[] values = catsData[current];
         for (int i = 0; i < 5; i++) {
@@ -258,7 +281,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
     }
     
-    void ApplyMouthShape() {
+    void ApplyMouthShape(bool fadeOnly) {
         if (vrmBlendShapeProxy == null)
             return;
         if (visemePresetMap == null)
@@ -280,6 +303,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
 
             do {
+                if (fadeOnly)
+                    break;
                 if (mouthUseSquelch && audioVolume < mouthSquelch)
                     break;
                 if (open < stabilizer && Mathf.Abs(wide) < stabilizer)
@@ -352,6 +377,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (result > 0f)
                 vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
         }
+    }
+    
+    void ApplyMouthShape() {
+        ApplyMouthShape(false);
     }
     
     void UpdateBrows() {
