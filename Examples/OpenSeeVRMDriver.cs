@@ -12,7 +12,7 @@ using VRM;
 public class OpenSeeVRMDriver : MonoBehaviour {
     #region DllImport
     [DllImport("user32.dll", SetLastError = true)]
-    static extern ushort GetAsyncKeyState(int vKey); 
+    static extern ushort GetAsyncKeyState(int vKey);
     #endregion
     
     [Header("Settings")]
@@ -71,12 +71,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
     [Tooltip("This component lets configure your VRM expressions.")]
     public OpenSeeVRMExpression[] expressions = new OpenSeeVRMExpression[]{
-        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, 1f, true, true, 0x70, 50f, 0f),
-        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, 1f, true, true, 0x71, 1f, 0f),
-        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, 1f, true, true, 0x72, 1f, 0f),
-        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, 0f, true, true, 0x73, 1f, 0f),
-        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, 0f, true, true, 0x74, 1f, 0f),
-        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, 0f, true, true, 0x75, 1f, 0f)
+        new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, 1f, true, true, 0x70, true, true, false, true, 50f, 120f),
+        new OpenSeeVRMExpression("fun", BlendShapePreset.Fun, 1f, 1f, 1f, true, true, 0x71, true, true, false, true, 1f, 120f),
+        new OpenSeeVRMExpression("joy", BlendShapePreset.Joy, 1f, 1f, 1f, true, true, 0x72, true, true, false, true, 1f, 120f),
+        new OpenSeeVRMExpression("angry", BlendShapePreset.Angry, 1f, 1f, 0f, true, true, 0x73, true, true, false, true, 1f, 120f),
+        new OpenSeeVRMExpression("sorrow", BlendShapePreset.Sorrow, 1f, 1f, 0f, true, true, 0x74, true, true, false, true, 1f, 120f),
+        new OpenSeeVRMExpression("surprise", "Surprised", 1f, 1f, 0f, true, true, 0x75, true, true, false, true, 1f, 120f)
     };
     [Tooltip("The expression configuration is initialized on startup. If it is changed and needs to be reinitialized, this can be triggered by using this flag or calling InitExpressionMap. This flag is reset to false afterwards.")]
     public bool reloadExpressions = false;
@@ -177,7 +177,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private int blinkInterpolationState = 0;
     
     private bool overridden = false;
-    private int continuedPress = -1;
+    private OpenSeeVRMExpression toggledExpression = null;
+    private HashSet<OpenSeeVRMExpression> continuedPress = new HashSet<OpenSeeVRMExpression>();
     
     private VRMBlendShapeProxy lastAvatar = null;
     private int eyebrowIsMoving = 0;
@@ -598,6 +599,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         public bool enableBlinking = true;
         [Tooltip("This can be set to a virtual key value. If this key is pressed together with shift and control, the expression will trigger as an override.")]
         public int hotkey = -1;
+        [Tooltip("If this is set, the shift key has to be pressed for the hotkey to trigger.")]
+        public bool shiftKey = false;
+        [Tooltip("If this is set, the ctrl key has to be pressed for the hotkey to trigger.")]
+        public bool ctrlKey = false;
+        [Tooltip("If this is set, the alt key has to be pressed for the hotkey to trigger.")]
+        public bool altKey = false;
+        [Tooltip("If this is set, the expression will toggle, otherwise it will only be active while this is pressed.")]
+        public bool toggle = true;
         [Tooltip("This is the weight for this class's error when training the model.")]
         public float errorWeight = 1f;
         [HideInInspector]
@@ -607,7 +616,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         [HideInInspector]
         public float lastTimeWeightOld = 0f;
 
-        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, float eyebrows, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
+        public OpenSeeVRMExpression(string trigger, BlendShapePreset preset, float weight, float factor, float eyebrows, bool visemes, bool blinking, int hotkey, bool shiftKey, bool ctrlKey, bool altKey, bool toggle, float errorWeight, float transitionTime) {
             this.trigger = trigger;
             this.blendShapePreset = preset;
             this.weight = weight;
@@ -616,11 +625,15 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
             this.hotkey = hotkey;
+            this.shiftKey = shiftKey;
+            this.ctrlKey = ctrlKey;
+            this.altKey = altKey;
+            this.toggle = toggle;
             this.errorWeight = errorWeight;
             this.transitionTime = transitionTime;
         }
 
-        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, float eyebrows, bool visemes, bool blinking, int hotkey, float errorWeight, float transitionTime) {
+        public OpenSeeVRMExpression(string trigger, string name, float weight, float factor, float eyebrows, bool visemes, bool blinking, int hotkey, bool shiftKey, bool ctrlKey, bool altKey, bool toggle, float errorWeight, float transitionTime) {
             this.trigger = trigger;
             this.customBlendShapeName = name;
             this.weight = weight;
@@ -629,12 +642,19 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.enableVisemes = visemes;
             this.enableBlinking = blinking;
             this.hotkey = hotkey;
+            this.shiftKey = shiftKey;
+            this.ctrlKey = ctrlKey;
+            this.altKey = altKey;
+            this.toggle = toggle;
             this.errorWeight = errorWeight;
             this.transitionTime = transitionTime;
         }
     }
 
     public void InitExpressionMap() {
+        toggledExpression = null;
+        overridden = false;
+        continuedPress = new HashSet<OpenSeeVRMExpression>();
         expressionMap = new Dictionary<string, OpenSeeVRMExpression>();
         openSeeExpression.weightMap = new Dictionary<string, float>();
         foreach (var expression in expressions) {
@@ -661,32 +681,36 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         }
         
-        bool anyPressed = false;
-        bool modifiers = (GetAsyncKeyState(0x10) & 0x8000U) != 0;
-        modifiers = ((GetAsyncKeyState(0x11) & 0x8000U) != 0) && modifiers;
-        if (modifiers) {
-            foreach (var expression in expressionMap.Values) {
-                if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0) {
-                    anyPressed = true;
-                    if (continuedPress != expression.hotkey && overridden && currentExpression == expression) {
-                        overridden = false;
+        bool shiftKey = (GetAsyncKeyState(0x10) & 0x8000U) != 0;
+        bool ctrlKey = (GetAsyncKeyState(0x11) & 0x8000U) != 0;
+        bool altKey = (GetAsyncKeyState(0x12) & 0x8000U) != 0;
+        bool trigger = false;
+        if (overridden)
+            currentExpression = toggledExpression;
+        foreach (var expression in expressionMap.Values) {
+            if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0 && shiftKey == expression.shiftKey && ctrlKey == expression.ctrlKey && altKey == expression.altKey) {
+                if (!continuedPress.Contains(expression) && overridden && toggledExpression == expression) {
+                    overridden = false;
+                    toggledExpression = null;
+                    if (currentExpression == expression)
                         currentExpression = null;
-                        continuedPress = expression.hotkey;
-                        break;
-                    }
-                    if (continuedPress != expression.hotkey) {
-                        overridden = true;
-                        currentExpression = expression;
-                        continuedPress = expression.hotkey;
-                        break;
-                    }
+                    continuedPress.Add(expression);
                 }
+                if (!continuedPress.Contains(expression)) {
+                    if (expression.toggle) {
+                        overridden = true;
+                        toggledExpression = expression;
+                        continuedPress.Add(expression);
+                    } else
+                        trigger = true;
+                    currentExpression = expression;
+                }
+            } else {
+                continuedPress.Remove(expression);
             }
         }
-        if (!anyPressed)
-            continuedPress = -1;
         
-        if (!overridden) {
+        if (!overridden && !trigger) {
             if (openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
                 currentExpression = null;
             } else {
