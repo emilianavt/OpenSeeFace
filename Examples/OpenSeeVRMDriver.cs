@@ -650,6 +650,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             this.transitionTime = transitionTime;
         }
     }
+    
+    public OpenSeeVRMExpression GetExpression(string trigger) {
+        if (!expressionMap.ContainsKey(trigger))
+            return null;
+        return expressionMap[trigger];
+    }
 
     public void InitExpressionMap() {
         toggledExpression = null;
