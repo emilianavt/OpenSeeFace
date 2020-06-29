@@ -69,6 +69,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public Vector2 gazeCenter = Vector2.zero;
     [Tooltip("This component lets you customize the automatic eye blinking.")]
     public OpenSeeEyeBlink eyeBlinker = new OpenSeeEyeBlink();
+    [Tooltip("When enabled, expressions will respond to global hotkeys.")]
+    public bool hotkeys = true;
     [Tooltip("This component lets configure your VRM expressions.")]
     public OpenSeeVRMExpression[] expressions = new OpenSeeVRMExpression[]{
         new OpenSeeVRMExpression("neutral", BlendShapePreset.Neutral, 1f, 1f, 1f, true, true, 0x70, true, true, false, true, 50f, 120f),
@@ -687,32 +689,34 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         }
         
-        bool shiftKey = (GetAsyncKeyState(0x10) & 0x8000U) != 0;
-        bool ctrlKey = (GetAsyncKeyState(0x11) & 0x8000U) != 0;
-        bool altKey = (GetAsyncKeyState(0x12) & 0x8000U) != 0;
-        bool trigger = false;
         if (overridden)
             currentExpression = toggledExpression;
-        foreach (var expression in expressionMap.Values) {
-            if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0 && shiftKey == expression.shiftKey && ctrlKey == expression.ctrlKey && altKey == expression.altKey) {
-                if (!continuedPress.Contains(expression) && overridden && toggledExpression == expression) {
-                    overridden = false;
-                    toggledExpression = null;
-                    if (currentExpression == expression)
-                        currentExpression = null;
-                    continuedPress.Add(expression);
-                }
-                if (!continuedPress.Contains(expression)) {
-                    if (expression.toggle) {
-                        overridden = true;
-                        toggledExpression = expression;
+        bool trigger = false;
+        if (hotkeys) {
+            bool shiftKey = (GetAsyncKeyState(0x10) & 0x8000U) != 0;
+            bool ctrlKey = (GetAsyncKeyState(0x11) & 0x8000U) != 0;
+            bool altKey = (GetAsyncKeyState(0x12) & 0x8000U) != 0;
+            foreach (var expression in expressionMap.Values) {
+                if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0 && shiftKey == expression.shiftKey && ctrlKey == expression.ctrlKey && altKey == expression.altKey) {
+                    if (!continuedPress.Contains(expression) && overridden && toggledExpression == expression) {
+                        overridden = false;
+                        toggledExpression = null;
+                        if (currentExpression == expression)
+                            currentExpression = null;
                         continuedPress.Add(expression);
-                    } else
-                        trigger = true;
-                    currentExpression = expression;
+                    }
+                    if (!continuedPress.Contains(expression)) {
+                        if (expression.toggle) {
+                            overridden = true;
+                            toggledExpression = expression;
+                            continuedPress.Add(expression);
+                        } else
+                            trigger = true;
+                        currentExpression = expression;
+                    }
+                } else {
+                    continuedPress.Remove(expression);
                 }
-            } else {
-                continuedPress.Remove(expression);
             }
         }
         
