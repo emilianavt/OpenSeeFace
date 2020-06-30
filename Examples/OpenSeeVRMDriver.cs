@@ -635,9 +635,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private float currentTransitionTime = 0f;
         
         public float GetWeight(float baseTransitionTime) {
-            bool active = triggered || toggled;
+            if (triggered != lastActive)
+                reached = false;
             if (reached) {
-                if (active) {
+                if (triggered) {
                     lastWeight = 1f;
                     return 1f;
                 } else {
@@ -645,12 +646,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     return 0f;
                 }
             }
-            if (active != lastActive) {
+            if (triggered != lastActive) {
                 stateChangedTime = Time.time;
                 stateChangedWeight = lastWeight;
                 currentTransitionTime = transitionTime;
-                lastActive = active;
-                if (active) {
+                lastActive = triggered;
+                if (triggered) {
                     targetWeight = 1f;
                     remainingWeight = 1f - lastWeight;
                 } else {
@@ -661,11 +662,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (baseTransitionTime < currentTransitionTime)
                 currentTransitionTime = baseTransitionTime;
             lastWeight = Mathf.Lerp(stateChangedWeight, targetWeight, Mathf.Min((Time.time - stateChangedTime) / (currentTransitionTime * 0.001f * remainingWeight), 1f));
-            if (lastWeight >= 0.9999f && active) {
+            if (lastWeight >= 0.9999f && triggered) {
                 lastWeight = 1f;
                 reached = true;
             }
-            if (lastWeight <= 0.0001f && !active) {
+            if (lastWeight <= 0.0001f && !triggered) {
                 lastWeight = 0f;
                 reached = true;
             }
@@ -752,12 +753,37 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             bool ctrlKey = (GetAsyncKeyState(0x11) & 0x8000U) != 0;
             bool altKey = (GetAsyncKeyState(0x12) & 0x8000U) != 0;
             foreach (var expression in expressionMap.Values) {
-                if (expression == toggledExpression && expression.toggled)
+                // Clean up inconsistent states
+                if (!expression.toggle && expression.toggled) {
+                    expression.toggled = false;
+                    if (toggledExpression == expression) {
+                        toggledExpression = null;
+                        overridden = false;
+                    }
+                    if (continuedPress.Contains(expression))
+                        continuedPress.Remove(expression);
+                }
+                if (expression.toggled && expression.additive && toggledExpression == expression) {
+                    toggledExpression = null;
+                    overridden = false;
+                }
+                if (expression.toggled && !expression.additive && toggledExpression != expression) {
+                    if (toggledExpression == null && !overridden) {
+                        toggledExpression = expression;
+                        overridden = true;
+                    } else
+                        expression.toggled = false;
+                }
+                
+                // Automatically trigger toggled expressions
+                if ((expression.additive || expression == toggledExpression) && expression.toggled)
                     expression.triggered = true;
                 else
                     expression.triggered = false;
                 
                 if (expression.hotkey >= 0 && expression.hotkey < 256 && (GetAsyncKeyState(expression.hotkey) & 0x8000) != 0 && shiftKey == expression.shiftKey && ctrlKey == expression.ctrlKey && altKey == expression.altKey) {
+                    if (!expression.toggle && continuedPress.Contains(expression))
+                        continuedPress.Remove(expression);
                     if (!continuedPress.Contains(expression)) {
                         // Generally, turn on expressions when their hotkey is pressed
                         expression.triggered = true;
@@ -787,29 +813,35 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                                 }
                             }
                             continuedPress.Add(expression);
-                        } else if (!expression.additive) {
-                            // If it's a base expression being triggered on, override expression detection
-                            trigger = true;
-                            currentExpression = expression;
+                        } else {
+                            if (!expression.additive) {
+                                // If it's a base expression being triggered on, override expression detection
+                                trigger = true;
+                                currentExpression = expression;
+                            }
                         }
                     }
                 } else {
                     continuedPress.Remove(expression);
                 }
-                if (expression.lastActive != expression.triggered)
-                    expression.reached = false;
             }
         }
 
-        if (overridden)
+        if (overridden && !trigger)
             currentExpression = toggledExpression;
+        if (trigger && overridden && currentExpression != toggledExpression)
+            toggledExpression.triggered = false;
         
         if (!overridden && !trigger) {
             if (openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
                 currentExpression = null;
             } else {
                 currentExpression = expressionMap[openSeeExpression.expression];
+                currentExpression.triggered = true;
             }
+        } else if (openSeeExpression.expression != null && openSeeExpression.expression != "" && expressionMap.ContainsKey(openSeeExpression.expression)) {
+            if (expressionMap[openSeeExpression.expression].additive)
+                expressionMap[openSeeExpression.expression].triggered = true;
         }
         
         if (currentExpression == null && expressionMap.ContainsKey("neutral")) {
@@ -823,9 +855,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         currentExpressionVisemeFactor = 1f;
 
         float baseTransitionTime = 1000f;
-        if (currentExpression != null && !currentExpression.reached && currentExpression.transitionTime < baseTransitionTime)
+        if (currentExpression != null && (!currentExpression.reached || currentExpression.lastActive != currentExpression.triggered) && currentExpression.transitionTime < baseTransitionTime)
             baseTransitionTime = currentExpression.transitionTime;
-        if (lastExpression != currentExpression && lastExpression != null && !lastExpression.reached && lastExpression.transitionTime < baseTransitionTime)
+        if (lastExpression != currentExpression && lastExpression != null && (!lastExpression.reached || lastExpression.lastActive != lastExpression.triggered) && lastExpression.transitionTime < baseTransitionTime)
             baseTransitionTime = lastExpression.transitionTime;
         foreach (var expression in expressionMap.Values) {
             float weight = expression.GetWeight(baseTransitionTime);
