@@ -147,6 +147,7 @@ public class OpenSeeIKTarget : MonoBehaviour
         }
         
         // Check for positional outliers
+        bool keep_offset = false;
         if (gotAcceptedPosition) {
             float distance = Vector3.Distance(t, lastAcceptedPosition);
             if (distance > outlierThresholdDistance) {
@@ -160,6 +161,7 @@ public class OpenSeeIKTarget : MonoBehaviour
                         lastAcceptedPosition = t;
                         skippedPosition = false;
                         calibrate = true;
+                        keep_offset = true;
                         outlierCalibrations += 1;
                     }
                 }
@@ -191,6 +193,11 @@ public class OpenSeeIKTarget : MonoBehaviour
             dR = Quaternion.Inverse(MirrorQuaternion(Quaternion.Inverse(dR)));
             dT = MirrorTranslation(dT);
             lastMirror = mirrorMotion;
+        }
+        if (calibrate && keep_offset) {
+            dR = Quaternion.Inverse(Quaternion.Inverse(transform.localRotation) * Quaternion.Inverse(dR));
+            dT -= transform.localPosition;
+            Debug.Log("Kept location.");
         }
         calibrate = false;
 
