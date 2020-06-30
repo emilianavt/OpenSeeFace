@@ -520,20 +520,20 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         
         // Check if the model has set up blendshape clips. Thanks do Deat for this idea!
-        bool foundClipUp = false;
-        bool foundClipDown = false;
+        string foundClipUp = null;
+        string foundClipDown = null;
         foreach (BlendShapeClip clip in vrmBlendShapeProxy.BlendShapeAvatar.Clips) {
             if (clip.Preset == BlendShapePreset.Unknown) {
-                if (clip.BlendShapeName == "Brows up")
-                    foundClipUp = true;
-                if (clip.BlendShapeName == "Brows down")
-                    foundClipDown = true;
+                if (clip.BlendShapeName.ToUpper() == "BROWS UP")
+                    foundClipUp = clip.BlendShapeName;
+                if (clip.BlendShapeName.ToUpper() == "BROWS DOWN")
+                    foundClipDown = clip.BlendShapeName;
             }
         }
-        if (foundClipUp && foundClipDown) {
+        if (foundClipUp != null && foundClipDown != null) {
             browClips =  new BlendShapeKey[2] {
-                new BlendShapeKey("Brows up"),
-                new BlendShapeKey("Brows down")
+                new BlendShapeKey(foundClipUp),
+                new BlendShapeKey(foundClipDown)
             };
             return;
         }
