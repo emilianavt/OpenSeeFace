@@ -526,7 +526,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         string foundClipUp = null;
         string foundClipDown = null;
         foreach (BlendShapeClip clip in vrmBlendShapeProxy.BlendShapeAvatar.Clips) {
-            if (clip.Preset == BlendShapePreset.Unknown) {
+            if (clip.Preset == BlendShapePreset.Unknown && clip.BlendShapeName != null) {
                 if (clip.BlendShapeName.ToUpper() == "BROWS UP")
                     foundClipUp = clip.BlendShapeName;
                 if (clip.BlendShapeName.ToUpper() == "BROWS DOWN")
