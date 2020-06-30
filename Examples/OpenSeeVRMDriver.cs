@@ -718,11 +718,17 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     public void InitExpressionMap() {
         toggledExpression = null;
+        lastExpression = null;
+        currentExpression = null;
         overridden = false;
         continuedPress = new HashSet<OpenSeeVRMExpression>();
         expressionMap = new Dictionary<string, OpenSeeVRMExpression>();
         openSeeExpression.weightMap = new Dictionary<string, float>();
         foreach (var expression in expressions) {
+            expression.toggled = false;
+            expression.triggered = false;
+            expression.lastActive = false;
+            expression.reached = true;
             openSeeExpression.weightMap.Add(expression.trigger, expression.errorWeight);
             if (expression.customBlendShapeName != "")
                 expression.blendShapeKey = new BlendShapeKey(expression.customBlendShapeName);
