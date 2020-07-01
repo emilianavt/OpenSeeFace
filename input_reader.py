@@ -24,12 +24,12 @@ class VideoReader():
         self.cap.release()
 
 class CameraReader(VideoReader):
-    def __init__(self, capture, width, height, fps):
+    def __init__(self, capture, width, height, fps, use_escapi=True):
         self.device = None
         self.width = width
         self.height = height
         self.fps = fps
-        if os.name == 'nt':
+        if os.name == 'nt' and use_escapi:
             escapi.init()
             self.device = capture
             self.buffer = escapi.init_camera(self.device, self.width, self.height, self.fps)
@@ -88,7 +88,7 @@ class RawReader:
         self.open = False
 
 class InputReader():
-    def __init__(self, capture, raw_rgb, width, height, fps):
+    def __init__(self, capture, raw_rgb, width, height, fps, use_escapi=False):
         self.reader = None
         try:
             if raw_rgb > 0:

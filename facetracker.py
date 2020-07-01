@@ -35,6 +35,8 @@ parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experiment
 parser.add_argument("--face-id-offset", type=int, help="When set, this offset is added to all face ids, which can be useful for mixing tracking data from multiple network sources", default=0)
 parser.add_argument("--repeat-video", type=int, help="When set to 1 and a video file was specified with -c, the tracker will loop the video until interrupted", default=0)
 parser.add_argument("--dump-points", type=str, help="When set to a filename, the current face 3D points are made symmetric and dumped to the given file when quitting the visualization with the \"q\" key", default="")
+if os.name == 'nt':
+    parser.add_argument("--use-escapi", type=int, help="When set to 1, escapi will be used for video input instead of OpenCV", default=1)
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -70,7 +72,9 @@ if args.faces >= 40:
 fps = 0
 if os.name == 'nt':
     fps = args.fps
-input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps)
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=True if args.use_escapi == 1 else False)
+else:
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=False)
 if type(input_reader.reader) == VideoReader:
     fps = 0
 
