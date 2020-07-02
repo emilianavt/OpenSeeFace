@@ -197,7 +197,6 @@ public class OpenSeeIKTarget : MonoBehaviour
         if (calibrate && keep_offset) {
             dR = Quaternion.Inverse(Quaternion.Inverse(transform.localRotation) * Quaternion.Inverse(dR));
             dT -= transform.localPosition;
-            Debug.Log("Kept location.");
         }
         calibrate = false;
 
