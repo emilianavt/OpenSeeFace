@@ -78,10 +78,10 @@ public class OpenSeeLauncher : MonoBehaviour {
             UnityEngine.Debug.LogError("Facetracker executable cannot be found.");
             return false;
         }
-        if (!Directory.Exists(modelPath)) {
+        /*if (!Directory.Exists(modelPath)) {
             UnityEngine.Debug.LogError("Model directory cannot be found.");
             return false;
-        }
+        }*/
         if (requireTarget) {
             ip = openSeeTarget.listenAddress;
             if (!IPAddress.TryParse(ip, out address)) {
