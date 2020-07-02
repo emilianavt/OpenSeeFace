@@ -96,7 +96,7 @@ class InputReader():
             elif os.path.exists(capture):
                 self.reader = VideoReader(capture)
             elif capture == str(int(capture)):
-                self.reader = CameraReader(int(capture), width, height, fps)
+                self.reader = CameraReader(int(capture), width, height, fps, use_escapi=use_escapi)
         except Exception as e:
             print("Error: " + str(e))
 

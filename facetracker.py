@@ -72,7 +72,8 @@ if args.faces >= 40:
 fps = 0
 if os.name == 'nt':
     fps = args.fps
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=True if args.use_escapi == 1 else False)
+    use_escapi_flag = True if args.use_escapi == 1 else False
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=use_escapi_flag)
 else:
     input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=False)
 if type(input_reader.reader) == VideoReader:
