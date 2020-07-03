@@ -1012,13 +1012,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void BlinkEyes() {
         if (vrmBlendShapeProxy == null || eyeBlinker == null)
             return;
-        vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_R), 0f);
-        vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_L), 0f);
         if (autoBlink) {
             if (currentExpressionEnableBlinking) {
                 float blink = eyeBlinker.Blink();
-                vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_R), blink);
-                vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_L), blink);
+                vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink), blink);
             }
         } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
             if (!currentExpressionEnableBlinking)
@@ -1088,12 +1085,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             
             if (linkBlinks) {
                 float v = Mathf.Max(left, right);
-                left = v;
-                right = v;
+                vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink), v);
+            } else {
+                vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
+                vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_L), left);
             }
-            
-            vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_R), right);
-            vrmBlendShapeProxy.AccumulateValue(new BlendShapeKey(BlendShapePreset.Blink_L), left);
         }
     }
 
