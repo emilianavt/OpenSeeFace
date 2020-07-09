@@ -89,6 +89,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public bool lipSync = true;
     [Tooltip("When enabled, camera based mouth tracking will be used when no viseme is detected.")]
     public bool hybridLipSync = false;
+    [Tooltip("When enabled, viseme size will not depend on the OVR Lip Sync weight.")]
+    public bool maximizeLipSync = false;
     [Tooltip("This is the mouth tracking smoothing factor, with 0 being no smoothing and 1 being a fixed mouth.")]
     [Range(0, 1)]
     public float mouthSmoothing = 0.6f;
@@ -273,7 +275,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (hybridLipSync && Time.time - startedSilVisemes < silVisemeHybridThreshold)
                 ApplyMouthShape(true);
         }
-        weight = Mathf.Clamp(weight * 1.5f, 0f, 1f);
+        if (!maximizeLipSync)
+            weight = Mathf.Clamp(weight * 1.5f, 0f, 1f);
+        else
+            weight = 1f;
         float[] values = catsData[current];
         for (int i = 0; i < 5; i++) {
             lastVisemeValues[i] = values[i] * weight * (1f - visemeSmoothing) + lastVisemeValues[i] * visemeSmoothing;
