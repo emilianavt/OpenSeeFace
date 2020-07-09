@@ -45,6 +45,10 @@ public class OpenSeeLauncher : MonoBehaviour {
     public string modelPath = "models\\";
     [Tooltip("Additional options that should be passed to the face tracker.")]
     public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "4" });
+    [Tooltip("When disabled, OpenCV will be used to read out the camera.")]
+    public bool useEscapi = true;
+    [Tooltip("If set to be greater than -1, camera indices greater or equal this value will use OpenCV.")]
+    public int implicitUseOpenCV = -1;
     [Tooltip("IL2CPP doesn't support Proocess.Start. When this is enabled, OpenSeeLauncher will create the tracking process by calling the necessary API functions directly through the DLLs. In this case, reading the standard output from the process will not be supported and it will instead be send to the logfiles set in pinvokeStdOut and pinvokeStdErr in the persistent data directory. It will also retrieve the camera list directly through the escapi DLLs, so make sure it is part of your Unity project.")]
     public bool usePinvoke = false;
     [Tooltip("When this is enabled, even if usePinvoke is disabled, the camera list will be retrieved through escapi DLLs directly, which can be faster. Make sure the DLLs are in your Unity project.")]
@@ -213,6 +217,13 @@ public class OpenSeeLauncher : MonoBehaviour {
         arguments.Add(openSeeTarget.listenPort.ToString());
         arguments.Add("--model-dir");
         arguments.Add(modelPath);
+        
+        arguments.Add("--use-escapi");
+        if (useEscapi && (implicitUseOpenCV < 0 || cameraIndex < implicitUseOpenCV))
+            arguments.Add("1");
+        else
+            arguments.Add("0");
+        
         arguments.Add("--capture");
         if (videoPath != "" && File.Exists(videoPath))
             arguments.Add(videoPath);
