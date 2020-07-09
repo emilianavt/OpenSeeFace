@@ -10,7 +10,10 @@ def list_cameras():
 
 class VideoReader():
     def __init__(self, capture):
-        self.cap = cv2.VideoCapture(capture)
+        if os.name == 'nt':
+            self.cap = cv2.VideoCapture(capture, cv2.CAP_DSHOW)
+        else:
+            self.cap = cv2.VideoCapture(capture)
         if self.cap is None:
             print("The video source cannot be opened")
             sys.exit(0)
@@ -87,6 +90,12 @@ class RawReader:
     def close(self):
         self.open = False
 
+def try_int(s):
+    try:
+        return int(s)
+    except:
+        return None
+
 class InputReader():
     def __init__(self, capture, raw_rgb, width, height, fps, use_escapi=False):
         self.reader = None
@@ -95,7 +104,7 @@ class InputReader():
                 self.reader = RawReader(width, height)
             elif os.path.exists(capture):
                 self.reader = VideoReader(capture)
-            elif capture == str(int(capture)):
+            elif capture == str(try_int(capture)):
                 self.reader = CameraReader(int(capture), width, height, fps, use_escapi=use_escapi)
         except Exception as e:
             print("Error: " + str(e))
