@@ -37,6 +37,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     public float outlierThresholdDistance = 2f;
     [Tooltip("This sets the number of seconds for which distance outliers are ignored before being accepted. Once this period elapses, automatic recalibration is triggered. Setting this to zero will disable outlier skipping.")]
     public float outlierSkipPeriodDistance = 0.4f;
+    [Tooltip("If set to true, persistent positional outliers will cause automatic recalibration.")]
+    public bool outlierRecalibrate = false;
     [Tooltip("If set to true, recalibration caused by positional outliers will keep the current position and rotation of the head.")]
     public bool outlierKeepOffset = false;
     [Header("Information")]
@@ -162,9 +164,11 @@ public class OpenSeeIKTarget : MonoBehaviour
                     if (Time.time > skipStartTimePosition + outlierSkipPeriodDistance) {
                         lastAcceptedPosition = t;
                         skippedPosition = false;
-                        calibrate = true;
-                        keepOffset = outlierKeepOffset;
-                        outlierCalibrations += 1;
+                        if (outlierRecalibrate) {
+                            calibrate = true;
+                            keepOffset = outlierKeepOffset;
+                            outlierCalibrations += 1;
+                        }
                     }
                 }
             } else {
