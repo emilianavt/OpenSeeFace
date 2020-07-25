@@ -37,6 +37,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     public float outlierThresholdDistance = 2f;
     [Tooltip("This sets the number of seconds for which distance outliers are ignored before being accepted. Once this period elapses, automatic recalibration is triggered. Setting this to zero will disable outlier skipping.")]
     public float outlierSkipPeriodDistance = 0.4f;
+    [Tooltip("If set to true, recalibration caused by positional outliers will keep the current position and rotation of the head.")]
+    public bool outlierKeepOffset = false;
     [Header("Information")]
     [Tooltip("This is the number of received tracking frames.")]
     public int trackingFrames = 0;
@@ -147,7 +149,7 @@ public class OpenSeeIKTarget : MonoBehaviour
         }
         
         // Check for positional outliers
-        bool keep_offset = false;
+        bool keepOffset = false;
         if (gotAcceptedPosition) {
             float distance = Vector3.Distance(t, lastAcceptedPosition);
             if (distance > outlierThresholdDistance) {
@@ -161,7 +163,7 @@ public class OpenSeeIKTarget : MonoBehaviour
                         lastAcceptedPosition = t;
                         skippedPosition = false;
                         calibrate = true;
-                        keep_offset = true;
+                        keepOffset = outlierKeepOffset;
                         outlierCalibrations += 1;
                     }
                 }
@@ -194,7 +196,7 @@ public class OpenSeeIKTarget : MonoBehaviour
             dT = MirrorTranslation(dT);
             lastMirror = mirrorMotion;
         }
-        if (calibrate && keep_offset) {
+        if (calibrate && keepOffset) {
             dR = Quaternion.Inverse(Quaternion.Inverse(transform.localRotation) * Quaternion.Inverse(dR));
             dT -= transform.localPosition;
         }
