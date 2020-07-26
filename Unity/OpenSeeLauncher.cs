@@ -45,6 +45,8 @@ public class OpenSeeLauncher : MonoBehaviour {
     public string modelPath = "models\\";
     [Tooltip("Additional options that should be passed to the face tracker.")]
     public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "4" });
+    [Tooltip("This string will be appended at the end of the tracker options without quoting.")]
+    public string extraOptions = "";
     [Tooltip("When disabled, OpenCV will be used to read out the camera.")]
     public bool useEscapi = true;
     [Tooltip("If set to be greater than -1, camera indices greater or equal this value will use OpenCV.")]
@@ -233,6 +235,8 @@ public class OpenSeeLauncher : MonoBehaviour {
             arguments.Add(argument);
         }
         string argumentString = EscapeArguments(arguments.ToArray());
+        if (extraOptions != "")
+            argumentString = argumentString + " " + extraOptions;
 
         StopTracker();
 
