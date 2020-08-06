@@ -13,17 +13,29 @@ namespace OpenSee {
 
 public class OpenSeeLauncher : MonoBehaviour {
     #region DllImport
-    [DllImport("escapi_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "countCaptureDevices")]
-	private static extern int countCaptureDevices_x64();
+    [DllImport("dshowcapture_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "create_capture")]
+	private static extern System.IntPtr create_capture_x64();
 
-	[DllImport("escapi_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "getCaptureDeviceName")]
-	private static extern void getCaptureDeviceName_x64(int deviceno, [Out] StringBuilder namebuffer, int bufferlength);
+    [DllImport("dshowcapture_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "get_devices")]
+	private static extern int get_devices_x64(System.IntPtr cap);
 
-    [DllImport("escapi_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "countCaptureDevices")]
-	private static extern int countCaptureDevices_x86();
+	[DllImport("dshowcapture_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "get_device")]
+	private static extern void get_device_x64(System.IntPtr cap, int deviceno, [Out] StringBuilder namebuffer, int bufferlength);
 
-	[DllImport("escapi_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "getCaptureDeviceName")]
-	private static extern void getCaptureDeviceName_x86(int deviceno, [Out] StringBuilder namebuffer, int bufferlength);
+    [DllImport("dshowcapture_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "destroy_capture")]
+	private static extern void destroy_capture_x64(System.IntPtr cap);
+
+    [DllImport("dshowcapture_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "create_capture")]
+	private static extern System.IntPtr create_capture_x86();
+
+    [DllImport("dshowcapture_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "get_devices")]
+	private static extern int get_devices_x86(System.IntPtr cap);
+
+	[DllImport("dshowcapture_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "get_device")]
+	private static extern void get_device_x86(System.IntPtr cap, int deviceno, [Out] StringBuilder namebuffer, int bufferlength);
+
+    [DllImport("dshowcapture_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "destroy_capture")]
+	private static extern void destroy_capture_x86(System.IntPtr cap);
     #endregion
     
     [Header("Settings")]
@@ -47,13 +59,9 @@ public class OpenSeeLauncher : MonoBehaviour {
     public List<string> commandlineOptions = new List<string>(new string[] { "--silent", "1", "--max-threads", "4" });
     [Tooltip("This string will be appended at the end of the tracker options without quoting.")]
     public string extraOptions = "";
-    [Tooltip("When disabled, OpenCV will be used to read out the camera.")]
-    public bool useEscapi = true;
-    [Tooltip("If set to be greater than -1, camera indices greater or equal this value will use OpenCV.")]
-    public int implicitUseOpenCV = -1;
-    [Tooltip("IL2CPP doesn't support Proocess.Start. When this is enabled, OpenSeeLauncher will create the tracking process by calling the necessary API functions directly through the DLLs. In this case, reading the standard output from the process will not be supported and it will instead be send to the logfiles set in pinvokeStdOut and pinvokeStdErr in the persistent data directory. It will also retrieve the camera list directly through the escapi DLLs, so make sure it is part of your Unity project.")]
+    [Tooltip("IL2CPP doesn't support Proocess.Start. When this is enabled, OpenSeeLauncher will create the tracking process by calling the necessary API functions directly through the DLLs. In this case, reading the standard output from the process will not be supported and it will instead be send to the logfiles set in pinvokeStdOut and pinvokeStdErr in the persistent data directory. It will also retrieve the camera list directly through the libdshowcapture DLLs, so make sure it is part of your Unity project.")]
     public bool usePinvoke = false;
-    [Tooltip("When this is enabled, even if usePinvoke is disabled, the camera list will be retrieved through escapi DLLs directly, which can be faster. Make sure the DLLs are in your Unity project.")]
+    [Tooltip("When this is enabled, even if usePinvoke is disabled, the camera list will be retrieved through libdshowcapture DLLs directly, which can be faster. Make sure the DLLs are in your Unity project.")]
     public bool usePinvokeListCameras = false;
     [Tooltip("This is the standard output log file's name in the persistent data directory.")]
     public string pinvokeStdOut = "output.txt";
@@ -117,34 +125,38 @@ public class OpenSeeLauncher : MonoBehaviour {
         return true;
     }
     
-    private string[] EscapiListCameras_x64() {
+    private string[] ListCameras_x64() {
 		List<string> cameras = new List<string>();
-		int count = countCaptureDevices_x64();
+        System.IntPtr cap = create_capture_x64();
+		int count = get_devices_x64(cap);
 		for (int i = 0; i < count; i++) {
 			StringBuilder namebuffer = new StringBuilder(2048);
-			getCaptureDeviceName_x64(i, namebuffer, 2048);
+			get_device_x64(cap, i, namebuffer, 2048);
 			cameras.Add(namebuffer.ToString());
 		}
+        destroy_capture_x64(cap);
 		return cameras.ToArray();
     }
     
-    private string[] EscapiListCameras_x86() {
+    private string[] ListCameras_x86() {
 		List<string> cameras = new List<string>();
-		int count = countCaptureDevices_x86();
+        System.IntPtr cap = create_capture_x86();
+		int count = get_devices_x86(cap);
 		for (int i = 0; i < count; i++) {
 			StringBuilder namebuffer = new StringBuilder(2048);
-			getCaptureDeviceName_x86(i, namebuffer, 2048);
+			get_device_x86(cap, i, namebuffer, 2048);
 			cameras.Add(namebuffer.ToString());
 		}
+        destroy_capture_x86(cap);
 		return cameras.ToArray();
     }
     
     public string[] ListCameras() {
         if (usePinvoke || usePinvokeListCameras) {
             if (Environment.Is64BitProcess)
-                return EscapiListCameras_x64();
+                return ListCameras_x64();
             else
-                return EscapiListCameras_x86();
+                return ListCameras_x86();
         }
         
         if (!CheckSetup(false))
@@ -219,12 +231,6 @@ public class OpenSeeLauncher : MonoBehaviour {
         arguments.Add(openSeeTarget.listenPort.ToString());
         arguments.Add("--model-dir");
         arguments.Add(modelPath);
-        
-        arguments.Add("--use-escapi");
-        if (useEscapi && (implicitUseOpenCV < 0 || cameraIndex < implicitUseOpenCV))
-            arguments.Add("1");
-        else
-            arguments.Add("0");
         
         arguments.Add("--capture");
         if (videoPath != "" && File.Exists(videoPath))

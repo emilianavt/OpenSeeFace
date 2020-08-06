@@ -36,23 +36,24 @@ parser.add_argument("--face-id-offset", type=int, help="When set, this offset is
 parser.add_argument("--repeat-video", type=int, help="When set to 1 and a video file was specified with -c, the tracker will loop the video until interrupted", default=0)
 parser.add_argument("--dump-points", type=str, help="When set to a filename, the current face 3D points are made symmetric and dumped to the given file when quitting the visualization with the \"q\" key", default="")
 if os.name == 'nt':
-    parser.add_argument("--use-escapi", type=int, help="When set to 1, escapi will be used for video input instead of OpenCV", default=1)
+    parser.add_argument("--use-dshowcapture", type=int, help="When set to 1, libdshowcapture will be used for video input instead of OpenCV", default=1)
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
 if os.name == 'nt' and args.list_cameras > 0:
-    import escapi
-    escapi.init()
-    camera_count = escapi.count_capture_devices()
+    import dshowcapture
+    cap = dshowcapture.DShowCapture()
+    camera_count = cap.get_devices()
     if args.list_cameras == 1:
         print("Available cameras:")
     for i in range(camera_count):
-        camera_name = escapi.device_name(i).decode()
+        camera_name = cap.get_device(i)
         if args.list_cameras == 1:
             print(f"{i}: {camera_name}")
         else:
             print(camera_name)
+    cap.destroy_capture()
     sys.exit(0)
 
 import numpy as np
@@ -60,7 +61,7 @@ import time
 import cv2
 import socket
 import struct
-from input_reader import InputReader, VideoReader, list_cameras
+from input_reader import InputReader, VideoReader
 from tracker import Tracker
 
 target_ip = args.ip
@@ -72,10 +73,10 @@ if args.faces >= 40:
 fps = 0
 if os.name == 'nt':
     fps = args.fps
-    use_escapi_flag = True if args.use_escapi == 1 else False
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=use_escapi_flag)
+    use_dshowcapture_flag = True if args.use_dshowcapture == 1 else False
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
 else:
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_escapi=False)
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=False)
 if type(input_reader.reader) == VideoReader:
     fps = 0
 
