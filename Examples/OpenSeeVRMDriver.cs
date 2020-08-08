@@ -1203,7 +1203,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         freq = maxFreq;
 
         lastMic = mic;
-        Microphone.GetDeviceCaps(lastMic, out minFreq, out maxFreq);
+        try { Microphone.GetDeviceCaps(lastMic, out minFreq, out maxFreq); } catch (Exception e) { Debug.LogError("Failed to get device capabilities: " + e); }
         if (maxFreq > 0)
             freq = maxFreq;
 
@@ -1218,7 +1218,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             inited = true;
         }
 
-        clip = Microphone.Start(lastMic, true, 1, freq);
+        try { clip = Microphone.Start(lastMic, true, 1, freq); } catch (Exception e) { Debug.LogError("Failed to start microphone: " + e); lipSync = false;}
         channels = clip.channels;
         partialAudio = new float[1024 * channels];
         lastPos = 0;
