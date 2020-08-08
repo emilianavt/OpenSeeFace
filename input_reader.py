@@ -124,16 +124,20 @@ def try_int(s):
         return None
 
 def test_reader(reader):
+    got_any = False
     try:
         for i in range(30):
             if not reader.is_ready():
                 time.sleep(0.02)
             ret, frame = reader.read()
             if not ret:
-                print("Not ret")
-                return False
+                time.sleep(0.02)
+                print("No frame")
+            else:
+                print("Got frame")
+                got_any = True
         if reader.is_open():
-            return True
+            return got_any
         print("Fail")
         return False
     except:
