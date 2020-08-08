@@ -1203,8 +1203,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         freq = maxFreq;
 
         lastMic = mic;
-        if (mic != null)
-            Microphone.GetDeviceCaps(lastMic, out minFreq, out maxFreq);
+        Microphone.GetDeviceCaps(lastMic, out minFreq, out maxFreq);
         if (maxFreq > 0)
             freq = maxFreq;
 
