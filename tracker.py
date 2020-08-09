@@ -110,6 +110,10 @@ def logit(p, factor=16.0):
     p = p/(1-p)
     return float(np.log(p)) / float(factor)
 
+def logit_arr(p, factor=16.0):
+    p = np.clip(p, 0.0000001, 0.9999999)
+    return np.log(p / (1 - p)) / float(factor)
+
 def matrix_to_quaternion(m):
     t = 0.0
     q = [0.0, 0.0, 0, 0.0]
@@ -613,8 +617,19 @@ class Tracker():
         self.scan_every = scan_every
         self.bbox_growth = bbox_growth
         self.silent = silent
+
         self.res = 224.
+        if model_type < 0:
+            self.res = 56.
         self.res_i = int(self.res)
+        self.out_res = 27.
+        if model_type < 0:
+            self.out_res = 13.
+        self.out_res_i = int(self.out_res) + 1
+        self.logit_factor = 16.
+        if model_type < 0:
+            self.logit_factor = 8.
+
         self.no_gaze = no_gaze
         self.debug_gaze = False
         self.max_feature_updates = max_feature_updates
@@ -651,22 +666,19 @@ class Tracker():
     def landmarks(self, tensor, crop_info):
         crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
         avg_conf = 0
-        lms = []
         res = self.res - 1
-        for i in range(0, 66):
-            m = int(tensor[i].argmax())
-            x = m // 28
-            y = m % 28
-            conf = float(tensor[i][x,y])
-            avg_conf = avg_conf + conf
-            off_x = res * ((1. * logit(tensor[66 + i][x, y])) - 0.0)
-            off_y = res * ((1. * logit(tensor[66 * 2 + i][x, y])) - 0.0)
-            off_x = math.floor(off_x + 0.5)
-            off_y = math.floor(off_y + 0.5)
-            lm_x = crop_y1 + scale_y * (res * (float(x) / 27.) + off_x)
-            lm_y = crop_x1 + scale_x * (res * (float(y) / 27.) + off_y)
-            lms.append((lm_x,lm_y,conf))
-        avg_conf = avg_conf / 66.
+        t_main = tensor[0:66].reshape((66,self.out_res_i * self.out_res_i))
+        t_m = t_main.argmax(1)
+        indices = np.expand_dims(t_m, 1)
+        t_conf = np.take_along_axis(t_main, indices, 1).reshape((66,))
+        t_off_x = np.take_along_axis(tensor[66:132].reshape((66,self.out_res_i * self.out_res_i)), indices, 1).reshape((66,))
+        t_off_y = np.take_along_axis(tensor[132:198].reshape((66,self.out_res_i * self.out_res_i)), indices, 1).reshape((66,))
+        t_off_x = np.floor(res * logit_arr(t_off_x, self.logit_factor) + 0.5)
+        t_off_y = np.floor(res * logit_arr(t_off_y, self.logit_factor) + 0.5)
+        t_x = crop_y1 + scale_y * (res * np.floor(t_m / self.out_res_i) / self.out_res + t_off_x)
+        t_y = crop_x1 + scale_x * (res * np.floor(np.mod(t_m, self.out_res_i)) / self.out_res + t_off_y)
+        avg_conf = np.average(t_conf)
+        lms = np.stack([t_x, t_y, t_conf], 1)
         return (avg_conf, np.array(lms))
 
     def estimate_depth(self, face_info):
