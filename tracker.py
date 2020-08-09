@@ -614,8 +614,19 @@ class Tracker():
         self.scan_every = scan_every
         self.bbox_growth = bbox_growth
         self.silent = silent
+
         self.res = 224.
+        if model_type < 0:
+            self.res = 56.
         self.res_i = int(self.res)
+        self.out_res = 27.
+        if model_type < 0:
+            self.out_res = 13.
+        self.out_res_i = int(self.out_res) + 1
+        self.logit_factor = 16.
+        if model_type < 0:
+            self.logit_factor = 8.
+
         self.no_gaze = no_gaze
         self.debug_gaze = False
         self.max_feature_updates = max_feature_updates
@@ -676,7 +687,17 @@ class Tracker():
 
         rmat, _ = cv2.Rodrigues(rotation)
         inverse_rotation = np.linalg.inv(rmat)
-        pnp_error = 0.0
+        t_reference = face_info.face_3d.dot(rmat.transpose())
+        t_reference = t_reference + face_info.translation
+        t_reference = t_reference.dot(self.camera.transpose())
+        t_depth = t_reference[:, 2]
+        t_depth[t_depth == 0] = 0.000001
+        t_depth_e = np.expand_dims(t_depth[:],1)
+        t_reference = t_reference[:] / t_depth_e
+        pts_3d[0:66] = np.stack([lms[0:66,0], lms[0:66,1], np.ones((66,))], 1) * t_depth_e[0:66]
+        pts_3d[0:66] = (pts_3d[0:66].dot(self.inverse_camera.transpose()) - face_info.translation).dot(inverse_rotation.transpose())
+        pnp_error = np.power(lms[0:17,0:2] - t_reference[0:17,0:2], 2).sum()
+        pnp_error += np.power(lms[30,0:2] - t_reference[30,0:2], 2).sum()
         for i, pt in enumerate(face_info.face_3d):
             if i == 68:
                 # Right eyeball
@@ -705,20 +726,16 @@ class Tracker():
                 d2 = np.linalg.norm(lms[i,0:2] - lms[45,0:2])
                 d = d1 + d2
                 pt = (pts_3d[42] * d1 + pts_3d[45] * d2) / d
-            reference = rmat.dot(pt)
-            reference = reference + face_info.translation
-            reference = self.camera.dot(reference)
-            depth = reference[2]
-            if i < 17 or i == 30:
-                reference = reference / depth
-                e1 = lms[i][0] - reference[0]
-                e2 = lms[i][1] - reference[1]
-                pnp_error += e1*e1 + e2*e2
-            pt_3d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
-            pt_3d = self.inverse_camera.dot(pt_3d)
-            pt_3d = pt_3d - face_info.translation
-            pt_3d = inverse_rotation.dot(pt_3d)
-            pts_3d[i,:] = pt_3d[:]
+            if i == 66 or i == 67:
+                reference = rmat.dot(pt)
+                reference = reference + face_info.translation
+                reference = self.camera.dot(reference)
+                depth = reference[2]
+                pt_3d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
+                pt_3d = self.inverse_camera.dot(pt_3d)
+                pt_3d = pt_3d - face_info.translation
+                pt_3d = inverse_rotation.dot(pt_3d)
+                pts_3d[i,:] = pt_3d[:]
 
         pnp_error = np.sqrt(pnp_error / (2.0 * image_pts.shape[0]))
         if pnp_error > 300:
