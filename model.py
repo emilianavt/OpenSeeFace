@@ -158,6 +158,19 @@ class OpenSeeFaceLandmarks(geffnet.mobilenetv3.MobileNetV3):
         x = self.up1(x, r3)
         x = self.up2(x, r2)
         x = self.group(x)
+
+        t_main = x[0:66].reshape((66, 28*28))
+        t_m = t_main.argmax(dim=1)
+        indices = t_m.unsqueeze(1)
+        t_conf = t_main.gather(1, indices).squeeze(1)
+        t_off_x = x[66:132].reshape((66, 28*28)).gather(1, indices).squeeze(1)
+        t_off_y = x[132:198].reshape((66, 28*28)).gather(1, indices).squeeze(1)
+        t_off_x = (223. * logit_arr(t_off_x) + 0.5).floor()
+        t_off_y = (223. * logit_arr(t_off_y) + 0.5).floor()
+        t_x = 223. * (t_m / 28.).floor() / 27. + t_off_x
+        t_y = 223. * t_m.remainder(28.).float() / 27. + t_off_y
+        x = (t_conf.mean(), torch.stack([t_x, t_y, t_conf], 1))
+
         return x
     def forward(self, x):
         return self._forward_impl(x)
