@@ -128,7 +128,7 @@ class OpenSeeFaceDetect(geffnet.mobilenetv3.MobileNetV3):
 # 2: "large", 0.75
 # 3: "large", 1.0
 class OpenSeeFaceLandmarks(geffnet.mobilenetv3.MobileNetV3):
-    def __init__(self, size="large", channel_multiplier=1.0):
+    def __init__(self, size="large", channel_multiplier=1.0, inference=False):
         kwargs = geffnet.mobilenetv3._gen_mobilenet_v3([size], channel_multiplier=channel_multiplier)
         super(OpenSeeFaceLandmarks, self).__init__(**kwargs)
         if size == "large":
@@ -143,6 +143,7 @@ class OpenSeeFaceLandmarks(geffnet.mobilenetv3.MobileNetV3):
             self.group = DSConv2d(198 * 1, 198, kernels_per_layer=4, groups=3)
             self.r2_i = 1
             self.r3_i = 2
+        self.inference = inference
     def _forward_impl(self, x):
         x = self.conv_stem(x)
         x = self.bn1(x)
@@ -159,17 +160,18 @@ class OpenSeeFaceLandmarks(geffnet.mobilenetv3.MobileNetV3):
         x = self.up2(x, r2)
         x = self.group(x)
 
-        t_main = x[0:66].reshape((66, 28*28))
-        t_m = t_main.argmax(dim=1)
-        indices = t_m.unsqueeze(1)
-        t_conf = t_main.gather(1, indices).squeeze(1)
-        t_off_x = x[66:132].reshape((66, 28*28)).gather(1, indices).squeeze(1)
-        t_off_y = x[132:198].reshape((66, 28*28)).gather(1, indices).squeeze(1)
-        t_off_x = (223. * logit_arr(t_off_x) + 0.5).floor()
-        t_off_y = (223. * logit_arr(t_off_y) + 0.5).floor()
-        t_x = 223. * (t_m / 28.).floor() / 27. + t_off_x
-        t_y = 223. * t_m.remainder(28.).float() / 27. + t_off_y
-        x = (t_conf.mean(), torch.stack([t_x, t_y, t_conf], 1))
+        if self.inference:
+            t_main = x[0:66].reshape((66, 28*28))
+            t_m = t_main.argmax(dim=1)
+            indices = t_m.unsqueeze(1)
+            t_conf = t_main.gather(1, indices).squeeze(1)
+            t_off_x = x[66:132].reshape((66, 28*28)).gather(1, indices).squeeze(1)
+            t_off_y = x[132:198].reshape((66, 28*28)).gather(1, indices).squeeze(1)
+            t_off_x = (223. * logit_arr(t_off_x) + 0.5).floor()
+            t_off_y = (223. * logit_arr(t_off_y) + 0.5).floor()
+            t_x = 223. * (t_m / 28.).floor() / 27. + t_off_x
+            t_y = 223. * t_m.remainder(28.).float() / 27. + t_off_y
+            x = (t_conf.mean(), torch.stack([t_x, t_y, t_conf], 1))
 
         return x
     def forward(self, x):
