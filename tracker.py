@@ -699,44 +699,44 @@ class Tracker():
         pts_3d[0:66] = (pts_3d[0:66].dot(self.inverse_camera.transpose()) - face_info.translation).dot(inverse_rotation.transpose())
         pnp_error = np.power(lms[0:17,0:2] - t_reference[0:17,0:2], 2).sum()
         pnp_error += np.power(lms[30,0:2] - t_reference[30,0:2], 2).sum()
-        for i, pt in enumerate(face_info.face_3d):
-            if i == 68:
+        for i, pt in enumerate(face_info.face_3d[66:70]):
+            if i == 2:
                 # Right eyeball
                 # Eyeballs have an average diameter of 12.5mm and and the distance between eye corners is 30-35mm, so a conversion factor of 0.385 can be applied
                 eye_center = (pts_3d[36] + pts_3d[39]) / 2.0
                 d_corner = np.linalg.norm(pts_3d[36] - pts_3d[39])
                 depth = 0.385 * d_corner
                 pt_3d = np.array([eye_center[0], eye_center[1], eye_center[2] - depth])
-                pts_3d[i] = pt_3d
+                pts_3d[68] = pt_3d
                 continue
-            if i == 69:
+            if i == 3:
                 # Left eyeball
                 eye_center = (pts_3d[42] + pts_3d[45]) / 2.0
                 d_corner = np.linalg.norm(pts_3d[42] - pts_3d[45])
                 depth = 0.385 * d_corner
                 pt_3d = np.array([eye_center[0], eye_center[1], eye_center[2] - depth])
-                pts_3d[i] = pt_3d
+                pts_3d[69] = pt_3d
                 continue
-            if i == 66:
-                d1 = np.linalg.norm(lms[i,0:2] - lms[36,0:2])
-                d2 = np.linalg.norm(lms[i,0:2] - lms[39,0:2])
+            if i == 0:
+                d1 = np.linalg.norm(lms[66,0:2] - lms[36,0:2])
+                d2 = np.linalg.norm(lms[66,0:2] - lms[39,0:2])
                 d = d1 + d2
                 pt = (pts_3d[36] * d1 + pts_3d[39] * d2) / d
-            if i == 67:
-                d1 = np.linalg.norm(lms[i,0:2] - lms[42,0:2])
-                d2 = np.linalg.norm(lms[i,0:2] - lms[45,0:2])
+            if i == 1:
+                d1 = np.linalg.norm(lms[67,0:2] - lms[42,0:2])
+                d2 = np.linalg.norm(lms[67,0:2] - lms[45,0:2])
                 d = d1 + d2
                 pt = (pts_3d[42] * d1 + pts_3d[45] * d2) / d
-            if i == 66 or i == 67:
+            if i < 2:
                 reference = rmat.dot(pt)
                 reference = reference + face_info.translation
                 reference = self.camera.dot(reference)
                 depth = reference[2]
-                pt_3d = np.array([lms[i][0] * depth, lms[i][1] * depth, depth], np.float32)
+                pt_3d = np.array([lms[66+i][0] * depth, lms[66+i][1] * depth, depth], np.float32)
                 pt_3d = self.inverse_camera.dot(pt_3d)
                 pt_3d = pt_3d - face_info.translation
                 pt_3d = inverse_rotation.dot(pt_3d)
-                pts_3d[i,:] = pt_3d[:]
+                pts_3d[66+i,:] = pt_3d[:]
 
         pnp_error = np.sqrt(pnp_error / (2.0 * image_pts.shape[0]))
         if pnp_error > 300:
