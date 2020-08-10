@@ -7,6 +7,7 @@ import time
 import queue
 import threading
 import copy
+from skimage.transform import SimilarityTransform
 from retinaface import RetinaFaceDetector
 from remedian import remedian
 
@@ -783,19 +784,12 @@ class Tracker():
         return upper_left, lower_right, center, radius, c1, a
 
     def prepare_eye(self, frame, full_frame, lms, flip):
-        outer_pt = tuple(lms[0])
-        inner_pt = tuple(lms[1])
-        h, w, _ = frame.shape
-        (x1, y1), (x2, y2), center, radius, reference, a = self.corners_to_eye((outer_pt, inner_pt), w, h, flip)
-        im = rotate_image(frame[:, :, ::], a, reference)
-        im = im[int(y1):int(y2), int(x1):int(x2),:]
-        if np.prod(im.shape) < 1:
-            return None, None, None, None, None, None
+        transform = SimilarityTransform()
+        transform.estimate(lms, np.array([[0,16], [32,16]]))
+        M = transform.params[0:2, :]
+        im = cv2.warpAffine(frame, M, (32, 32), 0)
         if flip:
             im = cv2.flip(im, 1)
-        scale = np.array([(x2 - x1), (y2 - y1)]) / 32.
-        im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_LINEAR)
-        #im = self.equalize(im)
         if self.debug_gaze:
             if not flip:
                 full_frame[0:32, 0:32] = im
@@ -804,7 +798,7 @@ class Tracker():
         im = im.astype(np.float32)[:,:,::-1] / self.std - self.mean
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,2,1))
-        return im, x1, y1, scale, reference, a
+        return im, np.linalg.inv(transform.params)
 
     def extract_face(self, frame, lms):
         lms = np.array(lms)[:,0:2][:,::-1]
@@ -830,10 +824,10 @@ class Tracker():
         e_y = [0,0]
         scale = [0,0]
         reference = [None, None]
-        angles = [0, 0]
+        M_inv = [np.identity(3), np.identity(3)]
         face_frame, lms, offset = self.extract_face(frame, lms)
-        (right_eye, e_x[0], e_y[0], scale[0], reference[0], angles[0]) = self.prepare_eye(face_frame, frame, np.array([lms[36,0:2], lms[39,0:2]]), False)
-        (left_eye, e_x[1], e_y[1], scale[1], reference[1], angles[1]) = self.prepare_eye(face_frame, frame, np.array([lms[42,0:2], lms[45,0:2]]), True)
+        (right_eye, M_inv[0]) = self.prepare_eye(face_frame, frame, np.array([lms[36,0:2], lms[39,0:2]]), False)
+        (left_eye, M_inv[1]) = self.prepare_eye(face_frame, frame, np.array([lms[42,0:2], lms[45,0:2]]), True)
         if right_eye is None or left_eye is None:
             return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         both_eyes = np.concatenate((right_eye, left_eye))
@@ -874,13 +868,10 @@ class Tracker():
                     frame[int(eye_y+1), 32+int(eye_x+1)] = (0, 0, 255)
                     frame[int(eye_y), 32+int(eye_x+1)] = (0, 0, 255)
 
-            if i == 0:
-                eye_x = e_x[i] + scale[i][0] * eye_x
-            else:
-                eye_x = e_x[i] + scale[i][0] * (32. - eye_x)
-            eye_y = e_y[i] + scale[i][1] * eye_y
-            eye_x, eye_y = rotate(reference[i], (eye_x, eye_y), -angles[i])
+            if i == 1:
+                eye_x = 32. - eye_x
 
+            eye_x, eye_y, w = M_inv[i].dot(np.array([eye_x, eye_y, 1]))
             eye_x = eye_x + offset[0]
             eye_y = eye_y + offset[1]
             eye_state.append([open[i], eye_y, eye_x, conf])
