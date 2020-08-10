@@ -136,7 +136,10 @@ def worker_thread(session, frame, input, crop_info, queue, input_name, idx, trac
     lms = np.array(output[1]) * np.array([crop_info[3], crop_info[2], 1.]) + np.array([crop_info[1], crop_info[0], 0.])
     conf = output[0]
     if conf > tracker.threshold:
-        eye_state = tracker.get_eye_state(frame, lms, single=True)
+        try:
+            eye_state = tracker.get_eye_state(frame, lms, single=True)
+        except:
+            eye_state = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         queue.put((session, conf, (lms, eye_state), crop_info, idx))
     else:
         queue.put((session,))
@@ -992,7 +995,10 @@ class Tracker():
             lms = np.array(output[1]) * np.array([crop_info[0][3], crop_info[0][2], 1.]) + np.array([crop_info[0][1], crop_info[0][0], 0.])
             conf = output[0]
             if conf > self.threshold:
-                eye_state = self.get_eye_state(frame, lms)
+                try:
+                    eye_state = self.get_eye_state(frame, lms)
+                except:
+                    eye_state = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
                 outputs[crop_info[0]] = (conf, (lms, eye_state), 0)
         else:
             started = 0

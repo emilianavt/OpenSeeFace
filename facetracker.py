@@ -61,7 +61,7 @@ import time
 import cv2
 import socket
 import struct
-from input_reader import InputReader, VideoReader
+from input_reader import InputReader, VideoReader, try_int
 from tracker import Tracker
 
 target_ip = args.ip
@@ -71,12 +71,13 @@ if args.faces >= 40:
     print("Transmission of tracking data over network is not supported with 40 or more faces.")
 
 fps = 0
+use_dshowcapture_flag = False
 if os.name == 'nt':
     fps = args.fps
     use_dshowcapture_flag = True if args.use_dshowcapture == 1 else False
     input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
 else:
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=False)
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
 if type(input_reader.reader) == VideoReader:
     fps = 0
 
@@ -105,7 +106,10 @@ if args.log_data != "":
     log.write("\r\n")
     log.flush()
 
+is_camera = args.capture == str(try_int(args.capture))
+
 try:
+    attempt = 0
     frame_time = time.perf_counter()
     target_duration = 0
     if fps > 0:
@@ -114,12 +118,12 @@ try:
     need_reinit = 0
     while repeat or input_reader.is_open():
         if not input_reader.is_open() or need_reinit == 1:
-            input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps)
+            input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
             need_reinit = 2
-            time.sleep(0.001)
+            time.sleep(0.02)
             continue
         if not input_reader.is_ready():
-            time.sleep(0.001)
+            time.sleep(0.02)
             continue
 
         ret, frame = input_reader.read()
@@ -128,8 +132,19 @@ try:
                 if need_reinit == 0:
                     need_reinit = 1
                 continue
-            break
+            elif is_camera:
+                attempt += 1
+                if attempt > 30:
+                    break
+                else:
+                    time.sleep(0.02)
+                    if attempt == 3:
+                        need_reinit = 1
+                    continue
+            else:
+                break;
 
+        attempt = 0
         need_reinit = 0
         frame_count += 1
         now = time.time()
