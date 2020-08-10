@@ -7,7 +7,7 @@ import time
 import queue
 import threading
 import copy
-from skimage.transform import SimilarityTransform
+from similaritytransform import SimilarityTransform
 from retinaface import RetinaFaceDetector
 from remedian import remedian
 
