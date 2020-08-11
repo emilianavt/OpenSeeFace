@@ -2,6 +2,7 @@ import copy
 import os
 import sys
 import argparse
+import traceback
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data", default="127.0.0.1")
