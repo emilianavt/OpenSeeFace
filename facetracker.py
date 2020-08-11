@@ -116,6 +116,7 @@ try:
         target_duration = 1. / float(fps)
     repeat = args.repeat_video != 0 and type(input_reader.reader) == VideoReader
     need_reinit = 0
+    failures = 0
     source_name = input_reader.name
     while repeat or input_reader.is_open():
         if not input_reader.is_open() or need_reinit == 1:
@@ -161,170 +162,181 @@ try:
             if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), 24, (width,height))
 
-        inference_start = time.perf_counter()
-        faces = tracker.predict(frame)
-        if len(faces) > 0:
-            tracking_time += (time.perf_counter() - inference_start) / len(faces)
-            tracking_frames += 1
-        packet = bytearray()
-        detected = False
-        for face_num, f in enumerate(faces):
-            f = copy.copy(f)
-            f.id += args.face_id_offset
-            if f.eye_blink is None:
-                f.eye_blink = [1, 1]
-            right_state = "O" if f.eye_blink[0] > 0.30 else "-"
-            left_state = "O" if f.eye_blink[1] > 0.30 else "-"
-            if args.silent == 0:
-                print(f"Confidence[{f.id}]: {f.conf:.4f} / 3D fitting error: {f.pnp_error:.4f} / Eyes: {left_state}, {right_state}")
-            detected = True
-            if not f.success:
-                pts_3d = np.zeros((70, 3), np.float32)
-            packet.extend(bytearray(struct.pack("d", now)))
-            packet.extend(bytearray(struct.pack("i", f.id)))
-            packet.extend(bytearray(struct.pack("f", width)))
-            packet.extend(bytearray(struct.pack("f", height)))
-            packet.extend(bytearray(struct.pack("f", f.eye_blink[0])))
-            packet.extend(bytearray(struct.pack("f", f.eye_blink[1])))
-            packet.extend(bytearray(struct.pack("B", 1 if f.success else 0)))
-            packet.extend(bytearray(struct.pack("f", f.pnp_error)))
-            packet.extend(bytearray(struct.pack("f", f.quaternion[0])))
-            packet.extend(bytearray(struct.pack("f", f.quaternion[1])))
-            packet.extend(bytearray(struct.pack("f", f.quaternion[2])))
-            packet.extend(bytearray(struct.pack("f", f.quaternion[3])))
-            packet.extend(bytearray(struct.pack("f", f.euler[0])))
-            packet.extend(bytearray(struct.pack("f", f.euler[1])))
-            packet.extend(bytearray(struct.pack("f", f.euler[2])))
-            packet.extend(bytearray(struct.pack("f", f.translation[0])))
-            packet.extend(bytearray(struct.pack("f", f.translation[1])))
-            packet.extend(bytearray(struct.pack("f", f.translation[2])))
-            if not log is None:
-                log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{f.id},{f.eye_blink[0]},{f.eye_blink[1]},{f.conf},{f.success},{f.pnp_error},{f.quaternion[0]},{f.quaternion[1]},{f.quaternion[2]},{f.quaternion[3]},{f.euler[0]},{f.euler[1]},{f.euler[2]},{f.rotation[0]},{f.rotation[1]},{f.rotation[2]},{f.translation[0]},{f.translation[1]},{f.translation[2]}")
-            for (x,y,c) in f.lms:
-                packet.extend(bytearray(struct.pack("f", c)))
-            if args.visualize > 1:
-                frame = cv2.putText(frame, str(f.id), (int(f.bbox[0]), int(f.bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
-            if args.visualize > 2:
-                frame = cv2.putText(frame, f"{f.conf:.4f}", (int(f.bbox[0] + 18), int(f.bbox[1] - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
-            for pt_num, (x,y,c) in enumerate(f.lms):
-                packet.extend(bytearray(struct.pack("f", y)))
-                packet.extend(bytearray(struct.pack("f", x)))
+        try:
+            inference_start = time.perf_counter()
+            faces = tracker.predict(frame)
+            if len(faces) > 0:
+                tracking_time += (time.perf_counter() - inference_start) / len(faces)
+                tracking_frames += 1
+            packet = bytearray()
+            detected = False
+            for face_num, f in enumerate(faces):
+                f = copy.copy(f)
+                f.id += args.face_id_offset
+                if f.eye_blink is None:
+                    f.eye_blink = [1, 1]
+                right_state = "O" if f.eye_blink[0] > 0.30 else "-"
+                left_state = "O" if f.eye_blink[1] > 0.30 else "-"
+                if args.silent == 0:
+                    print(f"Confidence[{f.id}]: {f.conf:.4f} / 3D fitting error: {f.pnp_error:.4f} / Eyes: {left_state}, {right_state}")
+                detected = True
+                if not f.success:
+                    pts_3d = np.zeros((70, 3), np.float32)
+                packet.extend(bytearray(struct.pack("d", now)))
+                packet.extend(bytearray(struct.pack("i", f.id)))
+                packet.extend(bytearray(struct.pack("f", width)))
+                packet.extend(bytearray(struct.pack("f", height)))
+                packet.extend(bytearray(struct.pack("f", f.eye_blink[0])))
+                packet.extend(bytearray(struct.pack("f", f.eye_blink[1])))
+                packet.extend(bytearray(struct.pack("B", 1 if f.success else 0)))
+                packet.extend(bytearray(struct.pack("f", f.pnp_error)))
+                packet.extend(bytearray(struct.pack("f", f.quaternion[0])))
+                packet.extend(bytearray(struct.pack("f", f.quaternion[1])))
+                packet.extend(bytearray(struct.pack("f", f.quaternion[2])))
+                packet.extend(bytearray(struct.pack("f", f.quaternion[3])))
+                packet.extend(bytearray(struct.pack("f", f.euler[0])))
+                packet.extend(bytearray(struct.pack("f", f.euler[1])))
+                packet.extend(bytearray(struct.pack("f", f.euler[2])))
+                packet.extend(bytearray(struct.pack("f", f.translation[0])))
+                packet.extend(bytearray(struct.pack("f", f.translation[1])))
+                packet.extend(bytearray(struct.pack("f", f.translation[2])))
                 if not log is None:
-                    log.write(f",{y},{x},{c}")
-                if pt_num == 66 and f.eye_blink[0] < 0.30:
-                    continue
-                if pt_num == 67 and f.eye_blink[1] < 0.30:
-                    continue
-                x = int(x + 0.5)
-                y = int(y + 0.5)
-                if args.visualize != 0 or not out is None:
-                    if args.visualize > 3:
-                        frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
-                    color = (0, 0, 255)
-                    if pt_num >= 66:
-                        color = (255, 255, 0)
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = color
-                    x += 1
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = color
-                    y += 1
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = color
-                    x -= 1
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = color
-            if args.pnp_points != 0 and (args.visualize != 0 or not out is None) and f.rotation is not None:
-                if args.pnp_points > 1:
-                    projected = cv2.projectPoints(f.face_3d[0:66], f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
-                else:
-                    projected = cv2.projectPoints(f.contour, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
-                for [(x,y)] in projected[0]:
+                    log.write(f"{frame_count},{now},{width},{height},{args.fps},{face_num},{f.id},{f.eye_blink[0]},{f.eye_blink[1]},{f.conf},{f.success},{f.pnp_error},{f.quaternion[0]},{f.quaternion[1]},{f.quaternion[2]},{f.quaternion[3]},{f.euler[0]},{f.euler[1]},{f.euler[2]},{f.rotation[0]},{f.rotation[1]},{f.rotation[2]},{f.translation[0]},{f.translation[1]},{f.translation[2]}")
+                for (x,y,c) in f.lms:
+                    packet.extend(bytearray(struct.pack("f", c)))
+                if args.visualize > 1:
+                    frame = cv2.putText(frame, str(f.id), (int(f.bbox[0]), int(f.bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
+                if args.visualize > 2:
+                    frame = cv2.putText(frame, f"{f.conf:.4f}", (int(f.bbox[0] + 18), int(f.bbox[1] - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
+                for pt_num, (x,y,c) in enumerate(f.lms):
+                    packet.extend(bytearray(struct.pack("f", y)))
+                    packet.extend(bytearray(struct.pack("f", x)))
+                    if not log is None:
+                        log.write(f",{y},{x},{c}")
+                    if pt_num == 66 and f.eye_blink[0] < 0.30:
+                        continue
+                    if pt_num == 67 and f.eye_blink[1] < 0.30:
+                        continue
                     x = int(x + 0.5)
                     y = int(y + 0.5)
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 255, 255)
-                    x += 1
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 255, 255)
-                    y += 1
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 255, 255)
-                    x -= 1
-                    if not (x < 0 or y < 0 or x >= height or y >= width):
-                        frame[int(x), int(y)] = (0, 255, 255)
-            for (x,y,z) in f.pts_3d:
-                packet.extend(bytearray(struct.pack("f", x)))
-                packet.extend(bytearray(struct.pack("f", -y)))
-                packet.extend(bytearray(struct.pack("f", -z)))
+                    if args.visualize != 0 or not out is None:
+                        if args.visualize > 3:
+                            frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
+                        color = (0, 0, 255)
+                        if pt_num >= 66:
+                            color = (255, 255, 0)
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                        x += 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                        y += 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                        x -= 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                if args.pnp_points != 0 and (args.visualize != 0 or not out is None) and f.rotation is not None:
+                    if args.pnp_points > 1:
+                        projected = cv2.projectPoints(f.face_3d[0:66], f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
+                    else:
+                        projected = cv2.projectPoints(f.contour, f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
+                    for [(x,y)] in projected[0]:
+                        x = int(x + 0.5)
+                        y = int(y + 0.5)
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = (0, 255, 255)
+                        x += 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = (0, 255, 255)
+                        y += 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = (0, 255, 255)
+                        x -= 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = (0, 255, 255)
+                for (x,y,z) in f.pts_3d:
+                    packet.extend(bytearray(struct.pack("f", x)))
+                    packet.extend(bytearray(struct.pack("f", -y)))
+                    packet.extend(bytearray(struct.pack("f", -z)))
+                    if not log is None:
+                        log.write(f",{x},{-y},{-z}")
+                if f.current_features is None:
+                    f.current_features = {}
+                for feature in features:
+                    if not feature in f.current_features:
+                        f.current_features[feature] = 0
+                    packet.extend(bytearray(struct.pack("f", f.current_features[feature])))
+                    if not log is None:
+                        log.write(f",{f.current_features[feature]}")
                 if not log is None:
-                    log.write(f",{x},{-y},{-z}")
-            if f.current_features is None:
-                f.current_features = {}
-            for feature in features:
-                if not feature in f.current_features:
-                    f.current_features[feature] = 0
-                packet.extend(bytearray(struct.pack("f", f.current_features[feature])))
-                if not log is None:
-                    log.write(f",{f.current_features[feature]}")
-            if not log is None:
-                log.write("\r\n")
-                log.flush()
+                    log.write("\r\n")
+                    log.flush()
 
-        if detected and len(faces) < 40:
-            sock.sendto(packet, (target_ip, target_port))
+            if detected and len(faces) < 40:
+                sock.sendto(packet, (target_ip, target_port))
 
-        if not out is None:
-            out.write(frame)
+            if not out is None:
+                out.write(frame)
 
-        if args.visualize != 0:
-            cv2.imshow('OpenSeeFace Visualization', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                if args.dump_points != "" and not faces is None and len(faces) > 0:
-                    np.set_printoptions(threshold=sys.maxsize, precision=15)
-                    pairs = [
-                        (0, 16),
-                        (1, 15),
-                        (2, 14),
-                        (3, 13),
-                        (4, 12),
-                        (5, 11),
-                        (6, 10),
-                        (7, 9),
-                        (17, 26),
-                        (18, 25),
-                        (19, 24),
-                        (20, 23),
-                        (21, 22),
-                        (31, 35),
-                        (32, 34),
-                        (36, 45),
-                        (37, 44),
-                        (38, 43),
-                        (39, 42),
-                        (40, 47),
-                        (41, 46),
-                        (48, 52),
-                        (49, 51),
-                        (56, 54),
-                        (57, 53),
-                        (58, 62),
-                        (59, 61),
-                        (65, 63)
-                    ]
-                    points = copy.copy(faces[0].face_3d)
-                    for a, b in pairs:
-                        x = (points[a, 0] - points[b, 0]) / 2.0
-                        y = (points[a, 1] + points[b, 1]) / 2.0
-                        z = (points[a, 2] + points[b, 2]) / 2.0
-                        points[a, 0] = x
-                        points[b, 0] = -x
-                        points[[a, b], 1] = y
-                        points[[a, b], 2] = z
-                    points[[8, 27, 28, 29, 33, 50, 55, 60, 64], 0] = 0.0
-                    points[30, :] = 0.0
-                    with open(args.dump_points, "w") as fh:
-                        fh.write(repr(points))
+            if args.visualize != 0:
+                cv2.imshow('OpenSeeFace Visualization', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    if args.dump_points != "" and not faces is None and len(faces) > 0:
+                        np.set_printoptions(threshold=sys.maxsize, precision=15)
+                        pairs = [
+                            (0, 16),
+                            (1, 15),
+                            (2, 14),
+                            (3, 13),
+                            (4, 12),
+                            (5, 11),
+                            (6, 10),
+                            (7, 9),
+                            (17, 26),
+                            (18, 25),
+                            (19, 24),
+                            (20, 23),
+                            (21, 22),
+                            (31, 35),
+                            (32, 34),
+                            (36, 45),
+                            (37, 44),
+                            (38, 43),
+                            (39, 42),
+                            (40, 47),
+                            (41, 46),
+                            (48, 52),
+                            (49, 51),
+                            (56, 54),
+                            (57, 53),
+                            (58, 62),
+                            (59, 61),
+                            (65, 63)
+                        ]
+                        points = copy.copy(faces[0].face_3d)
+                        for a, b in pairs:
+                            x = (points[a, 0] - points[b, 0]) / 2.0
+                            y = (points[a, 1] + points[b, 1]) / 2.0
+                            z = (points[a, 2] + points[b, 2]) / 2.0
+                            points[a, 0] = x
+                            points[b, 0] = -x
+                            points[[a, b], 1] = y
+                            points[[a, b], 2] = z
+                        points[[8, 27, 28, 29, 33, 50, 55, 60, 64], 0] = 0.0
+                        points[30, :] = 0.0
+                        with open(args.dump_points, "w") as fh:
+                            fh.write(repr(points))
+                    break
+            failures = 0
+        except Exception as e:
+            if e.__class__ == KeyboardInterrupt:
+                if args.silent == 0:
+                    print("Quitting")
+                break
+            traceback.print_exc()
+            failures += 1
+            if failures > 30:
                 break
 
         duration = time.perf_counter() - frame_time
