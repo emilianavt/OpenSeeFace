@@ -62,6 +62,7 @@ class DShowCaptureReader(VideoReader):
         self.device.get_devices()
         self.name = self.device.get_device(capture)
         self.device.capture_device(capture, self.width, self.height, self.fps)
+        print(f"Camera: \"{self.name}\" Resolution: {self.device.get_width()}x{self.device.get_height()} Frame rate: {self.device.get_fps()} Colorspace: {self.device.get_colorspace()} Flipped: {self.device.get_flipped()}")
         self.timeout = 1000
     def is_open(self):
         return self.device.capturing()
