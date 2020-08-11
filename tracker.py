@@ -683,6 +683,7 @@ class Tracker():
         t_y = crop_x1 + scale_x * (res * np.floor(np.mod(t_m, self.out_res_i)) / self.out_res + t_off_y)
         avg_conf = np.average(t_conf)
         lms = np.stack([t_x, t_y, t_conf], 1)
+        lms[np.isnan(lms).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
         return (avg_conf, np.array(lms))
 
     def estimate_depth(self, face_info):
@@ -723,6 +724,8 @@ class Tracker():
         pts_3d[0:66] = (pts_3d[0:66].dot(self.inverse_camera.transpose()) - face_info.translation).dot(inverse_rotation.transpose())
         pnp_error = np.power(lms[0:17,0:2] - t_reference[0:17,0:2], 2).sum()
         pnp_error += np.power(lms[30,0:2] - t_reference[30,0:2], 2).sum()
+        if np.isnan(pnp_error):
+            pnp_error = 9999999.
         for i, pt in enumerate(face_info.face_3d[66:70]):
             if i == 2:
                 # Right eyeball
@@ -761,6 +764,7 @@ class Tracker():
                 pt_3d = pt_3d - face_info.translation
                 pt_3d = inverse_rotation.dot(pt_3d)
                 pts_3d[66+i,:] = pt_3d[:]
+        pts_3d[np.isnan(pts_3d).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
 
         pnp_error = np.sqrt(pnp_error / (2.0 * image_pts.shape[0]))
         if pnp_error > 300:
@@ -900,6 +904,8 @@ class Tracker():
             eye_y = eye_y + offset[1]
             eye_state.append([open[i], eye_y, eye_x, conf])
 
+        eye_state = np.array(eye_state)
+        eye_state[np.isnan(eye_state).any(axis=1)] = np.array([1.,0.,0.,0.], dtype=np.float32)
         return eye_state
 
     def assign_face_info(self, results):
@@ -1107,6 +1113,8 @@ class Tracker():
                         h += 2 * h * self.bbox_growth
                         faces.append((x,y,w,h))
                     self.faces = faces
+        self.faces = [x for x in self.faces if not np.isnan(np.array(x)).any()]
+        self.detected = len(self.faces)
 
         duration = (time.perf_counter() - start) * 1000
         if not self.silent:
