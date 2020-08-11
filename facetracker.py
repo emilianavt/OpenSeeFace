@@ -29,6 +29,7 @@ parser.add_argument("--no-3d-adapt", type=int, help="When set to 1, the 3D face 
 parser.add_argument("--video-out", help="Set this to the filename of an AVI file to save the tracking visualization as a video", default=None)
 parser.add_argument("--raw-rgb", type=int, help="When this is set, raw RGB frames of the size given with \"-W\" and \"-H\" are read from standard input instead of reading a video", default=0)
 parser.add_argument("--log-data", help="You can set a filename to which tracking data will be logged here", default="")
+parser.add_argument("--log-output", help="You can set a filename to console output will be logged here", default="")
 parser.add_argument("--model", type=int, help="This can be used to select the tracking model. Higher numbers are models with better tracking quality, but slower speed. Models 1 and 0 tend to be too rigid for expression and blink detection.", default=3, choices=[0, 1, 2, 3])
 parser.add_argument("--model-dir", help="This can be used to specify the path to the directory containing the .onnx model files", default=None)
 parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experimental blink detection and gaze tracking are enabled, which makes things slightly slower", default=1)
@@ -39,7 +40,26 @@ if os.name == 'nt':
     parser.add_argument("--use-dshowcapture", type=int, help="When set to 1, libdshowcapture will be used for video input instead of OpenCV", default=1)
 args = parser.parse_args()
 
-os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OMP_NUM_THREADS"] = str(args.max_threads)
+
+class OutputLog(object):
+    def __init__(self, fh, output):
+        self.fh = fh
+        self.output = output
+    def write(self, buf):
+        if not self.fh is None:
+            self.fh.write(buf)
+        self.output.write(buf)
+        self.flush()
+    def flush(self):
+        if not self.fh is None:
+            self.fh.flush()
+        self.output.flush()
+output_logfile = None
+if args.log_output != "":
+    output_logfile = open(args.log_output, "w")
+sys.stdout = OutputLog(output_logfile, sys.stdout)
+sys.stderr = OutputLog(output_logfile, sys.stderr)
 
 if os.name == 'nt' and args.list_cameras > 0:
     import dshowcapture
