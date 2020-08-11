@@ -116,9 +116,13 @@ try:
         target_duration = 1. / float(fps)
     repeat = args.repeat_video != 0 and type(input_reader.reader) == VideoReader
     need_reinit = 0
+    source_name = input_reader.name
     while repeat or input_reader.is_open():
         if not input_reader.is_open() or need_reinit == 1:
             input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
+            if input_reader.name != source_name:
+                print(f"Failed to reinitialize camera and got {input_reader.name} instead of {source_name}.")
+                sys.exit(1)
             need_reinit = 2
             time.sleep(0.02)
             continue

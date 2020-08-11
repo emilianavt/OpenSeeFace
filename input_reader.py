@@ -17,6 +17,7 @@ class VideoReader():
         if self.cap is None:
             print("The video source cannot be opened")
             sys.exit(0)
+        self.name = str(capture)
     def is_open(self):
         return self.cap.isOpened()
     def is_ready(self):
@@ -33,6 +34,8 @@ class EscapiReader(VideoReader):
         self.height = height
         self.fps = fps
         self.device = capture
+        escapi.count_capture_devices()
+        self.name = str(escapi.device_name(self.device).decode('utf8'))
         self.buffer = escapi.init_camera(self.device, self.width, self.height, self.fps)
         escapi.do_capture(self.device)
     def is_open(self):
@@ -57,7 +60,7 @@ class DShowCaptureReader(VideoReader):
         self.fps = fps
         self.device = dshowcapture.DShowCapture()
         self.device.get_devices()
-        self.device_name = self.device.get_device(capture)
+        self.name = self.device.get_device(capture)
         self.device.capture_device(capture, self.width, self.height, self.fps)
         self.timeout = 1000
     def is_open(self):
@@ -79,6 +82,7 @@ class OpenCVReader(VideoReader):
         self.width = width
         self.height = height
         self.fps = fps
+        self.name = str(capture)
         super(OpenCVReader, self).__init__(capture, camera=True)
         self.cap.set(3, width)
         self.cap.set(4, height)
@@ -124,7 +128,7 @@ def try_int(s):
         return None
 
 def test_reader(reader):
-    got_any = False
+    got_any = 0
     try:
         for i in range(30):
             if not reader.is_ready():
@@ -135,9 +139,11 @@ def test_reader(reader):
                 print("No frame")
             else:
                 print("Got frame")
-                got_any = True
+                got_any += 1
+                if got_any > 10:
+                    break
         if reader.is_open():
-            return got_any
+            return got_any > 0
         print("Fail")
         return False
     except:
@@ -148,6 +154,7 @@ def test_reader(reader):
 class InputReader():
     def __init__(self, capture, raw_rgb, width, height, fps, use_dshowcapture=False):
         self.reader = None
+        self.name = str(capture)
         try:
             if raw_rgb > 0:
                 self.reader = RawReader(width, height)
@@ -161,11 +168,14 @@ class InputReader():
                     try:
                         if use_dshowcapture:
                             self.reader = DShowCaptureReader(int(capture), width, height, fps)
-                            name = self.reader.device_name
+                            name = self.reader.name
                             good = test_reader(self.reader)
+                            self.name = name
                         else:
                             good = False
                     except:
+                        print("DShowCapture exception: ")
+                        traceback.print_exc()
                         good = False
                     if good:
                         return
@@ -187,12 +197,15 @@ class InputReader():
                             self.reader = EscapiReader(found, width, height, fps)
                             good = test_reader(self.reader)
                     except:
+                        print("Escapi exception: ")
+                        traceback.print_exc()
                         good = False
                     if good:
                         return
                     # Try with OpenCV
                     print(f"Escapi failed. Falling back to OpenCV. If this fails, please change your camera settings.", file=sys.stderr)
                     self.reader = OpenCVReader(int(capture), width, height, fps)
+                    self.name = self.reader.name
                 else:
                     self.reader = OpenCVReader(int(capture), width, height, fps)
         except Exception as e:
