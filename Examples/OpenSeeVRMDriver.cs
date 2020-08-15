@@ -846,13 +846,13 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             toggledExpression.triggered = false;
         
         if (!overridden && !trigger) {
-            if (openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
+            if (!openSeeExpression.enabled || openSeeExpression.expressionTime + 15f < Time.time || openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
                 currentExpression = null;
             } else {
                 currentExpression = expressionMap[openSeeExpression.expression];
                 currentExpression.triggered = true;
             }
-        } else if (openSeeExpression.expression != null && openSeeExpression.expression != "" && expressionMap.ContainsKey(openSeeExpression.expression)) {
+        } else if (openSeeExpression.enabled && openSeeExpression.expressionTime + 15f > Time.time && openSeeExpression.expression != null && openSeeExpression.expression != "" && expressionMap.ContainsKey(openSeeExpression.expression)) {
             if (expressionMap[openSeeExpression.expression].additive)
                 expressionMap[openSeeExpression.expression].triggered = true;
         }
