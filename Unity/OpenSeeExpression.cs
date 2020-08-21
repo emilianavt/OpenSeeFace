@@ -20,8 +20,8 @@ public class OpenSeeExpression : MonoBehaviour
     [Range(0f, 1f)]
     public float simpleSmoothing = 0.6f;
     [Tooltip("This smoothing factor is applied to the features used for simple expression detection.")]
-    [Range(-1f, 1f)]
-    public float simpleSensitivity = 0f;
+    [Range(0f, 5f)]
+    public float simpleSensitivity = 1f;
     [Header("Calibration")]
     [Tooltip("This specifies which expression calibration data should be collected for.")]
     public string calibrationExpression = "neutral";
@@ -89,24 +89,24 @@ public class OpenSeeExpression : MonoBehaviour
     private bool hadSurprised = false;
     float AdjustThreshold(bool active) {
         if (active)
-            return Mathf.Clamp(0.8f - simpleSensitivity, -1f, 1f);
+            return 0.8f;
         else
-            return Mathf.Clamp(1f - simpleSensitivity, -1f, 1f);
+            return 1f;
     }
     void ThresholdDetection() {
         lastMouthCorner = lastMouthCorner * simpleSmoothing + (openSeeData.features.MouthCornerUpDownLeft + openSeeData.features.MouthCornerUpDownRight) * 0.5f * (1f - simpleSmoothing);
         lastEyebrows = lastEyebrows * simpleSmoothing + (openSeeData.features.EyebrowUpDownLeft + openSeeData.features.EyebrowUpDownRight) * 0.5f * (1f - simpleSmoothing);
-        if (lastMouthCorner < -0.2f * AdjustThreshold(hadFun)) {
+        if (lastMouthCorner * simpleSensitivity < -0.2f * AdjustThreshold(hadFun)) {
             expression = "fun";
             hadFun = true;
             hadSurprised = false;
             hadAngry = false;
-        } else if (lastEyebrows > 0.2f * AdjustThreshold(hadSurprised)) {
+        } else if (lastEyebrows * simpleSensitivity > 0.2f * AdjustThreshold(hadSurprised)) {
             expression = "surprise";
             hadFun = false;
             hadSurprised = true;
             hadAngry = false;
-        } else if (lastEyebrows < -0.2f * AdjustThreshold(hadAngry) && lastMouthCorner > -0.3f * (2f - AdjustThreshold(hadAngry))) {
+        } else if (lastEyebrows * simpleSensitivity < -0.25f * AdjustThreshold(hadAngry) && lastMouthCorner * simpleSensitivity > -0.3f * (2f - AdjustThreshold(hadAngry))) {
             expression = "angry";
             hadFun = false;
             hadSurprised = false;
