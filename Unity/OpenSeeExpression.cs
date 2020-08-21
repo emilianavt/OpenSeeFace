@@ -17,6 +17,7 @@ public class OpenSeeExpression : MonoBehaviour
     [Tooltip("When enabled, some simple heuristics will be used to detect expressions, rather than an SVM model. Outputs one of: neutral, fun, angry, surprise")]
     public bool simpleMode = false;
     [Tooltip("This smoothing factor is applied to the features used for simple expression detection.")]
+    [Range(0f, 1f)]
     public float simpleSmoothing = 0.6f;
     [Tooltip("This smoothing factor is applied to the features used for simple expression detection.")]
     [Range(-1f, 1f)]
