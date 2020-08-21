@@ -79,6 +79,30 @@ public class OpenSeeLauncher : MonoBehaviour {
     private System.IntPtr processStdOut = System.IntPtr.Zero;
     private System.IntPtr processStdErr = System.IntPtr.Zero;
     private Job job = null;
+    
+    public void UnsetOption(string name, bool hasArgument) {
+        int count = 1;
+        if (hasArgument)
+            count++;
+        int found = -1;
+        int i = 0;
+        foreach (string arg in commandlineOptions) {
+            if (arg == name) {
+                found = i;
+                break;
+            }
+            i++;
+        }
+        if (found > -1)
+            commandlineOptions.RemoveRange(found, count);
+    }
+    
+    public void SetOption(string name, string argument) {
+        UnsetOption(name, argument != null);
+        commandlineOptions.Add(name);
+        if (argument != null)
+            commandlineOptions.Add(name);
+    }
 
     private bool CheckSetup(bool requireTarget) {
         if (openSeeTarget == null)
