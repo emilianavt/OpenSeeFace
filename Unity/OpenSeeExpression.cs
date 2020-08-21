@@ -18,6 +18,9 @@ public class OpenSeeExpression : MonoBehaviour
     public bool simpleMode = false;
     [Tooltip("This smoothing factor is applied to the features used for simple expression detection.")]
     public float simpleSmoothing = 0.6f;
+    [Tooltip("This smoothing factor is applied to the features used for simple expression detection.")]
+    [Range(-1f, 1f)]
+    public float simpleSensitivity = 0f;
     [Header("Calibration")]
     [Tooltip("This specifies which expression calibration data should be collected for.")]
     public string calibrationExpression = "neutral";
@@ -85,9 +88,9 @@ public class OpenSeeExpression : MonoBehaviour
     private bool hadSurprised = false;
     float AdjustThreshold(bool active) {
         if (active)
-            return 0.8f;
+            return Mathf.Clamp(0.8f - simpleSensitivity, -1f, 1f);
         else
-            return 1f;
+            return Mathf.Clamp(1f - simpleSensitivity, -1f, 1f);
     }
     void ThresholdDetection() {
         lastMouthCorner = lastMouthCorner * simpleSmoothing + (openSeeData.features.MouthCornerUpDownLeft + openSeeData.features.MouthCornerUpDownRight) * 0.5f * (1f - simpleSmoothing);
