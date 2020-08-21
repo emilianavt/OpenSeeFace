@@ -101,7 +101,7 @@ public class OpenSeeLauncher : MonoBehaviour {
         UnsetOption(name, argument != null);
         commandlineOptions.Add(name);
         if (argument != null)
-            commandlineOptions.Add(name);
+            commandlineOptions.Add(argument);
     }
 
     private bool CheckSetup(bool requireTarget) {
