@@ -35,8 +35,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This is the blink smoothing factor for camera based blink tracking, with 0 being no smoothing and 1 being a fixed blink state.")]
     [Range(0, 1)]
     public float blinkSmoothing = 0.75f;
-    [Tooltip("When enabled, the blink state for both eyes is linked together.")]
+    [Tooltip("With tracked eye blinking, the eyes will close when looking down. Enable this to compensate this by modifying thresholds.")]
+    public bool lookDownCompensation = false;
+    [Tooltip("When enabled, the blink state for both eyes is permanently linked together.")]
     public bool linkBlinks = true;
+    [Tooltip("When enabled, it becomes possible to wink even with link blinks enabled.")]
+    public bool allowWinking = false;
     [Tooltip("When enabled, the avatar's eye will move according to the face tracker's gaze tracking.")]
     public bool gazeTracking = true;
     [Tooltip("This is the right eye bone. When either eye bone is not set, the VRM look direction blendshapes are used instead.")]
@@ -153,6 +157,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     private float turnLeftBoundaryAngle = -30f;
     private float turnRightBoundaryAngle = 20f;
+    private float turnDownBoundaryAngle = 205f;
     
     private double lastGaze = 0f;
     private float lastLookUpDown = 0f;
@@ -1034,41 +1039,64 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (openSeeData != null && lastBlink < openSeeData.time) {
                 lastBlink = openSeeData.time;
                 float openThreshold = eyeOpenedThreshold;
+                float closedThreshold = eyeClosedThreshold;
                 
                 if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle)
-                    openThreshold = Mathf.Lerp(openThreshold, eyeClosedThreshold, 0.4f);
+                    openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.4f);
+
+                float upDownAngle = openSeeData.rawEuler.x;
+                while (upDownAngle < 0f)
+                    upDownAngle += 360f;
+                while (upDownAngle >= 360f)
+                    upDownAngle -= 360f;
+                if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle) {
+                    openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.85f);
+                    closedThreshold = Mathf.Lerp(eyeClosedThreshold, 0f, 0.6f);
+                    if (upDownAngle > turnDownBoundaryAngle + 10f) {
+                        openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.95f);
+                        closedThreshold = Mathf.Lerp(eyeClosedThreshold, 0f, 0.8f);
+                    }
+                }
                 
                 if (openSeeData.rightEyeOpen > openThreshold)
                     right = 0f;
-                else if (openSeeData.rightEyeOpen < eyeClosedThreshold)
+                else if (openSeeData.rightEyeOpen < closedThreshold)
                     right = 1f;
                 else
-                    right = 1f - (openSeeData.rightEyeOpen - eyeClosedThreshold) / (openThreshold - eyeClosedThreshold);
+                    right = 1f - (openSeeData.rightEyeOpen - closedThreshold) / (openThreshold - closedThreshold);
 
                 if (openSeeData.leftEyeOpen > openThreshold)
                     left = 0f;
-                else if (openSeeData.leftEyeOpen < eyeClosedThreshold)
+                else if (openSeeData.leftEyeOpen < closedThreshold)
                     left = 1f;
                 else
-                    left = 1f - (openSeeData.leftEyeOpen - eyeClosedThreshold) / (openThreshold - eyeClosedThreshold);
+                    left = 1f - (openSeeData.leftEyeOpen - closedThreshold) / (openThreshold - closedThreshold);
                 
                 if (openSeeData.rawEuler.y < turnLeftBoundaryAngle)
                     left = right;
                 if (openSeeData.rawEuler.y > turnRightBoundaryAngle)
                     right = left;
                 
+                if (linkBlinks) {
+                    if (Mathf.Abs(right - left) < 0.95 || !allowWinking) {
+                        float v = Mathf.Max(left, right);
+                        left = v;
+                        right = v;
+                    }
+                }
+
                 lastBlinkLeft = currentBlinkLeft;
                 lastBlinkRight = currentBlinkRight;
                 currentBlinkLeft = Mathf.Lerp(currentBlinkLeft, left, 1f - blinkSmoothing);
                 currentBlinkRight = Mathf.Lerp(currentBlinkRight, right, 1f - blinkSmoothing);
                 
-                if (left == 0f)
+                if (left < 0.00001f)
                     currentBlinkLeft = 0f;
-                if (right == 0f)
+                if (right < 0.00001f)
                     currentBlinkRight = 0f;
-                if (left == 1f)
+                if (left > 0.99999f)
                     currentBlinkLeft = 1f;
-                if (right == 1f)
+                if (right > 0.99999f)
                     currentBlinkRight = 1f;
                 
                 if (blinkInterpolationState < 2)
@@ -1090,7 +1118,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 right = tmp;
             }
             
-            if (linkBlinks) {
+            if (linkBlinks && !allowWinking) {
                 float v = Mathf.Max(left, right);
                 vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), v);
             } else {
