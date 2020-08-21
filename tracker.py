@@ -1086,8 +1086,8 @@ class Tracker():
                 face_info.success, face_info.quaternion, face_info.euler, face_info.pnp_error, face_info.pts_3d, face_info.lms = self.estimate_depth(face_info)
                 face_info.adjust_3d()
                 lms = face_info.lms[:, 0:2]
-                x1, y1 = tuple(lms.min(0))
-                x2, y2 = tuple(lms.max(0))
+                x1, y1 = tuple(lms[0:66].min(0))
+                x2, y2 = tuple(lms[0:66].max(0))
                 bbox = (y1, x1, y2 - y1, x2 - x1)
                 face_info.bbox = bbox
                 detected.append(bbox)

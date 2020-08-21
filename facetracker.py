@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import traceback
+import gc
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data", default="127.0.0.1")
@@ -234,9 +235,9 @@ try:
                     packet.extend(bytearray(struct.pack("f", x)))
                     if not log is None:
                         log.write(f",{y},{x},{c}")
-                    if pt_num == 66 and f.eye_blink[0] < 0.30:
+                    if pt_num == 66 and (f.eye_blink[0] < 0.30 or c < 0.30):
                         continue
-                    if pt_num == 67 and f.eye_blink[1] < 0.30:
+                    if pt_num == 67 and (f.eye_blink[1] < 0.30 or c < 0.30):
                         continue
                     x = int(x + 0.5)
                     y = int(y + 0.5)
@@ -360,9 +361,18 @@ try:
             if failures > 30:
                 break
 
+        collected = False
+        del frame
+
         duration = time.perf_counter() - frame_time
         while duration < target_duration:
-            time.sleep(target_duration - duration)
+            if not collected:
+                gc.collect()
+                collected = True
+            duration = time.perf_counter() - frame_time
+            sleep_time = target_duration - duration
+            if sleep_time > 0:
+                time.sleep(sleep_time)
             duration = time.perf_counter() - frame_time
         frame_time = time.perf_counter()
 except KeyboardInterrupt:

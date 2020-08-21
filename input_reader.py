@@ -7,6 +7,7 @@ import escapi
 import dshowcapture
 import time
 import traceback
+import gc
 
 class VideoReader():
     def __init__(self, capture, camera=False):
@@ -69,7 +70,12 @@ class DShowCaptureReader(VideoReader):
     def is_ready(self):
         return self.device.capturing()
     def read(self):
-        img = self.device.get_frame(self.timeout)
+        img = None
+        try:
+            img = self.device.get_frame(self.timeout)
+        except:
+            gc.collect()
+            img = self.device.get_frame(self.timeout)
         if img is None:
             return False, None
         else:
