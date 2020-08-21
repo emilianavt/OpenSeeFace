@@ -13,6 +13,12 @@ public class OpenSeeExpression : MonoBehaviour
     [Header("Settings")]
     [Tooltip("This is the source of face tracking data. If it is not set, any OpenSee component on the current object is used.")]
     public OpenSee openSee;
+    [Header("Simple mode")]
+    [Tooltip("When enabled, some simple heuristics will be used to detect expressions, rather than an SVM model. Outputs one of: neutral, fun, angry, surprise")]
+    public bool simpleMode = false;
+    [Tooltip("This smoothing factor is applied to the features used for simple expression detection.")]
+    public float simpleSmoothing = 0.6f;
+    [Header("Calibration")]
     [Tooltip("This specifies which expression calibration data should be collected for.")]
     public string calibrationExpression = "neutral";
     [Tooltip("This specifies the id of the face for which data should be collected and predictions should be made. Face ids depend only on the order of first detection and locations of the faces.")]
@@ -50,7 +56,7 @@ public class OpenSeeExpression : MonoBehaviour
     [Tooltip("These settings can be used to train an expression detection model on a subset of points.")]
     public PointSelection pointSelection;
     [Header("Information")]
-    [Tooltip("This is the of expressions for which calibration data was collected. The maximum number is 10.")]
+    [Tooltip("This is the number of expressions for which calibration data was collected. The maximum number is 10.")]
     public int expressionNumber = 0;
     [Tooltip("This is the percentage of necessary training data collected for the current expression.")]
     public float percentRecorded = 0.0f;
@@ -71,6 +77,44 @@ public class OpenSeeExpression : MonoBehaviour
     public string confusionMatrixString = "";
     [Tooltip("This shows any accuracy warnings that resulted from the last training run.")]
     public string[] warnings = null;
+    
+    private float lastMouthCorner = 0f;
+    private float lastEyebrows = 0f;
+    private bool hadFun = false;
+    private bool hadAngry = false;
+    private bool hadSurprised = false;
+    float AdjustThreshold(bool active) {
+        if (active)
+            return 0.8f;
+        else
+            return 1f;
+    }
+    void ThresholdDetection() {
+        lastMouthCorner = lastMouthCorner * simpleSmoothing + (openSeeData.features.MouthCornerUpDownLeft + openSeeData.features.MouthCornerUpDownRight) * 0.5f * (1f - simpleSmoothing);
+        lastEyebrows = lastEyebrows * simpleSmoothing + (openSeeData.features.EyebrowUpDownLeft + openSeeData.features.EyebrowUpDownRight) * 0.5f * (1f - simpleSmoothing);
+        if (lastMouthCorner < -0.2f * AdjustThreshold(hadFun)) {
+            expression = "fun";
+            hadFun = true;
+            hadSurprised = false;
+            hadAngry = false;
+        } else if (lastEyebrows > 0.2f * AdjustThreshold(hadSurprised)) {
+            expression = "surprise";
+            hadFun = false;
+            hadSurprised = true;
+            hadAngry = false;
+        } else if (lastEyebrows < -0.2f * AdjustThreshold(hadAngry) && lastMouthCorner > -0.3f * (2f - AdjustThreshold(hadAngry))) {
+            expression = "angry";
+            hadFun = false;
+            hadSurprised = false;
+            hadAngry = true;
+        } else {
+            expression = "neutral";
+            hadFun = false;
+            hadSurprised = false;
+            hadAngry = false;
+        }
+        expressionTime = Time.time;
+    }
 
     [Serializable]
     public class PointSelection {
@@ -478,13 +522,19 @@ public class OpenSeeExpression : MonoBehaviour
     }
 
     public bool PredictExpression() {
-        if (openSee == null || !(modelReady && model.Ready())) {
+        if (openSee == null)
+            return false;
+        if (!simpleMode && !(modelReady && model.Ready())) {
             ResetInfo();
             return false;
         }
         openSeeData = openSee.GetOpenSeeData(faceId);
         if (openSeeData == null || openSeeData.time <= lastCapture)
             return false;
+        if (simpleMode) {
+            ThresholdDetection();
+            return true;
+        }
         float[] faceData = GetData(openSeeData);
         float[] predictionData = new float[cols];
         for (int i = 0; i < cols; i++)
@@ -632,7 +682,7 @@ public class OpenSeeExpression : MonoBehaviour
             SaveToFile();
         if (!predict)
             expression = "";
-        else if (modelReady)
+        else if (simpleMode || modelReady)
             PredictExpression();
         else
             predict = false;
