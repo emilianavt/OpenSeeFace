@@ -263,7 +263,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         float weight;
         OVRLipSync.Viseme current = GetActiveViseme(out weight);
-        if (current == OVRLipSync.Viseme.sil && weight > 0.9999f) {
+        if (current == OVRLipSync.Viseme.sil && (weight > 0.9999f || weight < 0.0001f)) {
             if (wasSilViseme) {
                 if (hybridLipSync && Time.time - startedSilVisemes > silVisemeHybridThreshold) {
                     ApplyMouthShape();
@@ -273,10 +273,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 startedSilVisemes = Time.time;
             }
             wasSilViseme = true;
+            Debug.Log("Got sil");
         } else {
             if (wasSilViseme)
                 startedSilVisemes = Time.time;
             wasSilViseme = false;
+            Debug.Log("Not sil " + current + "    " + weight);
             if (hybridLipSync && Time.time - startedSilVisemes < silVisemeHybridThreshold)
                 ApplyMouthShape(true);
         }
