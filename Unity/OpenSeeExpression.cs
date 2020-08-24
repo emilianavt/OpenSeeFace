@@ -425,13 +425,13 @@ public class OpenSeeExpression : MonoBehaviour
                 samples += list.Count;
             } else {
                 if (list != null && list.Count > 20) {
-                    Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate.");
-                    accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate.");
+                    Debug.Log("[Training warning] Expression " + key + " has little data and might be inaccurate. (" + list.Count + ")");
+                    accuracyWarnings.Add("Expression " + key + " has little data and might be inaccurate. (" + list.Count + ")");
                     samples += list.Count;
                     keys.Add(key);
                 } else {
-                    Debug.Log("[Training warning] Skipping expression " + key + " due to lack of collected data.");
-                    accuracyWarnings.Add("Skipping expression " + key + " due to lack of collected data.");
+                    Debug.Log("[Training warning] Skipping expression " + key + " due to lack of collected data. (" + list.Count + ")");
+                    accuracyWarnings.Add("Skipping expression " + key + " due to lack of collected data. (" + list.Count + ")");
                     continue;
                 }
             }
@@ -449,10 +449,15 @@ public class OpenSeeExpression : MonoBehaviour
         if (weightMap != null) {
             weights = new float[classLabels.Length];
             for (int i = 0; i < classLabels.Length; i++) {
-                weights[i] = weightMap[classLabels[i]];
+                if (weightMap.ContainsKey(classLabels[i]))
+                    weights[i] = weightMap[classLabels[i]];
+                else
+                    weights[i] = 1f;
                 Debug.Log("[Training info] Adding weight " + weights[i] + " for " + classLabels[i] + ".");
             }
         }
+        
+        Debug.Log("[Training info] Preparing trainig data.");
         
         int train_split = maxSamples * 3 / 4;
         int test_split = maxSamples - train_split;
@@ -503,6 +508,7 @@ public class OpenSeeExpression : MonoBehaviour
                 i_test++;
             }
         }
+        Debug.Log("[Training info] Preparation complete.");
         int probability = 0;
         if (enableProbabilityTraining)
             probability = 1;
@@ -522,6 +528,7 @@ public class OpenSeeExpression : MonoBehaviour
         }
         warnings = accuracyWarnings.ToArray();
         modelReady = true;
+        Debug.Log("[Training info] Trained model.");
         return true;
     }
 
