@@ -1055,8 +1055,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.85f);
                     closedThreshold = Mathf.Lerp(eyeClosedThreshold, 0f, 0.6f);
                     if (upDownAngle > turnDownBoundaryAngle + 10f) {
-                        openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.95f);
-                        closedThreshold = Mathf.Lerp(eyeClosedThreshold, 0f, 0.8f);
+                        openThreshold = 0.1f;
+                        closedThreshold = 0f;
                     }
                 }
                 
