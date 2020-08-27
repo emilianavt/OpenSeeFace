@@ -273,12 +273,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 startedSilVisemes = Time.time;
             }
             wasSilViseme = true;
-            Debug.Log("Got sil");
         } else {
             if (wasSilViseme)
                 startedSilVisemes = Time.time;
             wasSilViseme = false;
-            Debug.Log("Not sil " + current + "    " + weight);
             if (hybridLipSync && Time.time - startedSilVisemes < silVisemeHybridThreshold)
                 ApplyMouthShape(true);
         }

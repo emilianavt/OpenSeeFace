@@ -152,6 +152,7 @@ public class OpenSeeExpression : MonoBehaviour
         private string[] classLabels = null;
         private int[] indices = null;
         private PointSelection pointSelection;
+        private bool thunderSVM = false;
         //private bool newModel = false;
 
         static public void LoadSerialized(byte[] modelBytes, out Dictionary<string, List<float[]>> expressions, out SVMModel model, out string[] classLabels, out int[] indices, ref PointSelection pointSelection) {
@@ -163,7 +164,10 @@ public class OpenSeeExpression : MonoBehaviour
                 oser = formatter.Deserialize(gzipStream) as OpenSeeExpressionRepresentation;
             }
             expressions = oser.expressions;
-            model = new SVMModel(oser.modelBytes);
+            if (oser.thunderSVM)
+                model = new ThunderSVMModel(oser.modelBytes);
+            else
+                model = new SVMModel(oser.modelBytes);
             classLabels = oser.classLabels;
             indices = oser.indices;
             //pointSelection = oser.pointSelection;
@@ -185,6 +189,7 @@ public class OpenSeeExpression : MonoBehaviour
             oser.classLabels = classLabels;
             oser.indices = indices;
             oser.pointSelection = pointSelection;
+            oser.thunderSVM = true;
             //oser.newModel = true;
 
             IFormatter formatter = new BinaryFormatter();
@@ -357,7 +362,7 @@ public class OpenSeeExpression : MonoBehaviour
         }
         ResetInfo();
         expressions = new Dictionary<string, List<float[]>>();
-        model = new SVMModel();
+        model = new ThunderSVMModel();
         rnd = new System.Random();
     }
 
@@ -411,7 +416,8 @@ public class OpenSeeExpression : MonoBehaviour
             return false;
         }
         modelReady = false;
-        //model = new SVMModel();
+        if (model is SVMModel)
+            model = new ThunderSVMModel();
         SelectPoints();
         List<string> keys = new List<string>();
         List<string> accuracyWarnings = new List<string>();

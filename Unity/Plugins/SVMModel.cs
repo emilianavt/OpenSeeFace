@@ -6,34 +6,61 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
+using UnityEngine;
 
 namespace OpenSee {
 
 public class SVMModel {
 	#region DllImport
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern System.IntPtr trainModel(float[] features, float[] labels, float[] weights, int rows, int cols, int classes, int probability, float C);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, EntryPoint = "trainModel")]
+	private static extern System.IntPtr trainModelDll(float[] features, float[] labels, float[] weights, int rows, int cols, int classes, int probability, float C);
+    protected virtual System.IntPtr trainModel(float[] features, float[] labels, float[] weights, int rows, int cols, int classes, int probability, float C) {
+        Debug.Log("Training LibSVM");
+        return trainModelDll(features, labels, weights, rows, cols, classes, probability, C);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern void predict(System.IntPtr model, float[] features, [Out] float[] predictions, [Out] double[] probabilities, int rows);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, EntryPoint = "predict")]
+	private static extern void predictDll(System.IntPtr model, float[] features, [Out] float[] predictions, [Out] double[] probabilities, int rows);
+    protected virtual void predict(System.IntPtr model, float[] features, [Out] float[] predictions, [Out] double[] probabilities, int rows) {
+        predictDll(model, features, predictions, probabilities, rows);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-	private static extern System.IntPtr loadModel([MarshalAs(UnmanagedType.LPStr)]string filename, int cols, int classes, double[] means, double[] sdevs);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, EntryPoint = "loadModel")]
+	private static extern System.IntPtr loadModelDll([MarshalAs(UnmanagedType.LPStr)]string filename, int cols, int classes, double[] means, double[] sdevs);
+    protected virtual System.IntPtr loadModel([MarshalAs(UnmanagedType.LPStr)]string filename, int cols, int classes, double[] means, double[] sdevs) {
+        return loadModelDll(filename, cols, classes, means, sdevs);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-	private static extern System.IntPtr loadModelString([MarshalAs(UnmanagedType.LPStr)]string modelString, int cols, int classes, double[] means, double[] sdevs);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, EntryPoint = "loadModelString")]
+	private static extern System.IntPtr loadModelStringDll([MarshalAs(UnmanagedType.LPStr)]string modelString, int cols, int classes, double[] means, double[] sdevs);
+    protected virtual System.IntPtr loadModelString([MarshalAs(UnmanagedType.LPStr)]string modelString, int cols, int classes, double[] means, double[] sdevs) {
+        Debug.Log("Loading LibSVM");
+        return loadModelStringDll(modelString, cols, classes, means, sdevs);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern void getScales(System.IntPtr model, [Out] double[] means, [Out] double[] sdevs);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, EntryPoint = "getScales")]
+	private static extern void getScalesDll(System.IntPtr model, [Out] double[] means, [Out] double[] sdevs);
+    protected virtual void getScales(System.IntPtr model, [Out] double[] means, [Out] double[] sdevs) {
+        getScalesDll(model, means, sdevs);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-	private static extern int saveModel(System.IntPtr model, [MarshalAs(UnmanagedType.LPStr)]string filename);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, EntryPoint = "saveModel")]
+	private static extern int saveModelDll(System.IntPtr model, [MarshalAs(UnmanagedType.LPStr)]string filename);
+    protected virtual int saveModel(System.IntPtr model, [MarshalAs(UnmanagedType.LPStr)]string filename) {
+        return saveModelDll(model, filename);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-	private static extern string saveModelString(System.IntPtr model);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi, EntryPoint = "saveModelString")]
+	private static extern string saveModelStringDll(System.IntPtr model);
+    protected virtual string saveModelString(System.IntPtr model) {
+        return saveModelStringDll(model);
+    }
 
-	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl)]
-	private static extern void destroyModel(System.IntPtr model);
+	[DllImport("SVMModel", CallingConvention = CallingConvention.Cdecl, EntryPoint = "destroyModel")]
+	private static extern void destroyModelDll(System.IntPtr model);
+    protected virtual void destroyModel(System.IntPtr model) {
+        destroyModelDll(model);
+    }
 	#endregion
 
     private bool haveModel = false;
@@ -43,51 +70,51 @@ public class SVMModel {
 
     [Serializable]
     private class SVMModelRepresentation {
-        private string modelString;
-        private int cols;
-        private int maxClasses;
-        private double[] means;
-        private double[] sdevs;
+        public string modelString;
+        public int cols;
+        public int maxClasses;
+        public double[] means;
+        public double[] sdevs;
+    }
 
-        static public System.IntPtr LoadSerialized(byte[] modelBytes, out int cols, out int maxClasses, bool compress) {
-            IFormatter formatter = new BinaryFormatter();
-            MemoryStream memoryStream = new MemoryStream(modelBytes);
-            memoryStream.Position = 0;
-            SVMModelRepresentation smr;
-            if (compress) {
-                using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress)) {
-                    smr = formatter.Deserialize(gzipStream) as SVMModelRepresentation;
-                }
-            } else {
-                smr = formatter.Deserialize(memoryStream) as SVMModelRepresentation;
+    public System.IntPtr LoadSerialized(byte[] modelBytes, out int cols, out int maxClasses, bool compress) {
+        IFormatter formatter = new BinaryFormatter();
+        MemoryStream memoryStream = new MemoryStream(modelBytes);
+        memoryStream.Position = 0;
+        SVMModelRepresentation smr;
+        if (compress) {
+            using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress)) {
+                smr = formatter.Deserialize(gzipStream) as SVMModelRepresentation;
             }
-            cols = smr.cols;
-            maxClasses = smr.maxClasses;
-            System.IntPtr model = loadModelString(smr.modelString, smr.cols, smr.maxClasses, smr.means, smr.sdevs);
-            return model;
+        } else {
+            smr = formatter.Deserialize(memoryStream) as SVMModelRepresentation;
         }
+        cols = smr.cols;
+        maxClasses = smr.maxClasses;
+        System.IntPtr model = loadModelString(smr.modelString, smr.cols, smr.maxClasses, smr.means, smr.sdevs);
+        return model;
+    }
 
-        static public byte[] ToSerialized(System.IntPtr model, int cols, int maxClasses, bool compress) {
-            SVMModelRepresentation smr = new SVMModelRepresentation();
-            smr.cols = cols;
-            smr.maxClasses = maxClasses;
-            smr.means = new double[cols];
-            smr.sdevs = new double[cols];
-            getScales(model, smr.means, smr.sdevs);
-            smr.modelString = saveModelString(model);
+    public byte[] ToSerialized(System.IntPtr model, int cols, int maxClasses, bool compress) {
+        SVMModelRepresentation smr = new SVMModelRepresentation();
+        smr.cols = cols;
+        smr.maxClasses = maxClasses;
+        smr.means = new double[cols];
+        smr.sdevs = new double[cols];
+        getScales(model, smr.means, smr.sdevs);
+        smr.modelString = saveModelString(model);
 
-            IFormatter formatter = new BinaryFormatter();
-            MemoryStream memoryStream = new MemoryStream();
-            if (compress) {
-                using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Compress)) {
-                    formatter.Serialize(gzipStream, smr);
-                    gzipStream.Flush();
-                }
-            } else {
-                formatter.Serialize(memoryStream, smr);
+        IFormatter formatter = new BinaryFormatter();
+        MemoryStream memoryStream = new MemoryStream();
+        if (compress) {
+            using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Compress)) {
+                formatter.Serialize(gzipStream, smr);
+                gzipStream.Flush();
             }
-            return memoryStream.ToArray();
+        } else {
+            formatter.Serialize(memoryStream, smr);
         }
+        return memoryStream.ToArray();
     }
 
     public void DestroyModel() {
@@ -99,7 +126,7 @@ public class SVMModel {
 
     private void LoadModel(byte[] modelBytes, bool compress) {
         DestroyModel();
-        model = SVMModelRepresentation.LoadSerialized(modelBytes, out cols, out maxClasses, compress);
+        model = LoadSerialized(modelBytes, out cols, out maxClasses, compress);
         haveModel = true;
     }
 
@@ -110,7 +137,7 @@ public class SVMModel {
     private byte[] SaveModel(bool compress) {
         if (!haveModel)
             return null;
-        return SVMModelRepresentation.ToSerialized(model, cols, maxClasses, compress);
+        return ToSerialized(model, cols, maxClasses, compress);
     }
 
     public byte[] SaveModel() {
@@ -143,7 +170,9 @@ public class SVMModel {
 
         maxClasses = max + 1;
         this.cols = cols;
+        float start = Time.realtimeSinceStartup;
         model = trainModel(features, labels, weights, rows, cols, maxClasses, probability, C);
+        Debug.Log("Training took: " + (Time.realtimeSinceStartup - start).ToString());
         haveModel = true;
 
         return true;
