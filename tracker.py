@@ -255,7 +255,7 @@ class FeatureExtractor():
             aligned_pts.append(np.array(rotate(a, pt, alpha)))
         return alpha, np.array(aligned_pts)
 
-    def update(self, pts):
+    def update(self, pts, full=True):
         features = {}
         now = time.perf_counter()
 
@@ -270,36 +270,50 @@ class FeatureExtractor():
         f = np.clip((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y, 0, None)
         features["eye_r"] = self.eye_r.update(f, now)
 
-        a3, _ = self.align_points(pts[0], pts[16], [])
-        a4, _ = self.align_points(pts[31], pts[35], [])
-        norm_angle = np.mean(list(map(np.rad2deg, [a1, a2, a3, a4])))
+        if full:
+            a3, _ = self.align_points(pts[0], pts[16], [])
+            a4, _ = self.align_points(pts[31], pts[35], [])
+            norm_angle = np.mean(list(map(np.rad2deg, [a1, a2, a3, a4])))
 
-        a, f_pts = self.align_points(pts[22], pts[26], pts[[22, 23, 24, 25, 26]])
-        features["eyebrow_steepness_l"] = self.eyebrow_steepness_l.update(-np.rad2deg(a) - norm_angle, now)
+            a, f_pts = self.align_points(pts[22], pts[26], pts[[22, 23, 24, 25, 26]])
+            features["eyebrow_steepness_l"] = self.eyebrow_steepness_l.update(-np.rad2deg(a) - norm_angle, now)
+            f = np.max(np.abs(np.array(f_pts[1:4]) - f_pts[0, 1])) / norm_distance_y
+            features["eyebrow_quirk_l"] = self.eyebrow_quirk_l.update(f, now)
+
+            a, f_pts = self.align_points(pts[17], pts[21], pts[[17, 18, 19, 20, 21]])
+            features["eyebrow_steepness_r"] = self.eyebrow_steepness_r.update(np.rad2deg(a) - norm_angle, now)
+            f = np.max(np.abs(np.array(f_pts[1:4]) - f_pts[0, 1])) / norm_distance_y
+            features["eyebrow_quirk_r"] = self.eyebrow_quirk_r.update(f, now)
+        else:
+            features["eyebrow_steepness_l"] = 0.
+            features["eyebrow_steepness_r"] = 0.
+            features["eyebrow_quirk_l"] = 0.
+            features["eyebrow_quirk_r"] = 0.
+
         f = (np.mean([pts[22, 1], pts[26, 1]]) - pts[27, 1]) / norm_distance_y
         features["eyebrow_updown_l"] = self.eyebrow_updown_l.update(f, now)
-        f = np.max(np.abs(np.array(f_pts[1:4]) - f_pts[0, 1])) / norm_distance_y
-        features["eyebrow_quirk_l"] = self.eyebrow_quirk_l.update(f, now)
 
-        a, f_pts = self.align_points(pts[17], pts[21], pts[[17, 18, 19, 20, 21]])
-        features["eyebrow_steepness_r"] = self.eyebrow_steepness_r.update(np.rad2deg(a) - norm_angle, now)
         f = (np.mean([pts[17, 1], pts[21, 1]]) - pts[27, 1]) / norm_distance_y
         features["eyebrow_updown_r"] = self.eyebrow_updown_r.update(f, now)
-        f = np.max(np.abs(np.array(f_pts[1:4]) - f_pts[0, 1])) / norm_distance_y
-        features["eyebrow_quirk_r"] = self.eyebrow_quirk_r.update(f, now)
 
         upper_mouth_line = np.mean([pts[49, 1], pts[50, 1], pts[51, 1]])
         center_line = np.mean([pts[50, 0], pts[60, 0], pts[27, 0], pts[30, 0], pts[64, 0], pts[55, 0]])
 
         f = (upper_mouth_line - pts[62, 1]) / norm_distance_y
         features["mouth_corner_updown_l"] = self.mouth_corner_updown_l.update(f, now)
-        f = abs(center_line - pts[62, 0]) / norm_distance_x
-        features["mouth_corner_inout_l"] = self.mouth_corner_inout_l.update(f, now)
+        if full:
+            f = abs(center_line - pts[62, 0]) / norm_distance_x
+            features["mouth_corner_inout_l"] = self.mouth_corner_inout_l.update(f, now)
+        else:
+            features["mouth_corner_inout_l"] = 0.
 
         f = (upper_mouth_line - pts[58, 1]) / norm_distance_y
         features["mouth_corner_updown_r"] = self.mouth_corner_updown_r.update(f, now)
-        f = abs(center_line - pts[58, 0]) / norm_distance_x
-        features["mouth_corner_inout_r"] = self.mouth_corner_inout_r.update(f, now)
+        if full:
+            f = abs(center_line - pts[58, 0]) / norm_distance_x
+            features["mouth_corner_inout_r"] = self.mouth_corner_inout_r.update(f, now)
+        else:
+            features["mouth_corner_inout_r"] = 0.
 
         f = (np.mean([pts[59, 1], pts[60, 1], pts[61, 1]]) - np.mean([pts[65, 1], pts[64, 1], pts[63, 1]])) / norm_distance_y
         features["mouth_open"] = self.mouth_open.update(f, now)
@@ -316,6 +330,8 @@ class FaceInfo():
         self.tracker = tracker
         self.contour_pts = [0,1,8,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45]
         self.face_3d = copy.copy(self.tracker.face_3d)
+        if self.tracker.model_type < 0:
+            self.contour_pts = [0,2,8,14,16,27,30,33]
         self.reset()
         self.alive = False
         self.coord = None
@@ -385,7 +401,7 @@ class FaceInfo():
         if self.conf < 0.4 or self.pnp_error > 300:
             return
 
-        if not self.tracker.static_model:
+        if self.tracker.model_type > -1 and not self.tracker.static_model:
             max_runs = 1
             eligible = np.delete(np.arange(0, 66), [30])
             changed_any = False
@@ -457,14 +473,19 @@ class FaceInfo():
                 self.update_contour()
 
         self.pts_3d = self.normalize_pts3d(self.pts_3d)
-        self.current_features = self.features.update(self.pts_3d[:, 0:2])
-        self.eye_blink = []
-        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
-        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
-
+        if self.tracker.feature_level == 2:
+            self.current_features = self.features.update(self.pts_3d[:, 0:2])
+            self.eye_blink = []
+            self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
+            self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
+        elif self.tracker.feature_level == 1:
+            self.current_features = self.features.update(self.pts_3d[:, 0:2], False)
+            self.eye_blink = []
+            self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
+            self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, threshold=0.6, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False):
+    def __init__(self, width, height, model_type=3, threshold=None, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False, feature_level=2):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max(max_threads,4)
@@ -478,13 +499,20 @@ class Tracker():
             "lm_model2_opt.onnx",
             "lm_model3_opt.onnx"
         ]
-        model = self.models[self.model_type]
+        model = "lm_modelT_opt.onnx"
+        if model_type >= 0:
+            model = self.models[self.model_type]
         model_base_path = resolve(os.path.join("models"))
         if model_dir is None:
             if not os.path.exists(model_base_path):
                 model_base_path = resolve(os.path.join("..", "models"))
         else:
             model_base_path = model_dir
+
+        if threshold is None:
+            threshold = 0.6
+            if model_type < 0:
+                threshold = 0.84
 
         self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=max(max_threads,4), top_k=max_faces, res=(640, 640))
         self.retinaface_scan = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=2, top_k=max_faces, res=(640, 640))
@@ -528,6 +556,13 @@ class Tracker():
         self.std = np.float32(np.array([0.229, 0.224, 0.225]))
         self.mean = self.mean / self.std
         self.std = self.std * 255.0
+
+        self.mean = - self.mean
+        self.std = 1.0 / self.std
+        self.mean_32 = np.tile(self.mean, [32, 32, 1])
+        self.std_32 = np.tile(self.std, [32, 32, 1])
+        self.mean_224 = np.tile(self.mean, [224, 224, 1])
+        self.std_224 = np.tile(self.std, [224, 224, 1])
 
         # PnP solving
         self.face_3d = np.array([
@@ -623,12 +658,16 @@ class Tracker():
         self.silent = silent
 
         self.res = 224.
+        self.mean_res = self.mean_224
+        self.std_res = self.std_224
         if model_type < 0:
             self.res = 56.
+            self.mean_res = np.tile(self.mean, [56, 56, 1])
+            self.std_res = np.tile(self.std, [56, 56, 1])
         self.res_i = int(self.res)
         self.out_res = 27.
         if model_type < 0:
-            self.out_res = 13.
+            self.out_res = 6.
         self.out_res_i = int(self.out_res) + 1
         self.logit_factor = 16.
         if model_type < 0:
@@ -636,13 +675,16 @@ class Tracker():
 
         self.no_gaze = no_gaze
         self.debug_gaze = False
+        self.feature_level = feature_level
+        if model_type < 0:
+            self.feature_level = min(feature_level, 1)
         self.max_feature_updates = max_feature_updates
         self.static_model = static_model
         self.face_info = [FaceInfo(id, self) for id in range(max_faces)]
         self.fail_count = 0
 
     def detect_faces(self, frame):
-        im = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_LINEAR)[:,:,::-1] / self.std - self.mean
+        im = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_LINEAR)[:,:,::-1] * self.std_224 + self.mean_224
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,1,2))
         outputs, maxpool = self.detection.run([], {'input': im})
@@ -671,19 +713,27 @@ class Tracker():
         crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
         avg_conf = 0
         res = self.res - 1
-        t_main = tensor[0:66].reshape((66,self.out_res_i * self.out_res_i))
+        c0, c1, c2 = 66, 132, 198
+        if self.model_type < 0:
+            c0, c1, c2 = 30, 60, 90
+        t_main = tensor[0:c0].reshape((c0,self.out_res_i * self.out_res_i))
         t_m = t_main.argmax(1)
         indices = np.expand_dims(t_m, 1)
-        t_conf = np.take_along_axis(t_main, indices, 1).reshape((66,))
-        t_off_x = np.take_along_axis(tensor[66:132].reshape((66,self.out_res_i * self.out_res_i)), indices, 1).reshape((66,))
-        t_off_y = np.take_along_axis(tensor[132:198].reshape((66,self.out_res_i * self.out_res_i)), indices, 1).reshape((66,))
-        t_off_x = np.floor(res * logit_arr(t_off_x, self.logit_factor) + 0.5)
-        t_off_y = np.floor(res * logit_arr(t_off_y, self.logit_factor) + 0.5)
+        t_conf = np.take_along_axis(t_main, indices, 1).reshape((c0,))
+        t_off_x = np.take_along_axis(tensor[c0:c1].reshape((c0,self.out_res_i * self.out_res_i)), indices, 1).reshape((c0,))
+        t_off_y = np.take_along_axis(tensor[c1:c2].reshape((c0,self.out_res_i * self.out_res_i)), indices, 1).reshape((c0,))
+        t_off_x = res * logit_arr(t_off_x, self.logit_factor)
+        t_off_y = res * logit_arr(t_off_y, self.logit_factor)
         t_x = crop_y1 + scale_y * (res * np.floor(t_m / self.out_res_i) / self.out_res + t_off_x)
         t_y = crop_x1 + scale_x * (res * np.floor(np.mod(t_m, self.out_res_i)) / self.out_res + t_off_y)
         avg_conf = np.average(t_conf)
         lms = np.stack([t_x, t_y, t_conf], 1)
         lms[np.isnan(lms).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
+        if self.model_type < 0:
+            lms = lms[[0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,6,7,7,8,8,9,10,10,11,11,12,21,21,21,22,23,23,23,23,23,13,14,14,15,16,16,17,18,18,19,20,20,24,25,25,25,26,26,27,27,27,24,24,28,28,28,26,29,29,29]]
+            part_avg = np.mean(np.partition(lms[:,2],3)[0:3])
+            if part_avg < 0.65:
+                avg_conf = part_avg
         return (avg_conf, np.array(lms))
 
     def estimate_depth(self, face_info):
@@ -787,9 +837,7 @@ class Tracker():
     def preprocess(self, im, crop):
         x1, y1, x2, y2 = crop
         im = np.float32(im[y1:y2, x1:x2,::-1]) # Crop and BGR to RGB
-        im = cv2.resize(im, (self.res_i, self.res_i), interpolation=cv2.INTER_LINEAR) / self.std - self.mean
-        #im = cv2.resize(im, (224, 224), interpolation=cv2.INTER_LINEAR) / 255.0
-        #im = (im - mean) / std
+        im = cv2.resize(im, (self.res_i, self.res_i), interpolation=cv2.INTER_LINEAR) * self.std_res + self.mean_res
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,1,2))
         return im
@@ -823,7 +871,7 @@ class Tracker():
                 full_frame[0:32, 0:32] = im
             else:
                 full_frame[0:32, 32:64] = im
-        im = im.astype(np.float32)[:,:,::-1] / self.std - self.mean
+        im = im.astype(np.float32)[:,:,::-1] * self.mean_32 + self.std_32
         im = np.expand_dims(im, 0)
         im = np.transpose(im, (0,3,2,1))
         return im, np.linalg.inv(transform.params)
@@ -909,6 +957,10 @@ class Tracker():
         return eye_state
 
     def assign_face_info(self, results):
+        if self.max_faces == 1 and len(results) == 1:
+            conf, (lms, eye_state), conf_adjust = results[0]
+            self.face_info[0].update((conf - conf_adjust, (lms, eye_state)), np.array(lms)[:, 0:2].mean(0), self.frame_count)
+            return
         result_coords = []
         adjusted_results = []
         for conf, (lms, eye_state), conf_adjust in results:

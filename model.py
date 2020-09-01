@@ -177,6 +177,48 @@ class OpenSeeFaceLandmarks(geffnet.mobilenetv3.MobileNetV3):
     def forward(self, x):
         return self._forward_impl(x)
 
+# lm_modelT for 56x56 30 point inference
+class OpenSeeFaceLandmarks30Pt(geffnet.mobilenetv3.MobileNetV3):
+    def __init__(self, size="large", channel_multiplier=1.0, inference=False):
+        kwargs = geffnet.mobilenetv3._gen_mobilenet_v3([size], channel_multiplier=channel_multiplier)
+        super(OpenSeeFaceLandmarks30Pt, self).__init__(**kwargs)
+        self.up1 = UNetUp(960, 112, 256, (4,4))
+        self.up2 = UNetUp(256, 40, 180, (7,7))
+        self.group = DSConv2d(180, 90, kernels_per_layer=4, groups=3)
+        self.inference = inference
+    def _forward_impl(self, x):
+        x = self.conv_stem(x)
+        x = self.bn1(x)
+        x = self.act1(x)
+        r2 = None
+        r3 = None
+        for i, feature in enumerate(self.blocks):
+            x = feature(x)
+            if i == 4:
+                r3 = x
+            if i == 2:
+                r2 = x
+        x = self.up1(x, r3)
+        x = self.up2(x, r2)
+        x = self.group(x)
+
+        if self.inference:
+            t_main = x[0:30].reshape((30, 7*7))
+            t_m = t_main.argmax(dim=1)
+            indices = t_m.unsqueeze(1)
+            t_conf = t_main.gather(1, indices).squeeze(1)
+            t_off_x = x[30:60].reshape((60, 7*7)).gather(1, indices).squeeze(1)
+            t_off_y = x[60:90].reshape((60, 7*7)).gather(1, indices).squeeze(1)
+            t_off_x = 55. * logit_arr(t_off_x)
+            t_off_y = 55. * logit_arr(t_off_y)
+            t_x = 55. * (t_m / 7.).floor() / 6. + t_off_x
+            t_y = 55. * t_m.remainder(7.).float() / 6. + t_off_y
+            x = (t_conf.mean(), torch.stack([t_x, t_y, t_conf], 1))
+
+        return x
+    def forward(self, x):
+        return self._forward_impl(x)
+
 # Adaptive Wing Loss with offset layers and emphasis for eyes and eyebrows with 66 landmark points
 def AdapWingLoss(pre_hm, gt_hm):
     # pre_hm = pre_hm.to('cpu')
@@ -261,4 +303,8 @@ if __name__== "__main__":
     print("Checking lm_model3 model")
     m=OpenSeeFaceLandmarks("large", 1.0)
     ckpt = torch.load("lm_model3.pth")
+    m.load_state_dict(ckpt)
+    print("Checking lm_modelT model")
+    m=OpenSeeFaceLandmarks("large", 1.0)
+    ckpt = torch.load("lm_modelT.pth")
     m.load_state_dict(ckpt)
