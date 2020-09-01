@@ -83,6 +83,7 @@ To save both the trained model and the captured training data, type in a filenam
 
 Four pretrained face landmark models are included. Using the `--model` switch, it is possible to select them for tracking. The given fps values are for running the model on a single face video on a single CPU core. Lowering the frame rate would reduce CPU usage by a corresponding degree.
 
+* Model **-1**: This model is for running on toasters, so it's a very very fast and very low accuracy model. (213fps without gaze tracking)
 * Model **0**: This is a very fast, low accuracy model. (68fps)
 * Model **1**: This is a slightly slower model with better accuracy. (59fps)
 * Model **2**: This is a slower model with good accuracy. (50fps)
