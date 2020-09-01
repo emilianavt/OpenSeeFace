@@ -149,6 +149,12 @@ extern "C" {
         instances.clear();
         for (int r = 0; r < rows; r++)
             predictions[r] = (float)predicted[r];
+        if (probabilities != NULL && sw->param.probability) {
+            vector<float> probs = sw->model->get_prob_predict();
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < sw->classes; c++)
+                    probabilities[c + r * sw->classes] = probs[c + r * sw->classes];
+        }
         predicted.clear();
 
         return;
