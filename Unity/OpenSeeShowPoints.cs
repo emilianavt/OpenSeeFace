@@ -7,6 +7,7 @@ namespace OpenSee {
 public class OpenSeeShowPoints : MonoBehaviour {
     public OpenSee openSee = null;
     public int faceId = 0;
+    public bool only30Points = false;
     public bool show3DPoints = true;
     public bool applyTranslation = false;
     public bool applyRotation = false;
@@ -25,7 +26,10 @@ public class OpenSeeShowPoints : MonoBehaviour {
     private double updated = 0.0;
     private int total = 70;
     
-    private int[] lines = new int[]{/* Contour */ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, -1, /* Eyebrows */ 18, 19, 20, 21, -1, 23, 24, 25, 26, -1, 28, 29, 30, 33, 32, 33, 34, 35, -1, /* Eye */ 37, 38, 39, 40, 41, 36, /* Eye */ 43, 44, 45, 46, 47, 42, /* Mouth */ 49, 50, 51, 52, 62, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 58, 58, 62};
+    private int[] lines = new int[]{/* Contour */ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, -1, /* Eyebrows */ 18, 19, 20, 21, -1, 23, 24, 25, 26, -1, /* Nose */ 28, 29, 30, 33, 32, 33, 34, 35, -1, /* Eye */ 37, 38, 39, 40, 41, 36, /* Eye */ 43, 44, 45, 46, 47, 42, /* Mouth */ 49, 50, 51, 52, 62, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 58, 58, 62};
+    
+    private HashSet<int> pt30Set = new HashSet<int> { 0, 2, 5, 8, 11, 14, 16, 17, 19, 21, 22, 24, 26, 27, 30, 33, 36, 37, 39, 40, 42, 43, 45, 46, 50, 55, 58, 60, 62, 64 };
+    private int[] linesPt30Set = new int[]{/* Contour */ 2, -1, 5, -1, -1, 8, -1, -1, 11, -1, -1, 14, -1, -1, 16, -1, -1, /* Eyebrows */ 19, -1, 21, -1, -1, 24, -1, 26, -1, -1, /* Nose */ 30, -1, -1, 33, -1, -1, -1, -1, -1, /* Eye */ 37, 39, -1, 40, 36, -1, /* Eye */ 43, 45, -1, 46, 42, -1, /* Mouth */ -1, -1, 62, -1, -1, -1, -1, 58, -1, -1, 60, -1, 62, -1, 64, -1, 58, -1, 58, 62};
 
 	void Start () {
         if (openSee == null) {
@@ -55,16 +59,24 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 cylinder.transform.localPosition = new Vector3(0f, 0f, -4f);
                 cylinder.transform.localScale = new Vector3(1f, 4f, 1f);
             }
+            if (only30Points && i < 66 && !pt30Set.Contains(i))
+                gameObjects[i].SetActive(false);
         }
         for (int i = 0; i < 68; i++) {
                 if (i == 66) {
                     GameObject lineGameObject = new GameObject("LineGameObject");
-                    lineGameObject.transform.SetParent(gameObjects[48].transform);
+                    if (only30Points)
+                        lineGameObject.transform.SetParent(gameObjects[50].transform);
+                    else
+                        lineGameObject.transform.SetParent(gameObjects[48].transform);
                     lineGameObject.layer = gameObject.layer;
                     lineRenderers[i] = lineGameObject.AddComponent(typeof(LineRenderer)) as LineRenderer;
                 } else if (i == 67) {
                     GameObject lineGameObject = new GameObject("LineGameObject");
-                    lineGameObject.transform.SetParent(gameObjects[53].transform);
+                    if (only30Points)
+                        lineGameObject.transform.SetParent(gameObjects[55].transform);
+                    else
+                        lineGameObject.transform.SetParent(gameObjects[53].transform);
                     lineGameObject.layer = gameObject.layer;
                     lineRenderers[i] = lineGameObject.AddComponent(typeof(LineRenderer)) as LineRenderer;
                 }
@@ -172,17 +184,25 @@ public class OpenSeeShowPoints : MonoBehaviour {
             }
         }
         for (int i = 0; i < 68; i++) {
-            if (lines[i] == -1)
+            if ((!only30Points && lines[i] == -1) || (only30Points && linesPt30Set[i] == -1))
                 continue;
             if (!showLines || lineMaterial == null) {
                 lineRenderers[i].enabled = false;
             } else {
                 int a = i;
                 int b = lines[i];
-                if (i == 66)
-                    a = 48;
-                if (i == 67)
-                    a = 53;
+                if (only30Points) {
+                    b = linesPt30Set[i];
+                    if (i == 66)
+                        a = 50;
+                    if (i == 67)
+                        a = 55;
+                } else {
+                    if (i == 66)
+                        a = 48;
+                    if (i == 67)
+                        a = 53;
+                }
                 Color color = Color.Lerp(Color.red, Color.green, Mathf.Lerp(0.5f, openSeeData.confidence[a], openSeeData.confidence[b]));
                 lineRenderers[i].enabled = true;
                 lineRenderers[i].widthMultiplier = lineWidth;

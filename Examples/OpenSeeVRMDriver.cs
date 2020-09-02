@@ -6,7 +6,7 @@ using OpenSee;
 using VRM;
 
 // This is a more comprehensive VRM avatar animator than the OpenSeeVRMExpression example.
-// To use the lip sync functionality, place the OVRLipSync component somewhere in the scene.
+// To use the lip sync functionality, place the OVRLipSync 1.28 component somewhere in the scene.
 // No other OVR related components are required.
 
 public class OpenSeeVRMDriver : MonoBehaviour {
@@ -22,6 +22,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeIKTarget openSeeIKTarget;
     [Tooltip("This is the target VRM avatar's blend shape proxy.")]
     public VRMBlendShapeProxy vrmBlendShapeProxy;
+    [Tooltip("This needs to be enabled when tracking with the fast 30 point model.")]
+    public bool only30Points = false;
     //[Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
     //public bool fixedUpdate = true;
     [Tooltip("When enabled, the avatar will blink automatically. Otherwise, blinks will be applied according to the face tracking's blink detection, allowing it to wink. Even for tracked eye blinks, the eye blink setting of the current expression is used.")]
@@ -851,13 +853,13 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             toggledExpression.triggered = false;
         
         if (!overridden && !trigger) {
-            if (!openSeeExpression.enabled || openSeeExpression.expressionTime + 15f < Time.time || openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
+            if (only30Points || !openSeeExpression.enabled || openSeeExpression.expressionTime + 15f < Time.time || openSeeExpression.expression == null || openSeeExpression.expression == "" || !expressionMap.ContainsKey(openSeeExpression.expression)) {
                 currentExpression = null;
             } else {
                 currentExpression = expressionMap[openSeeExpression.expression];
                 currentExpression.triggered = true;
             }
-        } else if (openSeeExpression.enabled && openSeeExpression.expressionTime + 15f > Time.time && openSeeExpression.expression != null && openSeeExpression.expression != "" && expressionMap.ContainsKey(openSeeExpression.expression)) {
+        } else if (!only30Points && openSeeExpression.enabled && openSeeExpression.expressionTime + 15f > Time.time && openSeeExpression.expression != null && openSeeExpression.expression != "" && expressionMap.ContainsKey(openSeeExpression.expression)) {
             if (expressionMap[openSeeExpression.expression].additive)
                 expressionMap[openSeeExpression.expression].triggered = true;
         }
@@ -1024,7 +1026,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void BlinkEyes() {
         if (vrmBlendShapeProxy == null || eyeBlinker == null)
             return;
-        if (autoBlink) {
+        if (autoBlink || only30Points) {
             if (currentExpressionEnableBlinking) {
                 float blink = eyeBlinker.Blink();
                 vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
@@ -1416,7 +1418,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         FindFaceMesh();
         UpdateExpression();
-        if (trackGaze)
+        if (trackGaze && !only30Points)
             UpdateGaze();
         BlinkEyes();
         ReadAudio();
