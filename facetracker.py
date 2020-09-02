@@ -18,7 +18,8 @@ else:
     parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
 parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default="0")
 parser.add_argument("-m", "--max-threads", type=int, help="Set the maximum number of threads", default=1)
-parser.add_argument("-t", "--threshold", type=float, help="Set minimum confidence threshold for face detection", default=None)
+parser.add_argument("-t", "--threshold", type=float, help="Set minimum confidence threshold for face tracking", default=None)
+parser.add_argument("-d", "--detection-threshold", type=float, help="Set minimum confidence threshold for face detection", default=0.6)
 parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visualize the tracking, to 2 to also show face ids, to 3 to add confidence values or to 4 to add numbers to the point display", default=0)
 parser.add_argument("-P", "--pnp-points", type=int, help="Set this to 1 to add the 3D fitting points to the visualization", default=0)
 parser.add_argument("-s", "--silent", type=int, help="Set this to 1 to prevent text output on the console", default=0)
@@ -180,7 +181,7 @@ try:
             first = False
             height, width, channels = frame.shape
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True, use_retinaface=args.scan_retinaface, max_feature_updates=args.max_feature_updates, static_model=True if args.no_3d_adapt == 1 else False)
+            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True, detection_threshold=args.detection_threshold, use_retinaface=args.scan_retinaface, max_feature_updates=args.max_feature_updates, static_model=True if args.no_3d_adapt == 1 else False)
             if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), 24, (width,height))
 

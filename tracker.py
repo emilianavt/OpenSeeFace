@@ -485,7 +485,7 @@ class FaceInfo():
             self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, threshold=None, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False, feature_level=2):
+    def __init__(self, width, height, model_type=3, detection_threshold=0.6, threshold=None, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False, feature_level=2):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max(max_threads,4)
@@ -647,6 +647,7 @@ class Tracker():
         self.width = width
         self.height = height
         self.threshold = threshold
+        self.detection_threshold = detection_threshold
         self.max_faces = max_faces
         self.max_threads = max_threads
         self.discard = 0
@@ -700,7 +701,7 @@ class Tracker():
             x *= 4
             y *= 4
             r *= 1.0
-            if c < self.threshold:
+            if c < self.detection_threshold:
                 break
             results.append((x - r, y - r, 2 * r, 2 * r * 1.0))
         results = np.array(results).astype(np.float32)
