@@ -60,8 +60,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This is the sensitivity of the eyebrow tracking, with 0 meaning no eyebrow movement.")]
     [Range(0, 2)]
     public float eyebrowSensitivity = 1.0f;
-    [Tooltip("If enabled, the eye will be animated according to camera based gaze tracking.")]
-    public bool trackGaze = true;
     [Tooltip("This is the gaze smoothing factor, with 0 being no smoothing and 1 being a fixed gaze.")]
     [Range(0, 1)]
     public float gazeSmoothing = 0.6f;
@@ -1418,7 +1416,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         FindFaceMesh();
         UpdateExpression();
-        if (trackGaze && !only30Points)
+        if (gazeTracking && !only30Points)
             UpdateGaze();
         BlinkEyes();
         ReadAudio();
