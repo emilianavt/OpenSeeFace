@@ -209,6 +209,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private int browInterpolationCount = 0;
     private int browInterpolationState = 0;
     private BlendShapeKey[] browClips;
+    
+    private float lastAudioTime = -1f;
 
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
@@ -1195,6 +1197,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     public void InitializeLipSync() {
         active = false;
+        lastAudioTime = -1f;
         if (catsData == null)
             InitCatsData();
         if (!isCanned && clip != null)
@@ -1313,6 +1316,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
         }
         audioVolume /= buffer.Length;
+        
+        if (audioVolume > 0f)
+            lastAudioTime = Time.time;
 
         int totalLen = partialPos + buffer.Length;
         int bufferPos = 0;
@@ -1371,6 +1377,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void ReadAudio() {
+        if (lastAudioTime >= 0f && Time.time > lastAudioTime + 3f && lipSync) {
+            Debug.Log("Audio device might have disappeared, reinitializing lip sync.");
+            InitializeLipSync();
+        }
         if (clip == null)
             return;
         if (OVRLipSync.IsInitialized() != OVRLipSync.Result.Success) {
