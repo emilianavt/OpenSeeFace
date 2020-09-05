@@ -107,6 +107,8 @@ Here's an informal [comparison](https://raw.githubusercontent.com/emilianavt/Ope
 
 ![3DDFA_V2_800.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/3DDFA_V2_800.jpg)
 
+Please ignore the blue eye points in the OpenSeeFace images as they are not actually part of the tracking results.
+
 ## Face detection
 
 The landmark model is quite robust with respect to the size and orientation of the faces, so the custom face detection model gets away with rougher bounding boxes than other approaches. It has a favorable speed to accuracy ratio for the purposes of this project.
