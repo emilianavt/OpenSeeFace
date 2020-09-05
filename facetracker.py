@@ -30,6 +30,8 @@ parser.add_argument("--discard-after", type=int, help="Set the how long the trac
 parser.add_argument("--max-feature-updates", type=int, help="This is the number of seconds after which feature min/max/medium values will no longer be updated once a face has been detected.", default=900)
 parser.add_argument("--no-3d-adapt", type=int, help="When set to 1, the 3D face model will not be adapted to increase the fit", default=1)
 parser.add_argument("--video-out", help="Set this to the filename of an AVI file to save the tracking visualization as a video", default=None)
+parser.add_argument("--video-scale", type=int, help="This is a resolution scale factor applied to the saved AVI file", default=1, choices=[1,2,3,4])
+parser.add_argument("--video-fps", type=float, help="This sets the frame rate of the output AVI file", default=24)
 parser.add_argument("--raw-rgb", type=int, help="When this is set, raw RGB frames of the size given with \"-W\" and \"-H\" are read from standard input instead of reading a video", default=0)
 parser.add_argument("--log-data", help="You can set a filename to which tracking data will be logged here", default="")
 parser.add_argument("--log-output", help="You can set a filename to console output will be logged here", default="")
@@ -111,6 +113,7 @@ height = 0
 width = 0
 tracker = None
 sock = None
+total_tracking_time = 0.0
 tracking_time = 0.0
 tracking_frames = 0
 frame_count = 0
@@ -183,13 +186,15 @@ try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True, detection_threshold=args.detection_threshold, use_retinaface=args.scan_retinaface, max_feature_updates=args.max_feature_updates, static_model=True if args.no_3d_adapt == 1 else False)
             if not args.video_out is None:
-                out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), 24, (width,height))
+                out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), args.video_fps, (width * args.video_scale, height * args.video_scale))
 
         try:
             inference_start = time.perf_counter()
             faces = tracker.predict(frame)
             if len(faces) > 0:
-                tracking_time += (time.perf_counter() - inference_start) / len(faces)
+                inference_time = (time.perf_counter() - inference_start)
+                total_tracking_time += inference_time
+                tracking_time += inference_time / len(faces)
                 tracking_frames += 1
             packet = bytearray()
             detected = False
@@ -230,7 +235,7 @@ try:
                 if args.visualize > 1:
                     frame = cv2.putText(frame, str(f.id), (int(f.bbox[0]), int(f.bbox[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
                 if args.visualize > 2:
-                    frame = cv2.putText(frame, f"{f.conf:.4f}", (int(f.bbox[0] + 18), int(f.bbox[1] - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0))
+                    frame = cv2.putText(frame, f"{f.conf:.4f}", (int(f.bbox[0] + 18), int(f.bbox[1] - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255))
                 for pt_num, (x,y,c) in enumerate(f.lms):
                     packet.extend(bytearray(struct.pack("f", y)))
                     packet.extend(bytearray(struct.pack("f", x)))
@@ -245,7 +250,7 @@ try:
                     if args.visualize != 0 or not out is None:
                         if args.visualize > 3:
                             frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
-                        color = (0, 0, 255)
+                        color = (0, 255, 0)
                         if pt_num >= 66:
                             color = (255, 255, 0)
                         if not (x < 0 or y < 0 or x >= height or y >= width):
@@ -300,7 +305,12 @@ try:
                 sock.sendto(packet, (target_ip, target_port))
 
             if not out is None:
-                out.write(frame)
+                video_frame = frame
+                if args.video_scale != 1:
+                    video_frame = cv2.resize(frame, (width * args.video_scale, height * args.video_scale), interpolation=cv2.INTER_NEAREST)
+                out.write(video_frame)
+                if args.video_scale != 1:
+                    del video_frame
 
             if args.visualize != 0:
                 cv2.imshow('OpenSeeFace Visualization', frame)
@@ -386,5 +396,6 @@ if not out is None:
 cv2.destroyAllWindows()
 
 if args.silent == 0 and tracking_frames > 0:
-    tracking_time = 1000 * tracking_time / tracking_frames
-    print(f"Average tracking time per detected face: {tracking_time:.2f} ms")
+    average_tracking_time = 1000 * tracking_time / tracking_frames
+    print(f"Average tracking time per detected face: {average_tracking_time:.2f} ms")
+    print(f"Tracking time: {total_tracking_time:.3f} s\nFrames: {tracking_frames}")
