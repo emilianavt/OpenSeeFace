@@ -265,7 +265,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         float weight;
         OVRLipSync.Viseme current = GetActiveViseme(out weight);
-        if (current == OVRLipSync.Viseme.sil && (weight > 0.9999f || weight < 0.0001f)) {
+        if (current == OVRLipSync.Viseme.sil) {
             if (wasSilViseme) {
                 if (hybridLipSync && Time.time - startedSilVisemes > silVisemeHybridThreshold) {
                     ApplyMouthShape();
