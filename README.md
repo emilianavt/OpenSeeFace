@@ -103,6 +103,10 @@ Pytorch weights for use with `model.py` can be found [here](https://mega.nz/file
 
 More samples: [Results3.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/Results3.png), [Results4.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/Results4.png)
 
+Here's an informal [comparison](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/3DDFA_V2.png) with [3DDFA_V2](https://github.com/cleardusk/3DDFA_V2) on five arbitrary, non-cherry picked examples from my test data:
+
+![3DDFA_V2_800.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/3DDFA_V2_800.png)
+
 ## Face detection
 
 The landmark model is quite robust with respect to the size and orientation of the faces, so the custom face detection model gets away with rougher bounding boxes than other approaches. It has a favorable speed to accuracy ratio for the purposes of this project.
