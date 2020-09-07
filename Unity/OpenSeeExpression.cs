@@ -13,6 +13,8 @@ public class OpenSeeExpression : MonoBehaviour
     [Header("Settings")]
     [Tooltip("This is the source of face tracking data. If it is not set, any OpenSee component on the current object is used.")]
     public OpenSee openSee;
+    [Tooltip("When enabled ThunderSVM is used instead of LibSVM, which is usually faster, but may cause issues on some systems.")]
+    public bool useThunderSVM = false;
     [Header("Simple mode")]
     [Tooltip("When enabled, some simple heuristics will be used to detect expressions, rather than an SVM model. Outputs one of: neutral, fun, angry, surprise")]
     public bool simpleMode = false;
@@ -362,7 +364,10 @@ public class OpenSeeExpression : MonoBehaviour
         }
         ResetInfo();
         expressions = new Dictionary<string, List<float[]>>();
-        model = new ThunderSVMModel();
+        if (useThunderSVM)
+            model = new ThunderSVMModel();
+        else
+            model = new SVMModel();
         rnd = new System.Random();
     }
 
@@ -416,8 +421,10 @@ public class OpenSeeExpression : MonoBehaviour
             return false;
         }
         modelReady = false;
-        if (model is SVMModel)
+        if (model is SVMModel && useThunderSVM)
             model = new ThunderSVMModel();
+        else if (model is ThunderSVMModel && !useThunderSVM)
+            model = new SVMModel();
         SelectPoints();
         List<string> keys = new List<string>();
         List<string> accuracyWarnings = new List<string>();
