@@ -191,7 +191,7 @@ public class OpenSeeExpression : MonoBehaviour
             oser.classLabels = classLabels;
             oser.indices = indices;
             oser.pointSelection = pointSelection;
-            oser.thunderSVM = true;
+            oser.thunderSVM = model is ThunderSVMModel;
             //oser.newModel = true;
 
             IFormatter formatter = new BinaryFormatter();

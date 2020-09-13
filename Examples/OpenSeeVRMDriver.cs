@@ -137,6 +137,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float audioVolume = 0f;
 
     private OVRLipSync.Frame visemeData = new OVRLipSync.Frame();
+    private float fakeTimeTime = 0f;
     private float volume;
     static private bool inited = false;
     private int lastSmoothing = 50;
@@ -254,14 +255,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         return bestViseme;
     }
 
-    void ApplyVisemes() {
+    bool ApplyVisemes() {
         if (vrmBlendShapeProxy == null || catsData == null)
-            return;
+            return true;
         float expressionFactor = 1f;
         if (currentExpression != null)
             expressionFactor = currentExpressionVisemeFactor;
         if (currentExpression != null && !currentExpressionEnableVisemes) {
-            return;
+            return true;
         }
         float weight;
         OVRLipSync.Viseme current = GetActiveViseme(out weight);
@@ -269,7 +270,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (wasSilViseme) {
                 if (hybridLipSync && Time.time - startedSilVisemes > silVisemeHybridThreshold) {
                     ApplyMouthShape();
-                    return;
+                    return false;
                 }
             } else {
                 startedSilVisemes = Time.time;
@@ -299,6 +300,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (result > 0f)
                 vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
         }
+        return false;
     }
     
     void ApplyMouthShape(bool fadeOnly) {
@@ -1318,7 +1320,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         audioVolume /= buffer.Length;
         
         if (audioVolume > 0f)
-            lastAudioTime = Time.time;
+            lastAudioTime = fakeTimeTime;
 
         int totalLen = partialPos + buffer.Length;
         int bufferPos = 0;
@@ -1430,11 +1432,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             UpdateGaze();
         BlinkEyes();
         ReadAudio();
+        bool doMouthTracking = true;
         if (lipSync) {
-            ApplyVisemes();
-        } else {
-            ApplyMouthShape();
+            doMouthTracking = ApplyVisemes();
         }
+        if (doMouthTracking)
+            ApplyMouthShape();
         if (vrmBlendShapeProxy != null && browClips == null)
             vrmBlendShapeProxy.Apply();
         UpdateBrows();
@@ -1449,6 +1452,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void Update() {
+        fakeTimeTime = Time.time;
         if (inited && lastSmoothing != smoothAmount) {
             OVRLipSync.SendSignal(context, OVRLipSync.Signals.VisemeSmoothing, smoothAmount, 0);
             lastSmoothing = smoothAmount;
