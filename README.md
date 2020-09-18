@@ -2,7 +2,7 @@
 
 # Overview
 
-**Note**: This is a tracking library, **not** a stand-alone avatar puppeteering program. I'm also working on [such](https://www.vseeface.icu/) an application, which is currently in a semi-public beta, with releases being posted in the `#vseeface` channel of [@Virtual_Deat](https://twitter.com/Virtual_Deat)'s Discord server.
+**Note**: This is a tracking library, **not** a stand-alone avatar puppeteering program. I'm also working on [such](https://www.vseeface.icu/) an application, which is currently in a public beta.
 
 This project implements a facial landmark detection model based on MobileNetV3.
 
