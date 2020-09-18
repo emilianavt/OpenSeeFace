@@ -7,6 +7,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     [Header("Settings")]
     [Tooltip("This is the source of face tracking data.")]
     public OpenSee openSee;
+    [Tooltip("When this is set to another game object, its kinematic interpolation component will get updated from values of this.")]
+    public OpenSeeKinematicInterpolation kinematicInterpolation;
     [Tooltip("This can be used to skip the first few tracking frames.")]
     public int skipFirst = 5;
     [Tooltip("When set to true, the next rotation and translation values will be set as zero rotation and zero translation.")]
@@ -87,10 +89,12 @@ public class OpenSeeIKTarget : MonoBehaviour
     void Interpolate() {
         if (!interpolate || interpolateState < 2)
             return;
-        float t = Mathf.Clamp((float)interpolationCount / avgInterps, 0f, 0.985f);
-        transform.localPosition = Vector3.Lerp(lastT, currentT, t);
-        transform.localRotation = Quaternion.Lerp(lastR, currentR, t);
+        float t = Mathf.Clamp((float)interpolationCount / avgInterps, 0f, 1.5f);
+        transform.localPosition = Vector3.SlerpUnclamped(lastT, currentT, t);
+        transform.localRotation = Quaternion.SlerpUnclamped(lastR, currentR, t);
         interpolationCount++;
+        //transform.localPosition = new Vector3(0.3f * ((Time.time/3f) % 3f) - 0.5f, 0.3f * Mathf.Sin(Mathf.Rad2Deg * ((Time.time/5f) % 3f)), 0f);
+        //transform.localRotation = Quaternion.identity * Quaternion.AngleAxis(20f * Mathf.Sin(Mathf.Rad2Deg * ((Time.time/5f) % 3f)) - 10f, Vector3.up);
     }
 
     Quaternion MirrorQuaternion(Quaternion q) {
@@ -210,14 +214,14 @@ public class OpenSeeIKTarget : MonoBehaviour
             convertedQuaternion = MirrorQuaternion(convertedQuaternion);
             t = MirrorTranslation(t);
         }
-
+        
         if (interpolateState > 1)
             avgInterps = Mathf.Lerp(avgInterps, (float)interpolationCount, 0.15f);
         interpolationCount = 0;
         averageInterpolations = avgInterps;
 
-        lastT = currentT;
-        lastR = currentR;
+        lastT = transform.localPosition;
+        lastR = transform.localRotation;
         if (interpolateState > 0) {
             currentT = Vector3.Lerp(currentT, (t - dT) * translationScale, 1f - smooth);
             currentR = Quaternion.Lerp(transform.localRotation, convertedQuaternion * dR, 1f - smooth);
@@ -233,6 +237,9 @@ public class OpenSeeIKTarget : MonoBehaviour
         } else {
             transform.localPosition = Vector3.Lerp(transform.localPosition, (t - dT) * translationScale, 1f - smooth);
             transform.localRotation = Quaternion.Lerp(transform.localRotation, convertedQuaternion * dR, 1f - smooth);
+        }
+        if (kinematicInterpolation != null && kinematicInterpolation.gameObject != gameObject) {
+            kinematicInterpolation.UpdateKI(updated, transform.localPosition, transform.localRotation);
         }
         
         if (driftBack) {
