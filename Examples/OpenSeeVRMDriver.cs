@@ -39,6 +39,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float blinkSmoothing = 0.75f;
     [Tooltip("With tracked eye blinking, the eyes will close when looking down. Enable this to compensate this by modifying thresholds.")]
     public bool lookDownCompensation = false;
+    [Tooltip("When enabled, auto blinking will be enabled while looking down.")]
+    public bool autoBlinkLookingDown = false;
     [Tooltip("When enabled, the blink state for both eyes is permanently linked together.")]
     public bool linkBlinks = true;
     [Tooltip("When enabled, it becomes possible to wink even with link blinks enabled.")]
@@ -868,6 +870,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         
         if (currentExpression == null && expressionMap.ContainsKey("neutral")) {
             currentExpression = expressionMap["neutral"];
+            currentExpression.triggered = true;
         }
 
         // Reset limits on expressions
@@ -894,43 +897,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
         }
         lastExpression = currentExpression;
-        
-        /*if (currentExpression != lastExpression) {
-            expressionChangeTime = Time.time;
-            lastExpression = currentExpression;
-        }*/
-
-        /*float timeWeight = 1f;
-        if (currentExpression.transitionTime > 0f)
-            timeWeight = Mathf.Clamp((Time.time - expressionChangeTime) / (currentExpression.transitionTime * 0.001f), 0f, 1f);
-        if (timeWeight >= 1f) {
-            foreach (var expression in expressionMap.Values) {
-                if (expression != currentExpression) {
-                    expression.maxWeight = 0f;
-                    expression.lastTimeWeightOld = 0f;
-                    vrmBlendShapeProxy.AccumulateValue(expression.blendShapeKey, 0f);
-                }
-            }
-        } else {
-            foreach (var expression in expressionMap.Values) {
-                if (expression != currentExpression) {
-                    float timeWeightOld = 1f;
-                    if (expression.transitionTime > 0f)
-                        timeWeightOld = Mathf.Max(Mathf.Clamp((Time.time - expressionChangeTime) / (expression.transitionTime * 0.001f), 0f, 1f), timeWeight);
-                    if (expression.lastTimeWeightOld >= timeWeightOld)
-                        expression.lastTimeWeightOld = timeWeightOld;
-                    expression.maxWeight = Mathf.Clamp(expression.maxWeight - (timeWeightOld - expression.lastTimeWeightOld), 0f, 1f);
-                    expression.lastTimeWeightOld = timeWeightOld;
-                    vrmBlendShapeProxy.AccumulateValue(expression.blendShapeKey, expression.weight * expression.maxWeight);
-                }
-            }
-        }
-        
-        currentExpression.maxWeight = timeWeight;
-        currentExpression.lastTimeWeightOld = 0f;
-        
-        if (currentExpression != null)
-            vrmBlendShapeProxy.AccumulateValue(currentExpression.blendShapeKey, currentExpression.weight * currentExpression.maxWeight);*/
     }
     
     void GetLookParameters(ref float lookLeftRight, ref float lookUpDown, bool update, int gazePoint, int right, int left, int topRight, int topLeft, int bottomRight, int bottomLeft) {
@@ -1033,13 +999,24 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 float blink = eyeBlinker.Blink();
                 vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
             }
-        } else if (openSeeExpression != null && openSeeExpression.openSee != null) {
+        } else if (openSeeExpression != null && openSeeExpression.openSee != null && openSeeData != null) {
             if (!currentExpressionEnableBlinking)
                 return;
 
             float right = 1f;
             float left = 1f;
             
+            float upDownAngle = openSeeData.rawEuler.x;
+            while (upDownAngle < 0f)
+                upDownAngle += 360f;
+            while (upDownAngle >= 360f)
+                upDownAngle -= 360f;
+            if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle && autoBlinkLookingDown) {
+                float blink = eyeBlinker.Blink();
+                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
+                return;
+            }
+
             if (openSeeData != null && lastBlink < openSeeData.time) {
                 lastBlink = openSeeData.time;
                 float openThreshold = eyeOpenedThreshold;
@@ -1048,11 +1025,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle)
                     openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.4f);
 
-                float upDownAngle = openSeeData.rawEuler.x;
-                while (upDownAngle < 0f)
-                    upDownAngle += 360f;
-                while (upDownAngle >= 360f)
-                    upDownAngle -= 360f;
                 if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle) {
                     openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.85f);
                     closedThreshold = Mathf.Lerp(eyeClosedThreshold, 0f, 0.6f);
