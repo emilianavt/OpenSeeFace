@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+namespace OpenSee {
+
 public class OpenSeeKinematicInterpolation : MonoBehaviour
 {
     private Vector3 lastPos;
@@ -13,7 +15,7 @@ public class OpenSeeKinematicInterpolation : MonoBehaviour
     private Vector3 currentPosV;
     private double currentT = 0f;
     
-    private Vector3 lastRot;
+    private Vector3 lastRot = Vector3.zero;
     private Vector3 lastRotV;
     
     private Vector3 currentRot;
@@ -28,27 +30,12 @@ public class OpenSeeKinematicInterpolation : MonoBehaviour
     private double updateT;
     private double interpolateT;
     
-    public void PrettyEuler() {
-        // Ew, but how would you do this interpolation with quaternions?
-        if (currentRot.x > 270f && lastRot.x < 90f)
-            currentRot.x -= 360f;
-        if (currentRot.y > 270f && lastRot.y < 90f)
-            currentRot.y -= 360f;
-        if (currentRot.z > 270f && lastRot.z < 90f)
-            currentRot.z -= 360f;
-        if (currentRot.x < 90f && lastRot.x > 270f)
-            lastRot.x -= 360f;
-        if (currentRot.y < 90f && lastRot.y > 270f)
-            lastRot.y -= 360f;
-        if (currentRot.z < 90f && lastRot.z > 270f)
-            lastRot.z -= 360f;
-    }
-    
     public void UpdateKI(double newT, Vector3 newPos, Quaternion newRot) {
         Interpolate();
         currentPos = transform.localPosition;
+        currentRot = OpenSeeIKTarget.PrettyEuler(currentRot, transform.localRotation.eulerAngles);
+        float dTNow = (float)(interpolateT - updateT);
         if (interpolateT - updateT > 0) {
-            float dTNow = (float)(interpolateT - updateT);
             currentPosV = (currentPos - lastPos) / dTNow;
             currentRotV = (currentRot - lastRot) / dTNow;
         } else {
@@ -63,8 +50,7 @@ public class OpenSeeKinematicInterpolation : MonoBehaviour
         lastT = currentT;
         
         currentPos = newPos;
-        currentRot = newRot.eulerAngles;
-        PrettyEuler();
+        currentRot = OpenSeeIKTarget.PrettyEuler(lastRot, newRot.eulerAngles);
         currentT = newT;
         dT = (float)(currentT - lastT);
         currentPosV = (currentPos - lastPos) / dT;
@@ -109,4 +95,6 @@ public class OpenSeeKinematicInterpolation : MonoBehaviour
     public void LateUpdate() {
         Interpolate();
     }
+}
+
 }

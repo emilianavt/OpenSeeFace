@@ -39,6 +39,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float blinkSmoothing = 0.75f;
     [Tooltip("With tracked eye blinking, the eyes will close when looking down. Enable this to compensate this by modifying thresholds.")]
     public bool lookDownCompensation = false;
+    [Tooltip("This is an angle value that can be used to adjust the angle from which a face is considered to be looking downwards.")]
+    [Range(-10, 20)]
+    public float lookDownAdjustment = 0f;
     [Tooltip("When enabled, auto blinking will be enabled while looking down.")]
     public bool autoBlinkLookingDown = false;
     [Tooltip("When enabled, the blink state for both eyes is permanently linked together.")]
@@ -161,21 +164,20 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float turnLeftBoundaryAngle = -30f;
     private float turnRightBoundaryAngle = 20f;
     private float turnDownBoundaryAngle = 205f;
+    private float wasLookingDown = 0f;
     
     private double lastGaze = 0f;
     private float lastLookUpDown = 0f;
     private float lastLookLeftRight = 0f;
     private float currentLookUpDown = 0f;
     private float currentLookLeftRight = 0f;
-    private int interpolationCount = 0;
-    private int interpolationState = 0;
+    private TimeInterpolate gazeInterpolate;
     
     private float[] lastVisemeValues;
     private double lastMouth = 0f;
     private float[] lastMouthStates;
     private float[] currentMouthStates;
-    private int mouthInterpolationCount = 0;
-    private int mouthInterpolationState = 0;
+    private TimeInterpolate mouthInterpolate;
     
     private double startedSilVisemes = -10;
     private double silVisemeHybridThreshold = 0.3;
@@ -186,8 +188,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float lastBlinkRight = 0f;
     private float currentBlinkLeft = 0f;
     private float currentBlinkRight = 0f;
-    private int blinkInterpolationCount = 0;
-    private int blinkInterpolationState = 0;
+    private TimeInterpolate blinkInterpolate;
     
     private bool overridden = false;
     private OpenSeeVRMExpression toggledExpression = null;
@@ -209,11 +210,39 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float lastBrowUpDown = 0f;
     private float[] lastBrowStates;
     private float[] currentBrowStates;
-    private int browInterpolationCount = 0;
-    private int browInterpolationState = 0;
+    private TimeInterpolate browInterpolate;
     private BlendShapeKey[] browClips;
     
     private float lastAudioTime = -1f;
+    
+    private class TimeInterpolate {
+        private float interpolateT = 0f;
+        private float updateT = 0f;
+        private double lastT = 0f;
+        private double currentT = 0f;
+        private float clamp = 1f;
+        private int gotData = 0;
+        
+        public TimeInterpolate() {}
+        public TimeInterpolate(float clamp) {
+            this.clamp = clamp;
+        }
+        
+        public void UpdateTime(double nowT) {
+            updateT = Time.time;
+            lastT = currentT;
+            currentT = nowT;
+            if (gotData < 2)
+                gotData++;
+        }
+        
+        public float Interpolate() {
+            interpolateT = Time.time;
+            if (interpolateT == updateT || gotData < 2)
+                return 0f;
+            return Mathf.Min((interpolateT - updateT) / (float)(currentT - lastT), clamp);
+        }
+    }
 
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
@@ -313,8 +342,32 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (openSeeData == null || openSeeData.features == null)
             return;
         
+        if (lastMouthStates == null)
+            lastMouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+        if (currentMouthStates == null)
+            currentMouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+        
+        if (mouthInterpolate == null)
+            mouthInterpolate = new TimeInterpolate();
+        float t = mouthInterpolate.Interpolate();
+        
+        if (currentExpression != null && !currentExpressionEnableVisemes)
+            return;
+        
+        float expressionFactor = 1f;
+        if (currentExpression != null)
+            expressionFactor = currentExpressionVisemeFactor;
+
+        for (int i = 0; i < 5; i++) {
+            float interpolated = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
+            float result = interpolated * expressionFactor * visemeFactor;
+            if (result > 0f)
+                vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
+        }
+
         if (lastMouth < openSeeData.time) {
             lastMouth = openSeeData.time;
+            mouthInterpolate.UpdateTime(lastMouth);
             float open = openSeeData.features.MouthOpen;
             float wide = openSeeData.features.MouthWide;
             float[] mouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
@@ -369,37 +422,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 }
             } while (false);
             
-            if (mouthInterpolationState == 2) {
-                for (int i = 0; i < 5; i++) {
-                    mouthStates[i] = Mathf.Lerp(currentMouthStates[i], mouthStates[i], 1f - mouthSmoothing);
-                }
+            for (int i = 0; i < 5; i++) {
+                lastMouthStates[i] = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
+                mouthStates[i] = Mathf.Lerp(lastMouthStates[i], mouthStates[i], 1f - mouthSmoothing);
             }
-            
-            lastMouthStates = currentMouthStates;
             currentMouthStates = mouthStates;
-            if (mouthInterpolationState < 2)
-                mouthInterpolationState++;
-            mouthInterpolationCount = 0;
-        }
-        
-        if (mouthInterpolationState < 2)
-            return;
-        
-        float t = Mathf.Clamp((float)mouthInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
-        mouthInterpolationCount++;
-        
-        if (currentExpression != null && !currentExpressionEnableVisemes)
-            return;
-        
-        float expressionFactor = 1f;
-        if (currentExpression != null)
-            expressionFactor = currentExpressionVisemeFactor;
-
-        for (int i = 0; i < 5; i++) {
-            float interpolated = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
-            float result = interpolated * expressionFactor * visemeFactor;
-            if (result > 0f)
-                vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
         }
     }
     
@@ -411,6 +438,29 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if ((browClips == null && (faceMesh == null || faceType < 0)) || openSeeData == null) {
             return;
         }
+        if (browInterpolate == null)
+            browInterpolate = new TimeInterpolate();
+
+        float t = browInterpolate.Interpolate();
+        float strength = eyebrowStrength;
+        if (currentExpression != null)
+            strength *= currentExpressionEyebrowWeight;
+        
+        if (browUpIndex > -1 && strength > 0f)
+            faceMesh.SetBlendShapeWeight(browUpIndex, strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+        if (browDownIndex > -1 && strength > 0f)
+            faceMesh.SetBlendShapeWeight(browDownIndex, strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+        if (browAngryIndex > -1 && strength > 0f)
+            faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
+        if (browSorrowIndex > -1 && strength > 0f)
+            faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
+        if (browClips != null && strength > 0f) {
+            if (lastBrowUpDown > 0f)
+                vrmBlendShapeProxy.AccumulateValue(browClips[0], strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+            else if (lastBrowUpDown < 0f)
+                vrmBlendShapeProxy.AccumulateValue(browClips[1], strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+        }
+
         if (lastBrows < openSeeData.time) {
             lastBrows = openSeeData.time;
             float upDownStrength = (openSeeData.features.EyebrowUpDownLeft + openSeeData.features.EyebrowUpDownRight) / 2f;
@@ -448,15 +498,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
             if (eyebrowIsMoving > 0)
                 eyebrowIsMoving--;
-            upDownStrength = Mathf.Lerp(lastBrowUpDown, upDownStrength, 1f - eyebrowSmoothing);
+            upDownStrength = Mathf.LerpUnclamped(lastBrowUpDown, upDownStrength, 1f - eyebrowSmoothing);
             lastBrowUpDown = upDownStrength;
             
-            if (browInterpolationState < 2)
-                browInterpolationState++;
-            browInterpolationCount = 0;
-            
             for (int i = 0; i < 4; i++)
-                lastBrowStates[i] = currentBrowStates[i];
+                lastBrowStates[i] = Mathf.Lerp(lastBrowStates[i], currentBrowStates[i], t);
+            browInterpolate.UpdateTime(openSeeData.time);
             
             if (browClips != null) {
                 currentBrowStates[0] = upDownStrength;
@@ -497,28 +544,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     currentBrowStates[3] = 0f;
                 }
             }
-        }
-        
-        float t = Mathf.Clamp((float)browInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
-        browInterpolationCount++;
-        
-        float strength = eyebrowStrength;
-        if (currentExpression != null)
-            strength *= currentExpressionEyebrowWeight;
-        
-        if (browUpIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browUpIndex, strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
-        if (browDownIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browDownIndex, strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
-        if (browAngryIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
-        if (browSorrowIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
-        if (browClips != null && strength > 0f) {
-            if (lastBrowUpDown > 0f)
-                vrmBlendShapeProxy.AccumulateValue(browClips[0], strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
-            else if (lastBrowUpDown < 0f)
-                vrmBlendShapeProxy.AccumulateValue(browClips[1], strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
         }
     }
     
@@ -924,38 +949,18 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
     
     void UpdateGaze() {
-        if (openSeeData == null || vrmBlendShapeProxy == null || openSeeIKTarget == null || !(openSeeIKTarget.averageInterpolations > 0f))
+        if (openSeeData == null || vrmBlendShapeProxy == null || openSeeIKTarget == null)
             return;
         
         float lookUpDown = currentLookUpDown;
         float lookLeftRight = currentLookLeftRight;
-
-        if (lastGaze < openSeeData.time) {
-            GetLookParameters(ref lookLeftRight, ref lookUpDown, false, 66, 36, 39, 37, 38, 41, 40);
-            GetLookParameters(ref lookLeftRight, ref lookUpDown, true,  67, 42, 45, 43, 44, 47, 46);
-            
-            lookLeftRight = Mathf.Lerp(currentLookLeftRight, lookLeftRight, 1f - gazeSmoothing);
-            lookUpDown = Mathf.Lerp(currentLookUpDown, lookUpDown, 1f - gazeSmoothing);
-
-            if (Mathf.Abs(lookLeftRight - currentLookLeftRight) + Mathf.Abs(lookUpDown - currentLookUpDown) > gazeStabilizer) {
-                lastLookLeftRight = currentLookLeftRight;
-                lastLookUpDown = currentLookUpDown;
-                currentLookLeftRight = lookLeftRight;
-                currentLookUpDown = lookUpDown;
-                lastGaze = openSeeData.time;
-                if (interpolationState < 2)
-                    interpolationState++;
-                interpolationCount = 0;
-            }
-        }
         
-        if (interpolationState < 2)
-            return;
-        
-        float t = Mathf.Clamp((float)interpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
+        if (gazeInterpolate == null)
+            gazeInterpolate = new TimeInterpolate();
+        float t = gazeInterpolate.Interpolate();
+
         lookLeftRight = Mathf.Lerp(lastLookLeftRight, currentLookLeftRight, t);
         lookUpDown = Mathf.Lerp(lastLookUpDown, currentLookUpDown, t);
-        interpolationCount++;
         
         if (!openSeeIKTarget.mirrorMotion)
             lookLeftRight = -lookLeftRight;
@@ -989,6 +994,23 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 leftEye.localRotation = rotation;
             }
         }
+
+        if (lastGaze < openSeeData.time) {
+            GetLookParameters(ref lookLeftRight, ref lookUpDown, false, 66, 36, 39, 37, 38, 41, 40);
+            GetLookParameters(ref lookLeftRight, ref lookUpDown, true,  67, 42, 45, 43, 44, 47, 46);
+            
+            lookLeftRight = Mathf.Lerp(currentLookLeftRight, lookLeftRight, 1f - gazeSmoothing);
+            lookUpDown = Mathf.Lerp(currentLookUpDown, lookUpDown, 1f - gazeSmoothing);
+
+            if (Mathf.Abs(lookLeftRight - currentLookLeftRight) + Mathf.Abs(lookUpDown - currentLookUpDown) > gazeStabilizer) {
+                lastLookLeftRight = Mathf.Lerp(lastLookLeftRight, currentLookLeftRight, t);
+                lastLookUpDown = Mathf.Lerp(lastLookUpDown, currentLookUpDown, t);
+                currentLookLeftRight = lookLeftRight;
+                currentLookUpDown = lookUpDown;
+                lastGaze = openSeeData.time;
+                gazeInterpolate.UpdateTime(lastGaze);
+            }
+        }
     }
 
     void BlinkEyes() {
@@ -1011,27 +1033,54 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 upDownAngle += 360f;
             while (upDownAngle >= 360f)
                 upDownAngle -= 360f;
-            if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle && autoBlinkLookingDown) {
+            if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle - lookDownAdjustment - wasLookingDown && autoBlinkLookingDown) {
+                if (!(wasLookingDown > 0f))
+                    eyeBlinker.Blink();
                 float blink = eyeBlinker.Blink();
                 vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
                 return;
             }
 
+            if (blinkInterpolate == null)
+                blinkInterpolate = new TimeInterpolate();
+            float t = blinkInterpolate.Interpolate();
+            
+            left = Mathf.Lerp(lastBlinkLeft, currentBlinkLeft, t);
+            right = Mathf.Lerp(lastBlinkRight, currentBlinkRight, t);
+            
+            if (openSeeIKTarget.mirrorMotion) {
+                float tmp = left;
+                left = right;
+                right = tmp;
+            }
+            
+            if (linkBlinks && !allowWinking) {
+                float v = Mathf.Max(left, right);
+                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), v);
+            } else {
+                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_R), right);
+                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_L), left);
+            }
+
             if (openSeeData != null && lastBlink < openSeeData.time) {
                 lastBlink = openSeeData.time;
+                blinkInterpolate.UpdateTime(lastBlink);
                 float openThreshold = eyeOpenedThreshold;
                 float closedThreshold = eyeClosedThreshold;
                 
                 if (openSeeData.rawEuler.y < turnLeftBoundaryAngle || openSeeData.rawEuler.y > turnRightBoundaryAngle)
                     openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.4f);
 
-                if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle) {
+                if (lookDownCompensation && upDownAngle > turnDownBoundaryAngle - lookDownAdjustment - wasLookingDown) {
                     openThreshold = Mathf.Lerp(eyeOpenedThreshold, eyeClosedThreshold, 0.85f);
                     closedThreshold = Mathf.Lerp(eyeClosedThreshold, 0f, 0.6f);
-                    if (upDownAngle > turnDownBoundaryAngle + 10f) {
+                    if (upDownAngle > turnDownBoundaryAngle - lookDownAdjustment + 10f) {
                         openThreshold = 0.1f;
                         closedThreshold = 0f;
                     }
+                    wasLookingDown = 1.5f;
+                } else {
+                    wasLookingDown = 0f;
                 }
                 
                 if (openSeeData.rightEyeOpen > openThreshold)
@@ -1061,8 +1110,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     }
                 }
 
-                lastBlinkLeft = currentBlinkLeft;
-                lastBlinkRight = currentBlinkRight;
+                lastBlinkLeft = Mathf.Lerp(lastBlinkLeft, currentBlinkLeft, t);
+                lastBlinkRight = Mathf.Lerp(lastBlinkRight, currentBlinkRight, t);
                 currentBlinkLeft = Mathf.Lerp(currentBlinkLeft, left, 1f - blinkSmoothing);
                 currentBlinkRight = Mathf.Lerp(currentBlinkRight, right, 1f - blinkSmoothing);
                 
@@ -1074,32 +1123,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     currentBlinkLeft = 1f;
                 if (right > 0.99999f)
                     currentBlinkRight = 1f;
-                
-                if (blinkInterpolationState < 2)
-                    blinkInterpolationState++;
-            }
-            
-            if (blinkInterpolationState < 2)
-                return;
-            
-            float t = Mathf.Clamp((float)blinkInterpolationCount / openSeeIKTarget.averageInterpolations, 0f, 0.985f);
-            blinkInterpolationCount++;
-            
-            left = Mathf.Lerp(lastBlinkLeft, currentBlinkLeft, t);
-            right = Mathf.Lerp(lastBlinkRight, currentBlinkRight, t);
-            
-            if (openSeeIKTarget.mirrorMotion) {
-                float tmp = left;
-                left = right;
-                right = tmp;
-            }
-            
-            if (linkBlinks && !allowWinking) {
-                float v = Mathf.Max(left, right);
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), v);
-            } else {
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_R), right);
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_L), left);
             }
         }
     }

@@ -166,10 +166,10 @@ public class OpenSeeExpression : MonoBehaviour
                 oser = formatter.Deserialize(gzipStream) as OpenSeeExpressionRepresentation;
             }
             expressions = oser.expressions;
-            if (oser.thunderSVM)
+            /*if (oser.thunderSVM)
                 model = new ThunderSVMModel(oser.modelBytes);
-            else
-                model = new SVMModel(oser.modelBytes);
+            else*/
+            model = new SVMModel(oser.modelBytes);
             classLabels = oser.classLabels;
             indices = oser.indices;
             //pointSelection = oser.pointSelection;
