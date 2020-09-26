@@ -484,6 +484,15 @@ class FaceInfo():
             self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
             self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))
 
+def get_model_base_path(model_dir):
+    model_base_path = resolve(os.path.join("models"))
+    if model_dir is None:
+        if not os.path.exists(model_base_path):
+            model_base_path = resolve(os.path.join("..", "models"))
+    else:
+        model_base_path = model_dir
+    return model_base_path
+
 class Tracker():
     def __init__(self, width, height, model_type=3, detection_threshold=0.6, threshold=None, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False, feature_level=2):
         options = onnxruntime.SessionOptions()
@@ -502,12 +511,7 @@ class Tracker():
         model = "lm_modelT_opt.onnx"
         if model_type >= 0:
             model = self.models[self.model_type]
-        model_base_path = resolve(os.path.join("models"))
-        if model_dir is None:
-            if not os.path.exists(model_base_path):
-                model_base_path = resolve(os.path.join("..", "models"))
-        else:
-            model_base_path = model_dir
+        model_base_path = get_model_base_path(model_dir)
 
         if threshold is None:
             threshold = 0.6

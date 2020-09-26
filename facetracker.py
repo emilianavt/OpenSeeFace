@@ -10,7 +10,7 @@ parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data
 parser.add_argument("-p", "--port", type=int, help="Set port for sending tracking data", default=11573)
 if os.name == 'nt':
     parser.add_argument("-l", "--list-cameras", type=int, help="Set this to 1 to list the available cameras and quit, set this to 2 or higher to output only the names", default=0)
-    parser.add_argument("-a", "--list-dcaps", type=int, help="Set this to -1 to list all cameras and their available capabilities, set this to a camera id to list that camera's capabilities.", default=None)
+    parser.add_argument("-a", "--list-dcaps", type=int, help="Set this to -1 to list all cameras and their available capabilities, set this to a camera id to list that camera's capabilities", default=None)
     parser.add_argument("-W", "--width", type=int, help="Set camera and raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set camera and raw RGB height", default=360)
     parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
@@ -43,6 +43,7 @@ parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experiment
 parser.add_argument("--face-id-offset", type=int, help="When set, this offset is added to all face ids, which can be useful for mixing tracking data from multiple network sources", default=0)
 parser.add_argument("--repeat-video", type=int, help="When set to 1 and a video file was specified with -c, the tracker will loop the video until interrupted", default=0)
 parser.add_argument("--dump-points", type=str, help="When set to a filename, the current face 3D points are made symmetric and dumped to the given file when quitting the visualization with the \"q\" key", default="")
+parser.add_argument("--benchmark", type=int, help="When set to 1, the different tracking models are benchmarked, starting with the best and ending with the fastest and with gaze tracking disabled for models with negative IDs", default=0)
 if os.name == 'nt':
     parser.add_argument("--use-dshowcapture", type=int, help="When set to 1, libdshowcapture will be used for video input instead of OpenCV", default=1)
 args = parser.parse_args()
@@ -106,8 +107,25 @@ import time
 import cv2
 import socket
 import struct
+import json
 from input_reader import InputReader, VideoReader, DShowCaptureReader, try_int
-from tracker import Tracker
+from tracker import Tracker, get_model_base_path
+
+if args.benchmark > 0:
+    model_base_path = get_model_base_path(args.model_dir)
+    im = cv2.imread(os.path.join(model_base_path, "benchmark.bin"), cv2.IMREAD_COLOR)
+    results = []
+    for model_type in [3, 2, 1, 0, -1]:
+        tracker = Tracker(224, 224, threshold=0.1, max_threads=args.max_threads, max_faces=1, discard_after=0, scan_every=0, silent=True, model_type=model_type, model_dir=args.model_dir, no_gaze=(model_type < 0), detection_threshold=0.1, use_retinaface=0, max_feature_updates=900, static_model=True if args.no_3d_adapt == 1 else False)
+        tracker.detected = 1
+        tracker.faces = [(0, 0, 224, 224)]
+        total = 0.0
+        for i in range(100):
+            start = time.perf_counter()
+            r = tracker.predict(im)
+            total += time.perf_counter() - start
+        print(1. / (total / 100.))
+    sys.exit(0)
 
 target_ip = args.ip
 target_port = args.port
@@ -208,7 +226,7 @@ try:
             first = False
             height, width, channels = frame.shape
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 else True, detection_threshold=args.detection_threshold, use_retinaface=args.scan_retinaface, max_feature_updates=args.max_feature_updates, static_model=True if args.no_3d_adapt == 1 else False)
+            tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 and args.model >= 0 else True, detection_threshold=args.detection_threshold, use_retinaface=args.scan_retinaface, max_feature_updates=args.max_feature_updates, static_model=True if args.no_3d_adapt == 1 else False)
             if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), args.video_fps, (width * args.video_scale, height * args.video_scale))
 
