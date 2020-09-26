@@ -54,16 +54,26 @@ class EscapiReader(VideoReader):
         escapi.deinit_camera(self.device)
 
 class DShowCaptureReader(VideoReader):
-    def __init__(self, capture, width, height, fps, use_dshowcapture=True):
+    def __init__(self, capture, width, height, fps, use_dshowcapture=True, dcap=None):
         self.device = None
         self.width = width
         self.height = height
         self.fps = fps
+        self.dcap = dcap;
         self.device = dshowcapture.DShowCapture()
         self.device.get_devices()
         self.name = self.device.get_device(capture)
-        self.device.capture_device(capture, self.width, self.height, self.fps)
-        print(f"Camera: \"{self.name}\" Resolution: {self.device.get_width()}x{self.device.get_height()} Frame rate: {self.device.get_fps()} Colorspace: {self.device.get_colorspace()} Flipped: {self.device.get_flipped()}")
+        if dcap is None:
+            print("Opening classic")
+            self.device.capture_device(capture, self.width, self.height, self.fps)
+        else:
+            if dcap < 0:
+                print("Opening default")
+                self.device.capture_device_default(capture)
+            else:
+                print("Opening exact")
+                self.device.capture_device_by_dcap(capture, dcap, self.width, self.height, self.fps)
+        print(f"Camera: \"{self.name}\" Capability ID: {dcap} Resolution: {self.device.get_width()}x{self.device.get_height()} Frame rate: {self.device.get_fps()} Colorspace: {self.device.get_colorspace()} Internal: {self.device.get_colorspace_internal()} Flipped: {self.device.get_flipped()}")
         self.timeout = 1000
     def is_open(self):
         return self.device.capturing()
@@ -159,7 +169,7 @@ def test_reader(reader):
         return False
 
 class InputReader():
-    def __init__(self, capture, raw_rgb, width, height, fps, use_dshowcapture=False):
+    def __init__(self, capture, raw_rgb, width, height, fps, use_dshowcapture=False, dcap=None):
         self.reader = None
         self.name = str(capture)
         try:
@@ -174,7 +184,7 @@ class InputReader():
                     name = ""
                     try:
                         if use_dshowcapture:
-                            self.reader = DShowCaptureReader(int(capture), width, height, fps)
+                            self.reader = DShowCaptureReader(int(capture), width, height, fps, dcap=dcap)
                             name = self.reader.name
                             good = test_reader(self.reader)
                             self.name = name

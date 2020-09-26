@@ -5,6 +5,7 @@ import numpy as np
 from ctypes import *
 from PIL import Image
 import cv2
+import json
 
 def resolve(name):
     f = os.path.join(os.path.dirname(__file__), name)
@@ -13,7 +14,7 @@ def resolve(name):
 lib = None
 
 def create_frame_buffer(width, height):
-    buffer = bytearray(width * height * 4)
+    buffer = bytearray(width * height * 4 * 4)
     char_array = c_char * len(buffer)
     return char_array.from_buffer(buffer)
 
@@ -31,16 +32,20 @@ class DShowCapture():
             lib.get_devices.argtypes = [c_void_p]
             lib.get_device.argtypes = [c_void_p, c_int, c_char_p, c_int]
             lib.capture_device.argtypes = [c_void_p, c_int, c_int, c_int, c_int]
+            lib.capture_device_by_dcap.argtypes = [c_void_p, c_int, c_int, c_int, c_int, c_longlong]
             lib.capture_device_default.argtypes = [c_void_p, c_int]
             lib.get_width.argtypes = [c_void_p]
             lib.get_height.argtypes = [c_void_p]
             lib.get_fps.argtypes = [c_void_p]
             lib.get_flipped.argtypes = [c_void_p]
             lib.get_colorspace.argtypes = [c_void_p]
+            lib.get_colorspace_internal.argtypes = [c_void_p]
             lib.capturing.argtypes = [c_void_p]
             lib.get_frame.argtypes = [c_void_p, c_int, c_char_p, c_int]
             lib.get_size.argtypes = [c_void_p]
             lib.stop_capture.argtypes = [c_void_p]
+            lib.get_json_length.argtypes = [c_void_p]
+            lib.get_json.argtypes = [c_void_p, c_char_p, c_int]
             lib.destroy_capture.argtypes = [c_void_p]
         self.lib = lib
         self.cap = lib.create_capture()
@@ -49,6 +54,7 @@ class DShowCapture():
         self.have_devices = False
         self.size = None
         self.real_size = None
+        self.info = None
 
     def __del__(self):
         if not self.buffer is None:
@@ -64,6 +70,14 @@ class DShowCapture():
         self.lib.get_device(self.cap, device_number, self.name_buffer, 255)
         name_str = str(self.name_buffer.value.decode('utf8'))
         return name_str
+
+    def get_info(self):
+        json_length = self.lib.get_json_length(self.cap);
+        json_buffer = create_string_buffer(json_length)
+        self.lib.get_json(self.cap, json_buffer, json_length);
+        json_text = str(json_buffer.value.decode('utf8'))
+        self.info = json.loads(json_text)
+        return self.info
 
     def capture_device(self, cam, width, height, fps):
         if not self.have_devices:
@@ -81,6 +95,23 @@ class DShowCapture():
             self.real_size = None
         return ret;
 
+    def capture_device_by_dcap(self, cam, dcap, width, height, fps):
+        if not self.have_devices:
+            self.get_devices()
+        fps = int(10000000 / fps)
+        ret = self.lib.capture_device_by_dcap(self.cap, cam, dcap, width, height, fps) == 1
+        if ret:
+            self.width = self.get_width()
+            self.height = self.get_height()
+            self.flipped = self.get_flipped()
+            self.colorspace = self.get_colorspace()
+            self.size = self.width * self.height * 4 * 4
+            self.buffer = create_frame_buffer(self.width, self.height)
+        else:
+            self.size = None
+            self.real_size = None
+        return ret;
+
     def capture_device_default(self, cam):
         if not self.have_devices:
             self.get_devices()
@@ -90,7 +121,7 @@ class DShowCapture():
             self.height = self.get_height()
             self.flipped = self.get_flipped()
             self.colorspace = self.get_colorspace()
-            self.size = self.width * self.height * 4
+            self.size = self.width * self.height * 4 * 4
             self.buffer = create_frame_buffer(self.width, self.height)
         else:
             self.size = None
@@ -110,7 +141,13 @@ class DShowCapture():
         return self.lib.get_flipped(self.cap) != 0
 
     def get_colorspace(self):
-        return self.lib.get_colorspace(self.cap)
+        colorspace = self.lib.get_colorspace(self.cap)
+        if colorspace == 0:
+            colorspace = self.lib.get_colorspace_internal(self.cap)
+        return colorspace
+
+    def get_colorspace_internal(self):
+        return self.lib.get_colorspace_internal(self.cap)
 
     def capturing(self):
         return self.lib.capturing(self.cap) == 1
@@ -118,32 +155,36 @@ class DShowCapture():
     def get_frame(self, timeout):
         if self.size is None:
             return None
-        if self.lib.get_frame(self.cap, timeout, self.buffer, self.size) == 0:
-            return None
-        if self.real_size is None:
-            self.real_size = self.lib.get_size(self.cap)
+        self.real_size = self.lib.get_frame(self.cap, timeout, self.buffer, self.size)
         img = np.frombuffer(self.buffer, dtype=np.uint8)[0:self.real_size]
         if self.colorspace in [100, 101]:
-            img = cv2.cvtColor(img.reshape((self.height,self.width,4)), cv2.COLOR_BGRA2BGR);
+            if self.real_size == self.height * self.width * 4:
+                img = cv2.cvtColor(img.reshape((self.height,self.width,4)), cv2.COLOR_BGRA2BGR)
+            elif self.real_size == self.height * self.width * 3:
+                img = img.reshape((self.height,self.width,3))
+            else:
+                return None
             if not self.flipped:
                 img = cv2.flip(img, 0)
             return img
         elif self.colorspace == 200:
-            img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_I420);
+            img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_I420)
         elif self.colorspace == 201:
-            img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_NV12);
+            img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_NV12)
         elif self.colorspace == 202:
-            img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_YV12);
+            img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_YV12)
         elif self.colorspace == 203:
-            img = cv2.cvtColor(img.reshape((self.height,self.width,1)), cv2.COLOR_GRAY2BGR);
+            img = cv2.cvtColor(img.reshape((self.height,self.width,1)), cv2.COLOR_GRAY2BGR)
         elif self.colorspace == 300:
-            img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_YVYU);
+            img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_YVYU)
         elif self.colorspace == 301:
-            img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_YUY2);
+            img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_YUY2)
         elif self.colorspace == 302:
-            img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_UYVY);
+            img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_UYVY)
         elif self.colorspace == 303:
             return None
+        elif self.colorspace == 400:
+            img = cv2.imdecode(img, cv2.IMREAD_COLOR);
         if self.flipped:
             img = cv2.flip(img, 0)
         return img
@@ -186,7 +227,7 @@ if __name__ == "__main__":
     width = cap.get_width()
     height = cap.get_height()
     flipped = cap.get_flipped()
-    print(f"Width: {width} Height: {height} FPS: {cap.get_fps()} Flipped: {flipped} Colorspace: {cap.get_colorspace()}")
+    print(f"Width: {width} Height: {height} FPS: {cap.get_fps()} Flipped: {flipped} Colorspace: {cap.get_colorspace()} Internal: {cap.get_colorspace_internal()}")
     
     while True:
         img = cap.get_frame(1000)

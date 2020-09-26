@@ -9,10 +9,11 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data", default="127.0.0.1")
 parser.add_argument("-p", "--port", type=int, help="Set port for sending tracking data", default=11573)
 if os.name == 'nt':
-    parser.add_argument("-l", "--list-cameras", type=int, help="Set this to 1 to list the available cameras and quit, set this to a number higher than 1 to output only the names", default=0)
+    parser.add_argument("-l", "--list-cameras", type=int, help="Set this to 1 to list the available cameras and quit, set this to 2 to output only the names and to 3 to output camera names and device capabilities", default=0)
     parser.add_argument("-W", "--width", type=int, help="Set camera and raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set camera and raw RGB height", default=360)
     parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
+    parser.add_argument("-D", "--dcap", type=int, help="Set which device capability line to use or -1 to use the default camera settings", default=None)
 else:
     parser.add_argument("-W", "--width", type=int, help="Set raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
@@ -69,15 +70,30 @@ sys.stderr = OutputLog(output_logfile, sys.stderr)
 if os.name == 'nt' and args.list_cameras > 0:
     import dshowcapture
     cap = dshowcapture.DShowCapture()
-    camera_count = cap.get_devices()
-    if args.list_cameras == 1:
-        print("Available cameras:")
-    for i in range(camera_count):
-        camera_name = cap.get_device(i)
+    if args.list_cameras == 3:
+        info = cap.get_info()
+        unit = 10000000.;
+        formats = {0: "Any", 1: "Unknown", 100: "ARGB", 101: "XRGB", 200: "I420", 201: "NV12", 202: "YV12", 203: "Y800", 300: "YVYU", 301: "YUY2", 302: "UYVY", 303: "HDYC (Unsupported)", 400: "MJPEG", 401: "H264" }
+        for cam in info:
+            print(f"{cam['id']}: {cam['name']}")
+            for caps in cam['caps']:
+                format = caps['format']
+                if caps['format'] in formats:
+                    format = formats[caps['format']]
+                if caps['minCX'] == caps['maxCX'] and caps['minCY'] == caps['maxCY']:
+                    print(f"    {caps['id']}: Resolution: {caps['minCX']}x{caps['minCY']} FPS: {unit/caps['maxInterval']:.3f}-{unit/caps['minInterval']:.3f} Format: {format}")
+                else:
+                    print(f"    {caps['id']}: Resolution: {caps['minCX']}x{caps['minCY']}-{caps['maxCX']}x{caps['maxCY']} FPS: {unit/caps['maxInterval']:.3f}-{unit/caps['minInterval']:.3f} Format: {format}")
+    else:
+        camera_count = cap.get_devices()
         if args.list_cameras == 1:
-            print(f"{i}: {camera_name}")
-        else:
-            print(camera_name)
+            print("Available cameras:")
+        for i in range(camera_count):
+            camera_name = cap.get_device(i)
+            if args.list_cameras == 1:
+                print(f"{i}: {camera_name}")
+            else:
+                print(camera_name)
     cap.destroy_capture()
     sys.exit(0)
 
@@ -86,7 +102,7 @@ import time
 import cv2
 import socket
 import struct
-from input_reader import InputReader, VideoReader, try_int
+from input_reader import InputReader, VideoReader, DShowCaptureReader, try_int
 from tracker import Tracker
 
 target_ip = args.ip
@@ -96,11 +112,15 @@ if args.faces >= 40:
     print("Transmission of tracking data over network is not supported with 40 or more faces.")
 
 fps = 0
+dcap = None
 use_dshowcapture_flag = False
 if os.name == 'nt':
     fps = args.fps
+    dcap = args.dcap
     use_dshowcapture_flag = True if args.use_dshowcapture == 1 else False
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag, dcap=dcap)
+    if args.dcap == -1 and type(input_reader) == DShowCaptureReader:
+        fps = min(fps, input_reader.device.get_fps())
 else:
     input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
 if type(input_reader.reader) == VideoReader:
@@ -146,7 +166,7 @@ try:
     source_name = input_reader.name
     while repeat or input_reader.is_open():
         if not input_reader.is_open() or need_reinit == 1:
-            input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
+            input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag, dcap=dcap)
             if input_reader.name != source_name:
                 print(f"Failed to reinitialize camera and got {input_reader.name} instead of {source_name}.")
                 sys.exit(1)
