@@ -9,7 +9,8 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data", default="127.0.0.1")
 parser.add_argument("-p", "--port", type=int, help="Set port for sending tracking data", default=11573)
 if os.name == 'nt':
-    parser.add_argument("-l", "--list-cameras", type=int, help="Set this to 1 to list the available cameras and quit, set this to 2 to output only the names and to 3 to output camera names and device capabilities", default=0)
+    parser.add_argument("-l", "--list-cameras", type=int, help="Set this to 1 to list the available cameras and quit, set this to 2 or higher to output only the names", default=0)
+    parser.add_argument("-a", "--list-dcaps", type=int, help="Set this to -1 to list all cameras and their available capabilities, set this to a camera id to list that camera's capabilities.", default=None)
     parser.add_argument("-W", "--width", type=int, help="Set camera and raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set camera and raw RGB height", default=360)
     parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
@@ -67,15 +68,18 @@ if args.log_output != "":
 sys.stdout = OutputLog(output_logfile, sys.stdout)
 sys.stderr = OutputLog(output_logfile, sys.stderr)
 
-if os.name == 'nt' and args.list_cameras > 0:
+if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
     import dshowcapture
     cap = dshowcapture.DShowCapture()
-    if args.list_cameras == 3:
+    if not args.list_dcaps is None:
         info = cap.get_info()
         unit = 10000000.;
         formats = {0: "Any", 1: "Unknown", 100: "ARGB", 101: "XRGB", 200: "I420", 201: "NV12", 202: "YV12", 203: "Y800", 300: "YVYU", 301: "YUY2", 302: "UYVY", 303: "HDYC (Unsupported)", 400: "MJPEG", 401: "H264" }
         for cam in info:
-            print(f"{cam['id']}: {cam['name']}")
+            if args.list_dcaps == -1:
+                print(f"{cam['id']}: {cam['name']}")
+            if args.list_dcaps != -1 and args.list_dcaps != cam['id']:
+                continue
             for caps in cam['caps']:
                 format = caps['format']
                 if caps['format'] in formats:
