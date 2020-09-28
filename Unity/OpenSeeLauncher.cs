@@ -284,7 +284,7 @@ public class OpenSeeLauncher : MonoBehaviour {
             processStartInfo.RedirectStandardError = true;
             processStartInfo.UseShellExecute = false;
             processStartInfo.FileName = exePath;
-            processStartInfo.Arguments = "facetracker " + argumentString;
+            processStartInfo.Arguments = argumentString;
             
             trackerSB = new StringBuilder();
             trackerProcess = new Process();
