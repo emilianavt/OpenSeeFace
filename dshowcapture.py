@@ -12,22 +12,30 @@ def resolve(name):
     return f
 
 lib = None
+bm_lib = None
 
-def create_frame_buffer(width, height):
-    buffer = bytearray(width * height * 4 * 4)
+def create_frame_buffer(width, height, factor):
+    buffer = bytearray(width * height * 4 * factor)
     char_array = c_char * len(buffer)
     return char_array.from_buffer(buffer)
 
 class DShowCapture():
     def __init__(self):
         global lib
-        if lib is None:
+        global bm_lib
+        if lib is None or bm_lib is None:
             if platform.architecture()[0] == '32bit':
                 dll_path = resolve(os.path.join("dshowcapture", "dshowcapture_x86.dll"))
                 lib = cdll.LoadLibrary(dll_path)
+                dll_path = resolve(os.path.join("dshowcapture", "libminibmcapture32.dll"))
+                bm_lib = cdll.LoadLibrary(dll_path)
             else:
                 dll_path = resolve(os.path.join("dshowcapture", "dshowcapture_x64.dll"))
                 lib = cdll.LoadLibrary(dll_path)
+                dll_path = resolve(os.path.join("dshowcapture", "libminibmcapture64.dll"))
+                bm_lib = cdll.LoadLibrary(dll_path)
+
+            # DirectShow
             lib.create_capture.restype = c_void_p
             lib.get_devices.argtypes = [c_void_p]
             lib.get_device.argtypes = [c_void_p, c_int, c_char_p, c_int]
@@ -47,7 +55,15 @@ class DShowCapture():
             lib.get_json_length.argtypes = [c_void_p]
             lib.get_json.argtypes = [c_void_p, c_char_p, c_int]
             lib.destroy_capture.argtypes = [c_void_p]
+
+            # Blackmagic
+            bm_lib.start_capture_single.argtypes = [c_int, c_int, c_void_p]
+            bm_lib.read_frame_bgra32_blocking.argtypes = [c_char_p, c_int]
+            bm_lib.stop_capture_single.argtypes = []
+            bm_lib.get_json_length.argtypes = []
+            bm_lib.get_json.argtypes = [c_char_p, c_int]
         self.lib = lib
+        self.bm_lib = bm_lib
         self.cap = lib.create_capture()
         self.name_buffer = create_string_buffer(255);
         self.buffer = None
@@ -55,6 +71,7 @@ class DShowCapture():
         self.size = None
         self.real_size = None
         self.info = None
+        self.type = None
 
     def __del__(self):
         if not self.buffer is None:
@@ -72,11 +89,27 @@ class DShowCapture():
         return name_str
 
     def get_info(self):
+        # DirectShow
         json_length = self.lib.get_json_length(self.cap);
         json_buffer = create_string_buffer(json_length)
         self.lib.get_json(self.cap, json_buffer, json_length);
         json_text = str(json_buffer.value.decode('utf8'))
         self.info = json.loads(json_text)
+        for cam in self.info:
+            cam["type"] = "DirectShow"
+        
+        # Blackmagic
+        json_length = self.bm_lib.get_json_length();
+        json_buffer = create_string_buffer(json_length)
+        self.bm_lib.get_json(json_buffer, json_length);
+        json_text = str(json_buffer.value.decode('utf8'))
+        bm_info = json.loads(json_text)
+        dshow_len = len(self.info)
+        for cam in bm_info:
+            cam["type"] = "Blackmagic"
+            cam["id"] += dshow_len
+        self.info.extend(bm_info)
+
         return self.info
 
     def capture_device(self, cam, width, height, fps):
@@ -84,12 +117,15 @@ class DShowCapture():
             self.get_devices()
         ret = self.lib.capture_device(self.cap, cam, width, height, fps) == 1
         if ret:
+            self.type = "DirectShow"
             self.width = self.get_width()
             self.height = self.get_height()
+            self.fps = self.get_fps()
             self.flipped = self.get_flipped()
             self.colorspace = self.get_colorspace()
+            self.colorspace_internal = self.get_colorspace_internal()
             self.size = self.width * self.height * 4
-            self.buffer = create_frame_buffer(self.width, self.height)
+            self.buffer = create_frame_buffer(self.width, self.height, 4)
         else:
             self.size = None
             self.real_size = None
@@ -98,15 +134,35 @@ class DShowCapture():
     def capture_device_by_dcap(self, cam, dcap, width, height, fps):
         if not self.have_devices:
             self.get_devices()
+        if self.info is None:
+            self.get_info()
         fps = int(10000000 / fps)
-        ret = self.lib.capture_device_by_dcap(self.cap, cam, dcap, width, height, fps) == 1
+        ret = False
+        if self.info[cam]['type'] == "DirectShow":
+            ret = self.lib.capture_device_by_dcap(self.cap, cam, dcap, width, height, fps) == 1
+        elif self.info[cam]['type'] == "Blackmagic":
+            ret = self.bm_lib.start_capture_single(self.info[cam]['bmId'], self.info[cam]['caps'][dcap]['bmModecode'], None) != 0
         if ret:
-            self.width = self.get_width()
-            self.height = self.get_height()
-            self.flipped = self.get_flipped()
-            self.colorspace = self.get_colorspace()
-            self.size = self.width * self.height * 4 * 4
-            self.buffer = create_frame_buffer(self.width, self.height)
+            self.type = self.info[cam]['type']
+            if self.type == "DirectShow":
+                self.width = self.get_width()
+                self.height = self.get_height()
+                self.fps = self.get_fps()
+                self.flipped = self.get_flipped()
+                self.colorspace = self.get_colorspace()
+                self.colorspace_internal = self.get_colorspace_internal()
+                self.size = self.width * self.height * 4 * 4
+                self.buffer = create_frame_buffer(self.width, self.height, 4)
+            elif self.type == "Blackmagic":
+                self.width = self.info[cam]['caps'][dcap]['minCX']
+                self.height = self.info[cam]['caps'][dcap]['minCY']
+                self.fps = int(10000000 / self.info[cam]['caps'][dcap]['minInterval'])
+                self.flipped = False
+                self.colorspace = 101
+                self.colorspace_internal = self.colorspace
+                self.size = self.width * self.height * 4
+                self.buffer = create_frame_buffer(self.width, self.height, 1)
+                self.real_size = self.size
         else:
             self.size = None
             self.real_size = None
@@ -117,12 +173,15 @@ class DShowCapture():
             self.get_devices()
         ret = self.lib.capture_device_default(self.cap, cam) == 1
         if ret:
+            self.type = "DirectShow"
             self.width = self.get_width()
             self.height = self.get_height()
+            self.fps = self.get_fps()
             self.flipped = self.get_flipped()
             self.colorspace = self.get_colorspace()
+            self.colorspace_internal = self.get_colorspace_internal()
             self.size = self.width * self.height * 4 * 4
-            self.buffer = create_frame_buffer(self.width, self.height)
+            self.buffer = create_frame_buffer(self.width, self.height, 4)
         else:
             self.size = None
             self.real_size = None
@@ -155,7 +214,12 @@ class DShowCapture():
     def get_frame(self, timeout):
         if self.size is None:
             return None
-        self.real_size = self.lib.get_frame(self.cap, timeout, self.buffer, self.size)
+        if self.type == "DirectShow":
+            self.real_size = self.lib.get_frame(self.cap, timeout, self.buffer, self.size)
+        elif self.type == "Blackmagic":
+            self.bm_lib.read_frame_bgra32_blocking(self.buffer, self.size)
+        else:
+            return None
         img = np.frombuffer(self.buffer, dtype=np.uint8)[0:self.real_size]
         if self.colorspace in [100, 101]:
             if self.real_size == self.height * self.width * 4:
@@ -192,11 +256,16 @@ class DShowCapture():
     def stop_capture(self):
         self.size = None
         self.real_size = None
-        return self.lib.stop_capture(self.cap)
+        if self.type == "DirectShow":
+            return self.lib.stop_capture(self.cap)
+        elif self.type == "Blackmagic":
+            return self.bm_lib.stop_capture_single() != 0
+        return True
 
     def destroy_capture(self):
         if self.cap is None:
             return 0
+        self.stop_capture()
         ret = self.lib.destroy_capture(self.cap)
         self.cap = None
         self.size = None

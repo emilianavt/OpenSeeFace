@@ -62,18 +62,26 @@ class DShowCaptureReader(VideoReader):
         self.dcap = dcap;
         self.device = dshowcapture.DShowCapture()
         self.device.get_devices()
-        self.name = self.device.get_device(capture)
+        info = self.device.get_info()
+        self.name = info[capture]['name']
+        if info[capture]['type'] == "Blackmagic":
+            self.name = "Blackmagic: " + self.name
+            if dcap is None or dcap < 0:
+                dcap = 0
+        ret = False
         if dcap is None:
-            print("Opening classic")
-            self.device.capture_device(capture, self.width, self.height, self.fps)
+            ret = self.device.capture_device(capture, self.width, self.height, self.fps)
         else:
             if dcap < 0:
-                print("Opening default")
-                self.device.capture_device_default(capture)
+                ret = self.device.capture_device_default(capture)
             else:
-                print("Opening exact")
-                self.device.capture_device_by_dcap(capture, dcap, self.width, self.height, self.fps)
-        print(f"Camera: \"{self.name}\" Capability ID: {dcap} Resolution: {self.device.get_width()}x{self.device.get_height()} Frame rate: {self.device.get_fps()} Colorspace: {self.device.get_colorspace()} Internal: {self.device.get_colorspace_internal()} Flipped: {self.device.get_flipped()}")
+                ret = self.device.capture_device_by_dcap(capture, dcap, self.width, self.height, self.fps)
+        if not ret:
+            raise Exception("Failed to start capture.")
+        self.width = self.device.width
+        self.height = self.device.height
+        self.fps = self.device.fps
+        print(f"Camera: \"{self.name}\" Capability ID: {dcap} Resolution: {self.device.width}x{self.device.height} Frame rate: {self.device.fps} Colorspace: {self.device.colorspace} Internal: {self.device.colorspace_internal} Flipped: {self.device.flipped}")
         self.timeout = 1000
     def is_open(self):
         return self.device.capturing()

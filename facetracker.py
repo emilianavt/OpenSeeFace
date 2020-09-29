@@ -78,7 +78,10 @@ if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
         formats = {0: "Any", 1: "Unknown", 100: "ARGB", 101: "XRGB", 200: "I420", 201: "NV12", 202: "YV12", 203: "Y800", 300: "YVYU", 301: "YUY2", 302: "UYVY", 303: "HDYC (Unsupported)", 400: "MJPEG", 401: "H264" }
         for cam in info:
             if args.list_dcaps == -1:
-                print(f"{cam['id']}: {cam['name']}")
+                type = ""
+                if cam['type'] == "Blackmagic":
+                    type = "Blackmagic: "
+                print(f"{cam['id']}: {type}{cam['name']}")
             if args.list_dcaps != -1 and args.list_dcaps != cam['id']:
                 continue
             for caps in cam['caps']:
