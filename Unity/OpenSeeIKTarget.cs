@@ -2,6 +2,7 @@
 
 namespace OpenSee {
 
+[DefaultExecutionOrder(-1)]
 public class OpenSeeIKTarget : MonoBehaviour
 {
     [Header("Settings")]
