@@ -108,6 +108,8 @@ public class OpenSeeWebcam {
         splitCaps.Sort((a, b) => CompareCaps(a.Item1, b.Item1));
         
         prettyCaps = new List<string>();
+        if (type == OpenSeeWebcamType.DirectShow)
+            prettyCaps.Add("Default settings");
         foreach (var cap in splitCaps) {
             prettyCaps.Add(GetPrettyCapability(cap.Item1));
         }
@@ -116,15 +118,28 @@ public class OpenSeeWebcam {
     }
     
     public OpenSeeWebcamCapability GetCapabilityByPrettyIndex(int index) {
-        if (splitCaps == null || index >= splitCaps.Count)
+        int dshowOffset = 0;
+        if (type == OpenSeeWebcamType.DirectShow) {
+            if (index == 0) {
+                OpenSeeWebcamCapability cap = new OpenSeeWebcamCapability();
+                cap.id = -1;
+                cap.format = OpenSeeWebcamFormat.Any;
+                return cap;
+            }
+            dshowOffset = 1;
+        }
+        
+        if (splitCaps == null || index >= splitCaps.Count + dshowOffset || index < 0)
             throw new InvalidOperationException("Invalid capability index.");
-        return caps[splitCaps[index].Item2];
+        
+        return caps[splitCaps[index - dshowOffset].Item2];
     }
 }
 
 [DefaultExecutionOrder(-50)]
 public class OpenSeeWebcamInfo : MonoBehaviour {
     #region DllImport
+    // DirectShow
     [DllImport("dshowcapture_x64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "create_capture")]
 	private static extern System.IntPtr create_capture_x64();
 
@@ -149,7 +164,7 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
     [DllImport("dshowcapture_x86", CallingConvention = CallingConvention.Cdecl, EntryPoint = "destroy_capture")]
 	private static extern void destroy_capture_x86(System.IntPtr cap);
 
-    /* Blackmagic */
+    // Blackmagic
     [DllImport("libminibmcapture64", CallingConvention = CallingConvention.Cdecl, EntryPoint = "get_json_length")]
 	private static extern int bm_get_json_length_x64();
 
