@@ -46,6 +46,7 @@ parser.add_argument("--dump-points", type=str, help="When set to a filename, the
 parser.add_argument("--benchmark", type=int, help="When set to 1, the different tracking models are benchmarked, starting with the best and ending with the fastest and with gaze tracking disabled for models with negative IDs", default=0)
 if os.name == 'nt':
     parser.add_argument("--use-dshowcapture", type=int, help="When set to 1, libdshowcapture will be used for video input instead of OpenCV", default=1)
+    parser.add_argument("--blackmagic-options", type=str, help="When set, this additional option string is passed to the blackmagic capture library", default=None)
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = str(args.max_threads)
@@ -69,20 +70,24 @@ if args.log_output != "":
 sys.stdout = OutputLog(output_logfile, sys.stdout)
 sys.stderr = OutputLog(output_logfile, sys.stderr)
 
-if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
+if os.name == 'nt':
     import dshowcapture
+    if not args.blackmagic_options is None:
+        dshowcapture.set_options(args.blackmagic_options)
+
+if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
     cap = dshowcapture.DShowCapture()
+    info = cap.get_info()
+    unit = 10000000.;
     if not args.list_dcaps is None:
-        info = cap.get_info()
-        unit = 10000000.;
         formats = {0: "Any", 1: "Unknown", 100: "ARGB", 101: "XRGB", 200: "I420", 201: "NV12", 202: "YV12", 203: "Y800", 300: "YVYU", 301: "YUY2", 302: "UYVY", 303: "HDYC (Unsupported)", 400: "MJPEG", 401: "H264" }
         for cam in info:
             if args.list_dcaps == -1:
                 type = ""
                 if cam['type'] == "Blackmagic":
                     type = "Blackmagic: "
-                print(f"{cam['id']}: {type}{cam['name']}")
-            if args.list_dcaps != -1 and args.list_dcaps != cam['id']:
+                print(f"{cam['index']}: {type}{cam['name']}")
+            if args.list_dcaps != -1 and args.list_dcaps != cam['index']:
                 continue
             for caps in cam['caps']:
                 format = caps['format']
@@ -93,15 +98,16 @@ if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
                 else:
                     print(f"    {caps['id']}: Resolution: {caps['minCX']}x{caps['minCY']}-{caps['maxCX']}x{caps['maxCY']} FPS: {unit/caps['maxInterval']:.3f}-{unit/caps['minInterval']:.3f} Format: {format}")
     else:
-        camera_count = cap.get_devices()
         if args.list_cameras == 1:
             print("Available cameras:")
-        for i in range(camera_count):
-            camera_name = cap.get_device(i)
+        for cam in info:
+            type = ""
+            if cam['type'] == "Blackmagic":
+                type = "Blackmagic: "
             if args.list_cameras == 1:
-                print(f"{i}: {camera_name}")
+                print(f"{cam['index']}: {type}{cam['name']}")
             else:
-                print(camera_name)
+                print(f"{type}{cam['name']}")
     cap.destroy_capture()
     sys.exit(0)
 

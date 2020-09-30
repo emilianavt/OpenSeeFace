@@ -4,7 +4,7 @@ facetracker -l 1
 
 set /p cameraNum=Select your camera from the list above and enter the corresponding number:
 
-facetracker -a 1
+facetracker -a %cameraNum%
 
 set /p dcaps=Select your camera mode or -1 for default settings:
 set /p width=Select the width:

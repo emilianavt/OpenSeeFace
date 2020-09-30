@@ -1189,7 +1189,7 @@ class Tracker():
 
         duration = (time.perf_counter() - start) * 1000
         if not self.silent:
-            print(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
+            print(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}ms, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
 
         results = sorted(results, key=lambda x: x.id)
 
