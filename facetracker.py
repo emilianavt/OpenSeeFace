@@ -47,6 +47,7 @@ parser.add_argument("--benchmark", type=int, help="When set to 1, the different 
 if os.name == 'nt':
     parser.add_argument("--use-dshowcapture", type=int, help="When set to 1, libdshowcapture will be used for video input instead of OpenCV", default=1)
     parser.add_argument("--blackmagic-options", type=str, help="When set, this additional option string is passed to the blackmagic capture library", default=None)
+    parser.add_argument("--priority", type=int, help="When set, the process priority will be changed", default=None, choices=[0, 1, 2, 3, 4, 5])
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = str(args.max_threads)
@@ -74,6 +75,11 @@ if os.name == 'nt':
     import dshowcapture
     if not args.blackmagic_options is None:
         dshowcapture.set_options(args.blackmagic_options)
+    if not args.priority is None:
+        import psutil
+        classes = [psutil.IDLE_PRIORITY_CLASS, psutil.BELOW_NORMAL_PRIORITY_CLASS, psutil.NORMAL_PRIORITY_CLASS, psutil.ABOVE_NORMAL_PRIORITY_CLASS, psutil.HIGH_PRIORITY_CLASS, psutil.REALTIME_PRIORITY_CLASS]
+        p = psutil.Process(os.getpid())
+        p.nice(classes[args.priority])
 
 if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
     cap = dshowcapture.DShowCapture()
