@@ -1423,8 +1423,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         FindFaceMesh();
         UpdateExpression();
-        if (gazeTracking && !only30Points)
-            UpdateGaze();
         BlinkEyes();
         ReadAudio();
         bool doMouthTracking = true;
@@ -1438,6 +1436,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         UpdateBrows();
         if (vrmBlendShapeProxy != null && browClips != null)
             vrmBlendShapeProxy.Apply();
+    }
+    
+    void LateUpdate() {
+        if (gazeTracking && !only30Points)
+            UpdateGaze();
     }
 
     void FixedUpdate() {
