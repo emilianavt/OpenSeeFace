@@ -221,6 +221,48 @@ public class OpenSeeLauncher : MonoBehaviour {
         return cameras;
     }
     
+    public float[] Benchmark(int threads) {
+        if (!CheckSetup(false))
+            return null;
+
+        StringBuilder stringBuilder;
+        ProcessStartInfo processStartInfo;
+        Process process;
+
+        stringBuilder = new StringBuilder();
+
+        processStartInfo = new ProcessStartInfo();
+        processStartInfo.CreateNoWindow = true;
+        processStartInfo.RedirectStandardOutput = true;
+        processStartInfo.RedirectStandardInput = true;
+        processStartInfo.RedirectStandardError = true;
+        processStartInfo.UseShellExecute = false;
+        processStartInfo.FileName = exePath;
+        processStartInfo.Arguments = "--benchmark 1 --priority 4 --max-threads " + threads.ToString();
+        
+        process = new Process();
+        process.StartInfo = processStartInfo;
+        process.EnableRaisingEvents = true;
+        process.OutputDataReceived += new DataReceivedEventHandler(delegate(object sender, DataReceivedEventArgs e) {
+            stringBuilder.Append(e.Data);
+            stringBuilder.Append("\n");
+        });
+        process.Start();
+        job.AddProcess(process.Handle);
+        process.BeginOutputReadLine();
+        process.WaitForExit();
+        process.CancelOutputRead();
+        
+        string[] lines = stringBuilder.ToString().Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        float[] results = new float[lines.Length];
+        
+        for (int i = 0; i < lines.Length; i++) {
+            results[i] = Single.Parse(lines[i]);
+        }
+        
+        return results;
+    }
+    
     // From: http://csharptest.net/529/how-to-correctly-escape-command-line-arguments-in-c/index.html
     private static string EscapeArguments(params string[] args)
     {
