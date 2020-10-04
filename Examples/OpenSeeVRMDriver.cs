@@ -965,7 +965,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (!openSeeIKTarget.mirrorMotion)
             lookLeftRight = -lookLeftRight;
         
-        if (leftEye == null || rightEye == null) {
+        if (leftEye == null && rightEye == null) {
             vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), 0f);
             vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookDown), 0f);
             vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookLeft), 0);
@@ -986,12 +986,16 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         } else {
             //vrmLookAtHead.UpdateType = VRM.UpdateType.None;
             //vrmLookAtHead.RaiseYawPitchChanged(gazeFactor.y * lookLeftRight, gazeFactor.x * lookUpDown);
-            rightEye.localRotation = Quaternion.identity;
-            leftEye.localRotation = Quaternion.identity;
+            if (rightEye != null)
+                rightEye.localRotation = Quaternion.identity;
+            if (leftEye != null)
+                leftEye.localRotation = Quaternion.identity;
             if (gazeTracking) {
                 Quaternion rotation = Quaternion.AngleAxis(-gazeFactor.x * gazeStrength * lookUpDown, Vector3.right) * Quaternion.AngleAxis(-gazeFactor.y * gazeStrength * lookLeftRight, Vector3.up);
-                rightEye.localRotation = rotation;
-                leftEye.localRotation = rotation;
+                if (rightEye != null)
+                    rightEye.localRotation = rotation;
+                if (leftEye != null)
+                    leftEye.localRotation = rotation;
             }
         }
 
