@@ -14,6 +14,11 @@ def resolve(name):
 lib = None
 bm_lib = None
 bm_options = None
+bm_enabled = False
+
+def set_bm_enabled(v):
+    global bm_enabled
+    bm_enabled = v
 
 def set_options(str):
     global bm_options
@@ -29,17 +34,20 @@ class DShowCapture():
         global lib
         global bm_lib
         global bm_options
+        global bm_enabled
         if lib is None or bm_lib is None:
             if platform.architecture()[0] == '32bit':
                 dll_path = resolve(os.path.join("dshowcapture", "dshowcapture_x86.dll"))
                 lib = cdll.LoadLibrary(dll_path)
-                dll_path = resolve(os.path.join("dshowcapture", "libminibmcapture32.dll"))
-                bm_lib = cdll.LoadLibrary(dll_path)
+                if bm_enabled:
+                    dll_path = resolve(os.path.join("dshowcapture", "libminibmcapture32.dll"))
+                    bm_lib = cdll.LoadLibrary(dll_path)
             else:
                 dll_path = resolve(os.path.join("dshowcapture", "dshowcapture_x64.dll"))
                 lib = cdll.LoadLibrary(dll_path)
-                dll_path = resolve(os.path.join("dshowcapture", "libminibmcapture64.dll"))
-                bm_lib = cdll.LoadLibrary(dll_path)
+                if bm_enabled:
+                    dll_path = resolve(os.path.join("dshowcapture", "libminibmcapture64.dll"))
+                    bm_lib = cdll.LoadLibrary(dll_path)
 
             # DirectShow
             lib.create_capture.restype = c_void_p
@@ -63,16 +71,18 @@ class DShowCapture():
             lib.destroy_capture.argtypes = [c_void_p]
 
             # Blackmagic
-            bm_lib.start_capture_single.argtypes = [c_int, c_int, c_void_p]
-            bm_lib.read_frame_bgra32_blocking.argtypes = [c_char_p, c_int]
-            bm_lib.stop_capture_single.argtypes = []
-            bm_lib.get_json_length.argtypes = []
-            bm_lib.get_json.argtypes = [c_char_p, c_int]
-            if not bm_options is None:
-                bm_lib.set_options.argtypes = [c_char_p]
-                bm_lib.set_options(bm_options.encode())
+            if bm_enabled:
+                bm_lib.start_capture_single.argtypes = [c_int, c_int, c_void_p]
+                bm_lib.read_frame_bgra32_blocking.argtypes = [c_char_p, c_int]
+                bm_lib.stop_capture_single.argtypes = []
+                bm_lib.get_json_length.argtypes = []
+                bm_lib.get_json.argtypes = [c_char_p, c_int]
+                if not bm_options is None:
+                    bm_lib.set_options.argtypes = [c_char_p]
+                    bm_lib.set_options(bm_options.encode())
         self.lib = lib
-        self.bm_lib = bm_lib
+        if bm_enabled:
+            self.bm_lib = bm_lib
         self.cap = lib.create_capture()
         self.name_buffer = create_string_buffer(255);
         self.buffer = None
@@ -98,6 +108,7 @@ class DShowCapture():
         return name_str
 
     def get_info(self):
+        global bm_enabled
         # DirectShow
         json_length = self.lib.get_json_length(self.cap);
         json_buffer = create_string_buffer(json_length)
@@ -109,16 +120,17 @@ class DShowCapture():
             cam["index"] = cam["id"]
         
         # Blackmagic
-        json_length = self.bm_lib.get_json_length();
-        json_buffer = create_string_buffer(json_length)
-        self.bm_lib.get_json(json_buffer, json_length);
-        json_text = str(json_buffer.value.decode('utf8'))
-        bm_info = json.loads(json_text)
-        dshow_len = len(self.info)
-        for cam in bm_info:
-            cam["type"] = "Blackmagic"
-            cam["index"] = cam["id"] + dshow_len
-        self.info.extend(bm_info)
+        if bm_enabled:
+            json_length = self.bm_lib.get_json_length();
+            json_buffer = create_string_buffer(json_length)
+            self.bm_lib.get_json(json_buffer, json_length);
+            json_text = str(json_buffer.value.decode('utf8'))
+            bm_info = json.loads(json_text)
+            dshow_len = len(self.info)
+            for cam in bm_info:
+                cam["type"] = "Blackmagic"
+                cam["index"] = cam["id"] + dshow_len
+            self.info.extend(bm_info)
 
         return self.info
 
@@ -142,6 +154,7 @@ class DShowCapture():
         return ret;
 
     def capture_device_by_dcap(self, cam, dcap, width, height, fps):
+        global bm_enabled
         if not self.have_devices:
             self.get_devices()
         if self.info is None:
@@ -150,7 +163,7 @@ class DShowCapture():
         ret = False
         if self.info[cam]['type'] == "DirectShow":
             ret = self.lib.capture_device_by_dcap(self.cap, cam, dcap, width, height, fps) == 1
-        elif self.info[cam]['type'] == "Blackmagic":
+        elif bm_enabled and self.info[cam]['type'] == "Blackmagic":
             ret = self.bm_lib.start_capture_single(self.info[cam]['id'], self.info[cam]['caps'][dcap]['bmModecode'], None) == 1
         if ret:
             self.type = self.info[cam]['type']
@@ -163,7 +176,7 @@ class DShowCapture():
                 self.colorspace_internal = self.get_colorspace_internal()
                 self.size = self.width * self.height * 4 * 4
                 self.buffer = create_frame_buffer(self.width, self.height, 4)
-            elif self.type == "Blackmagic":
+            elif bm_enabled and self.type == "Blackmagic":
                 self.width = self.info[cam]['caps'][dcap]['minCX']
                 self.height = self.info[cam]['caps'][dcap]['minCY']
                 self.fps = int(10000000 / self.info[cam]['caps'][dcap]['minInterval'])
@@ -224,11 +237,12 @@ class DShowCapture():
         return self.lib.capturing(self.cap) == 1
 
     def get_frame(self, timeout):
+        global bm_enabled
         if self.size is None:
             return None
         if self.type == "DirectShow":
             self.real_size = self.lib.get_frame(self.cap, timeout, self.buffer, self.size)
-        elif self.type == "Blackmagic":
+        elif bm_enabled and self.type == "Blackmagic":
             self.bm_lib.read_frame_bgra32_blocking(self.buffer, self.size)
         else:
             return None
@@ -266,11 +280,12 @@ class DShowCapture():
         return img
 
     def stop_capture(self):
+        global bm_enabled
         self.size = None
         self.real_size = None
         if self.type == "DirectShow":
             return self.lib.stop_capture(self.cap)
-        elif self.type == "Blackmagic":
+        elif bm_enabled and self.type == "Blackmagic":
             return self.bm_lib.stop_capture_single() != 0
         return True
 

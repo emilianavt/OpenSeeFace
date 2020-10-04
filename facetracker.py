@@ -15,6 +15,7 @@ if os.name == 'nt':
     parser.add_argument("-H", "--height", type=int, help="Set camera and raw RGB height", default=360)
     parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
     parser.add_argument("-D", "--dcap", type=int, help="Set which device capability line to use or -1 to use the default camera settings", default=None)
+    parser.add_argument("-B", "--blackmagic", type=int, help="When set to 1, special support for Blackmagic devices is enabled", default=0)
 else:
     parser.add_argument("-W", "--width", type=int, help="Set raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
@@ -73,6 +74,8 @@ sys.stderr = OutputLog(output_logfile, sys.stderr)
 
 if os.name == 'nt':
     import dshowcapture
+    if args.blackmagic == 1:
+        dshowcapture.set_bm_enabled(True)
     if not args.blackmagic_options is None:
         dshowcapture.set_options(args.blackmagic_options)
     if not args.priority is None:

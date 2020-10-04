@@ -181,8 +181,6 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
     
     public List<OpenSeeWebcam> cameras;
     
-    private bool initialized = false;
-
     static private string ListCameraDetails_x64() {
         System.IntPtr cap = create_capture_x64();
 		int length = get_json_length_x64(cap);
@@ -215,35 +213,36 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
 		return buffer.ToString();
     }
 
-    static public List<OpenSeeWebcam> ListCameraDetails() {
-        string jsonData;
-        string bmJsonData;
+    static public List<OpenSeeWebcam> ListCameraDetails(bool includeBlackMagic) {
+        string jsonData = null;
+        string bmJsonData = null;
         if (Environment.Is64BitProcess) {
             jsonData = ListCameraDetails_x64();
-            bmJsonData = ListBlackMagicDetails_x64();
+            if (includeBlackMagic)
+                bmJsonData = ListBlackMagicDetails_x64();
         } else {
             jsonData = ListCameraDetails_x86();
-            bmJsonData = ListBlackMagicDetails_x86();
+            if (includeBlackMagic)
+                bmJsonData = ListBlackMagicDetails_x86();
         }
         List<OpenSeeWebcam> details = JsonConvert.DeserializeObject<List<OpenSeeWebcam>>(jsonData);
         foreach (var cam in details)
             cam.type = OpenSeeWebcamType.DirectShow;
-        List<OpenSeeWebcam> bmDetails = JsonConvert.DeserializeObject<List<OpenSeeWebcam>>(bmJsonData);
-        foreach (var cam in bmDetails)
-            cam.type = OpenSeeWebcamType.Blackmagic;
-        details.AddRange(bmDetails);
+        if (includeBlackMagic) {
+            List<OpenSeeWebcam> bmDetails = JsonConvert.DeserializeObject<List<OpenSeeWebcam>>(bmJsonData);
+            foreach (var cam in bmDetails)
+                cam.type = OpenSeeWebcamType.Blackmagic;
+            details.AddRange(bmDetails);
+        }
         return details;
     }
     
     void Start() {
-        Initialize();
+        Initialize(false);
     }
     
-    public void Initialize() {
-        if (initialized)
-            return;
-        initialized = true;
-        cameras = ListCameraDetails();
+    public void Initialize(bool includeBlackMagic) {
+        cameras = ListCameraDetails(includeBlackMagic);
         foreach (var camera in cameras)
             camera.GetPrettyCapabilities();
     }
