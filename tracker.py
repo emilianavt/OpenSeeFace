@@ -136,13 +136,13 @@ def matrix_to_quaternion(m):
     return q
 
 def worker_thread(session, frame, input, crop_info, queue, input_name, idx, tracker):
-    output = session.run([], {input_name: input})[0]
-    conf, lms = tracker.landmarks(output[0], crop_info)
+    output = session.run([], {input_name: input})
+    conf, lms = tracker.landmarks(output, crop_info)
     if conf > tracker.threshold:
         try:
             eye_state = tracker.get_eye_state(frame, lms, single=True)
         except:
-            eye_state = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
+            eye_state = [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]
         queue.put((session, conf, (lms, eye_state), crop_info, idx))
     else:
         queue.put((session,))
@@ -716,37 +716,20 @@ class Tracker():
 
     def landmarks(self, tensor, crop_info):
         crop_x1, crop_y1, scale_x, scale_y, _ = crop_info
-        avg_conf = 0
-        res = self.res - 1
-        c0, c1, c2 = 66, 132, 198
-        if self.model_type < 0:
-            c0, c1, c2 = 30, 60, 90
-        t_main = tensor[0:c0].reshape((c0,self.out_res_i * self.out_res_i))
-        t_m = t_main.argmax(1)
-        indices = np.expand_dims(t_m, 1)
-        t_conf = np.take_along_axis(t_main, indices, 1).reshape((c0,))
-        t_off_x = np.take_along_axis(tensor[c0:c1].reshape((c0,self.out_res_i * self.out_res_i)), indices, 1).reshape((c0,))
-        t_off_y = np.take_along_axis(tensor[c1:c2].reshape((c0,self.out_res_i * self.out_res_i)), indices, 1).reshape((c0,))
-        t_off_x = res * logit_arr(t_off_x, self.logit_factor)
-        t_off_y = res * logit_arr(t_off_y, self.logit_factor)
-        t_x = crop_y1 + scale_y * (res * np.floor(t_m / self.out_res_i) / self.out_res + t_off_x)
-        t_y = crop_x1 + scale_x * (res * np.floor(np.mod(t_m, self.out_res_i)) / self.out_res + t_off_y)
-        avg_conf = np.average(t_conf)
-        lms = np.stack([t_x, t_y, t_conf], 1)
-        lms[np.isnan(lms).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
+        avg_conf = tensor[0][0]
+        lms = np.array(tensor[1][0])
+        lms[:, 0:2] = lms[:, 0:2] * np.array((scale_y, scale_x)) + np.array((crop_y1, crop_x1))
+
         if self.model_type < 0:
             lms = lms[[0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,6,7,7,8,8,9,10,10,11,11,12,21,21,21,22,23,23,23,23,23,13,14,14,15,16,16,17,18,18,19,20,20,24,25,25,25,26,26,27,27,27,24,24,28,28,28,26,29,29,29]]
-            #lms[[1,3,4,6,7,9,10,12,13,15,18,20,23,25,38,40,44,46]] += lms[[2,2,5,5,8,8,11,11,14,16,19,21,24,26,39,39,45,45]]
-            #lms[[3,4,6,7,9,10,12,13]] += lms[[5,5,8,8,11,11,14,14]]
-            #lms[[1,15,18,20,23,25,38,40,44,46]] /= 2.0
-            #lms[[3,4,6,7,9,10,12,13]] /= 3.0
             part_avg = np.mean(np.partition(lms[:,2],3)[0:3])
             if part_avg < 0.65:
                 avg_conf = part_avg
-        return (avg_conf, np.array(lms))
+
+        return avg_conf, lms
 
     def estimate_depth(self, face_info):
-        lms = np.concatenate((face_info.lms, np.array([[face_info.eye_state[0][1], face_info.eye_state[0][2], face_info.eye_state[0][3]], [face_info.eye_state[1][1], face_info.eye_state[1][2], face_info.eye_state[1][3]]], np.float)), 0)
+        lms = np.concatenate((face_info.lms, np.array([[face_info.eye_state[0][0], face_info.eye_state[0][1], face_info.eye_state[0][2]], [face_info.eye_state[1][0], face_info.eye_state[1][1], face_info.eye_state[1][2]]], np.float)), 0)
 
         image_pts = np.array(lms)[face_info.contour_pts, 0:2]
 
@@ -928,9 +911,6 @@ class Tracker():
             results = self.gaze_model_single.run([], {self.input_name: both_eyes})
         else:
             results = self.gaze_model.run([], {self.input_name: both_eyes})
-        open = [0, 0]
-        open[0] = 1#results[1][0].argmax()
-        open[1] = 1#results[1][1].argmax()
         results = np.array(results[0])
 
         eye_state = []
@@ -969,10 +949,10 @@ class Tracker():
 
             eye_x = eye_x + offset[0]
             eye_y = eye_y + offset[1]
-            eye_state.append([open[i], eye_y, eye_x, conf])
+            eye_state.append([eye_y, eye_x, conf])
 
         eye_state = np.array(eye_state)
-        eye_state[np.isnan(eye_state).any(axis=1)] = np.array([1.,0.,0.,0.], dtype=np.float32)
+        eye_state[np.isnan(eye_state).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
         return eye_state
 
     def assign_face_info(self, results):
@@ -1089,13 +1069,13 @@ class Tracker():
         start_model = time.perf_counter()
         outputs = {}
         if num_crops == 1:
-            output = self.session.run([], {self.input_name: crops[0]})[0]
-            conf, lms = self.landmarks(output[0], crop_info[0])
+            output = self.session.run([], {self.input_name: crops[0]})
+            conf, lms = self.landmarks(output, crop_info[0])
             if conf > self.threshold:
                 try:
                     eye_state = self.get_eye_state(frame, lms)
                 except:
-                    eye_state = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
+                    eye_state = [(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]
                 outputs[crop_info[0]] = (conf, (lms, eye_state), 0)
         else:
             started = 0
@@ -1121,7 +1101,7 @@ class Tracker():
         actual_faces = []
         good_crops = []
         for crop in crop_info:
-            if crop not in outputs:
+            if crop not in outputs.keys():
                 continue
             conf, lms, i = outputs[crop]
             x1, y1, _ = lms[0].min(0)
