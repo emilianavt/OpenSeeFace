@@ -494,7 +494,7 @@ def get_model_base_path(model_dir):
     return model_base_path
 
 class Tracker():
-    def __init__(self, width, height, model_type=3, detection_threshold=0.6, threshold=None, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False, feature_level=2):
+    def __init__(self, width, height, model_type=3, detection_threshold=0.6, threshold=None, max_faces=1, discard_after=5, scan_every=3, bbox_growth=0.0, max_threads=4, silent=False, model_dir=None, no_gaze=False, use_retinaface=False, max_feature_updates=0, static_model=False, feature_level=2, try_hard=False):
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = max(max_threads,4)
@@ -661,6 +661,7 @@ class Tracker():
         self.scan_every = scan_every
         self.bbox_growth = bbox_growth
         self.silent = silent
+        self.try_hard = try_hard
 
         self.res = 224.
         self.mean_res = self.mean_224
@@ -1014,11 +1015,13 @@ class Tracker():
         self.wait_count += 1
         if self.detected == 0:
             start_fd = time.perf_counter()
-            if self.use_retinaface > 0:
+            if self.use_retinaface > 0 or self.try_hard:
                 retinaface_detections = self.retinaface.detect_retina(frame)
                 new_faces.extend(retinaface_detections)
-            else:
+            if self.use_retinaface == 0 or self.try_hard:
                 new_faces.extend(self.detect_faces(frame))
+            if self.try_hard:
+                new_faces.extend([(0, 0, self.width, self.height)])
             duration_fd = 1000 * (time.perf_counter() - start_fd)
             self.wait_count = 0
         elif self.detected < self.max_faces:

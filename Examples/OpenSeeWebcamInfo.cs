@@ -63,13 +63,13 @@ public class OpenSeeWebcam {
     private List<Tuple<OpenSeeWebcamCapability, int>> splitCaps = null;
 
     private int CompareCaps(OpenSeeWebcamCapability a, OpenSeeWebcamCapability b) {
-        if (a.minCX * a.minCY > b.minCX * b.minCY)
-            return -1;
-        if (a.minCX * a.minCY < b.minCX * b.minCY)
-            return 1;
         if (a.rating < b.rating)
             return -1;
         if (a.rating > b.rating)
+            return 1;
+        if (a.minCX * a.minCY > b.minCX * b.minCY)
+            return -1;
+        if (a.minCX * a.minCY < b.minCX * b.minCY)
             return 1;
         if (a.minInterval < b.minInterval)
             return -1;
