@@ -100,6 +100,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public bool hybridLipSync = false;
     [Tooltip("When enabled, viseme size will not depend on the OVR Lip Sync weight.")]
     public bool maximizeLipSync = false;
+    [Tooltip("When enabled and the animator of the avatar has a float parameter called JawMovement, this parameter will be set to values from 0 to 1, corresponding to a closed to open mouth. This can be used for animating jaw bones.")]
+    public bool animateJawBone = false;
     [Tooltip("This is the mouth tracking smoothing factor, with 0 being no smoothing and 1 being a fixed mouth.")]
     [Range(0, 1)]
     public float mouthSmoothing = 0.6f;
@@ -198,6 +200,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float currentExpressionEyebrowWeight;
     private float currentExpressionVisemeFactor;
     
+    private Animator animator;
+    private bool haveJawParameter;
+    
     private VRMBlendShapeProxy lastAvatar = null;
     private int eyebrowIsMoving = 0;
     private double lastBrows = 0f;
@@ -247,30 +252,31 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
     void InitCatsData() {
         catsData = new Dictionary<OVRLipSync.Viseme, float[]>();
-        // This is similar to what the Blender CATS plugin does, but with A, I, U, E, O
-        catsData.Add(OVRLipSync.Viseme.sil, new float[]{0f, 0f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.aa, new float[]{0.9998f, 0f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.CH, new float[]{0f, 0.9996f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.DD, new float[]{0.3f, 0.7f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.E, new float[]{0f, 0f, 0f, 0.9997f, 0f});
-        catsData.Add(OVRLipSync.Viseme.FF, new float[]{0.2f, 0.4f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.ih, new float[]{0.5f, 0.2f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.kk, new float[]{0.7f, 0.4f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.nn, new float[]{0.2f, 0.7f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.oh, new float[]{0f, 0f, 0f, 0f, 0.9999f});
-        catsData.Add(OVRLipSync.Viseme.ou, new float[]{0f, 0f, 0.9995f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.PP, new float[]{0.4f, 0f, 0f, 0f, 0.4f});
-        catsData.Add(OVRLipSync.Viseme.RR, new float[]{0f, 0.5f, 0f, 0f, 0.3f});
-        catsData.Add(OVRLipSync.Viseme.SS, new float[]{0f, 0.8f, 0f, 0f, 0f});
-        catsData.Add(OVRLipSync.Viseme.TH, new float[]{0.4f, 0f, 0f, 0f, 0.15f});
-        visemePresetMap = new BlendShapeKey[5] {
+        // This is similar to what the Blender CATS plugin does, but with A, I, U, E, O, JawOpen
+        catsData.Add(OVRLipSync.Viseme.sil, new float[]{0f, 0f, 0f, 0f, 0f, 0f});
+        catsData.Add(OVRLipSync.Viseme.aa, new float[]{0.9998f, 0f, 0f, 0f, 0f, 1f});
+        catsData.Add(OVRLipSync.Viseme.CH, new float[]{0f, 0.9996f, 0f, 0f, 0f, 1f});
+        catsData.Add(OVRLipSync.Viseme.DD, new float[]{0.3f, 0.7f, 0f, 0f, 0f, 0.7f});
+        catsData.Add(OVRLipSync.Viseme.E, new float[]{0f, 0f, 0f, 0.9997f, 0f, 0.6f});
+        catsData.Add(OVRLipSync.Viseme.FF, new float[]{0.2f, 0.4f, 0f, 0f, 0f, 0.1f});
+        catsData.Add(OVRLipSync.Viseme.ih, new float[]{0.5f, 0.2f, 0f, 0f, 0f, 0.5f});
+        catsData.Add(OVRLipSync.Viseme.kk, new float[]{0.7f, 0.4f, 0f, 0f, 0f, 0.0f});
+        catsData.Add(OVRLipSync.Viseme.nn, new float[]{0.2f, 0.7f, 0f, 0f, 0f, 0.1f});
+        catsData.Add(OVRLipSync.Viseme.oh, new float[]{0f, 0f, 0f, 0f, 0.9999f, 1f});
+        catsData.Add(OVRLipSync.Viseme.ou, new float[]{0f, 0f, 0.9995f, 0f, 0f, 1f});
+        catsData.Add(OVRLipSync.Viseme.PP, new float[]{0.4f, 0f, 0f, 0f, 0.4f, 0f});
+        catsData.Add(OVRLipSync.Viseme.RR, new float[]{0f, 0.5f, 0f, 0f, 0.3f, 0.4f});
+        catsData.Add(OVRLipSync.Viseme.SS, new float[]{0f, 0.8f, 0f, 0f, 0f, 0.3f});
+        catsData.Add(OVRLipSync.Viseme.TH, new float[]{0.4f, 0f, 0f, 0f, 0.15f, 0.5f});
+        visemePresetMap = new BlendShapeKey[6] {
             BlendShapeKey.CreateFromPreset(BlendShapePreset.A),
             BlendShapeKey.CreateFromPreset(BlendShapePreset.I),
             BlendShapeKey.CreateFromPreset(BlendShapePreset.U),
             BlendShapeKey.CreateFromPreset(BlendShapePreset.E),
-            BlendShapeKey.CreateFromPreset(BlendShapePreset.O)
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.O),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.Unknown)
         };
-        lastVisemeValues = new float[5] {0f, 0f, 0f, 0f, 0f};
+        lastVisemeValues = new float[] {0f, 0f, 0f, 0f, 0f, 0f};
     }
 
     OVRLipSync.Viseme GetActiveViseme(out float bestValue) {
@@ -319,7 +325,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         else
             weight = 1f;
         float[] values = catsData[current];
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             lastVisemeValues[i] = values[i] * weight * (1f - visemeSmoothing) + lastVisemeValues[i] * visemeSmoothing;
             if (lastVisemeValues[i] < 0f) {
                 lastVisemeValues[i] = 0f;
@@ -328,8 +334,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 lastVisemeValues[i] = 1f;
             }
             float result = lastVisemeValues[i] * visemeFactor * expressionFactor;
-            if (result > 0f)
+            if (result > 0f && i < 5)
                 vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
+            if (i == 5 && haveJawParameter) {
+                if (animateJawBone)
+                    animator.SetFloat("JawMovement", result * 0.99999f);
+                else
+                    animator.SetFloat("JawMovement", 0f);
+            }
         }
         return false;
     }
@@ -343,9 +355,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         
         if (lastMouthStates == null)
-            lastMouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+            lastMouthStates = new float[]{0f, 0f, 0f, 0f, 0f, 0f};
         if (currentMouthStates == null)
-            currentMouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+            currentMouthStates = new float[]{0f, 0f, 0f, 0f, 0f, 0f};
         
         if (mouthInterpolate == null)
             mouthInterpolate = new TimeInterpolate();
@@ -358,11 +370,17 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (currentExpression != null)
             expressionFactor = currentExpressionVisemeFactor;
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             float interpolated = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
             float result = interpolated * expressionFactor * visemeFactor;
-            if (result > 0f)
+            if (i < 5 && result > 0f)
                 vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
+            if (i == 5 && haveJawParameter) {
+                if (animateJawBone)
+                    animator.SetFloat("JawMovement", result * 0.99999f);
+                else
+                    animator.SetFloat("JawMovement", 0f);
+            }
         }
 
         if (lastMouth < openSeeData.time) {
@@ -370,7 +388,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             mouthInterpolate.UpdateTime(lastMouth);
             float open = openSeeData.features.MouthOpen;
             float wide = openSeeData.features.MouthWide;
-            float[] mouthStates = new float[]{0f, 0f, 0f, 0f, 0f};
+            float[] mouthStates = new float[]{0f, 0f, 0f, 0f, 0f, 0f};
             float stabilizer = mouthStabilizer;
             float stabilizerWide = mouthStabilizerWide;
             
@@ -384,6 +402,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     break;
                 if (mouthUseSquelch && audioVolume < mouthSquelch)
                     break;
+                mouthStates[5] = Mathf.Clamp(open / 0.55f - 0.1f, 0f, 1f);
                 if (open < stabilizer && Mathf.Abs(wide) < stabilizer)
                     break;
                 if (wide > stabilizer && open < stabilizerWide)
@@ -393,7 +412,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     mouthStates[4] = open;
                 } else if (open >= 0f) {
                     // A
-                    mouthStates[0] = open * 1f;
+                    mouthStates[0] = open;
                 }
                 if (wide >= 0f && open > stabilizer * 0.5f) {
                     if (wide > 0.5f) {
@@ -401,7 +420,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                         mouthStates[1] = wide;
                     } else {
                         // E
-                        mouthStates[3] = wide * 1f;
+                        mouthStates[3] = wide;
                     }
                 } else if (wide < Mathf.Clamp(stabilizerWide * 1.5f, 0f, 0.8f) && open > stabilizer) {
                     // U
@@ -422,7 +441,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 }
             } while (false);
             
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 6; i++) {
                 lastMouthStates[i] = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
                 mouthStates[i] = Mathf.Lerp(lastMouthStates[i], mouthStates[i], 1f - mouthSmoothing);
             }
@@ -551,6 +570,17 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (lastAvatar == vrmBlendShapeProxy)
             return;
         lastAvatar = vrmBlendShapeProxy;
+        
+        animator = lastAvatar.gameObject.GetComponent<Animator>();
+        haveJawParameter = false;
+        if (animator != null) {
+            for (int i = 0; i < animator.parameterCount; i++) {
+                if (animator.parameters[i].name == "JawMovement") {
+                    haveJawParameter = true;
+                    break;
+                }
+            }
+        }
         
         faceMesh = null;
         faceType = -1;
