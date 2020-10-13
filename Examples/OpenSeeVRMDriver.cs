@@ -1509,4 +1509,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void OnDestroy() {
         DestroyContext();
     }
+    
+    public void SetAnimateJawBone(bool value) {
+        animateJawBone = value;
+    }
 }
