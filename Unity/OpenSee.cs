@@ -24,6 +24,8 @@ public class OpenSee : MonoBehaviour {
     [Tooltip("This contains the actual tracking data")]
     public OpenSeeData[] trackingData = null;
     
+    public bool listening { get; private set; } = false;
+    
     [HideInInspector]
     public float maxFit3DError = 100f;
 
@@ -211,6 +213,7 @@ public class OpenSee : MonoBehaviour {
 
     void performReception() {
         EndPoint senderRemote = new IPEndPoint(IPAddress.Any, 0);
+        listening = true;
         while (!stopReception) {
             try {
                 int receivedBytes = socket.ReceiveFrom(buffer, SocketFlags.None, ref senderRemote);

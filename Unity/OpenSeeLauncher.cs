@@ -51,6 +51,8 @@ public class OpenSeeLauncher : MonoBehaviour {
     public bool autoListCameras = false;
     [Tooltip("If this is enabled, no output from the tracker will be printed to the debug console. This cannot be changed while the tracker is running.")]
     public bool dontPrint = true;
+    [Tooltip("If enabled, the next available port within 500 starting after the one given on the OpenSee component will be used.")]
+    public bool dynamicPort = false;
     [Tooltip("The path to \"facetracker.exe\".")]
     public string exePath = "facetracker.exe";
     [Tooltip("The path, where the .onnx model files can be found")]
@@ -295,6 +297,27 @@ public class OpenSeeLauncher : MonoBehaviour {
         List<string> arguments = new List<string>();
         arguments.Add("--ip");
         arguments.Add(ip);
+        
+        if (dynamicPort && !openSeeTarget.listening) {
+            System.Net.IPEndPoint[] inUse = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveUdpListeners();
+            Array.Sort(inUse, delegate(System.Net.IPEndPoint a, System.Net.IPEndPoint b) { return a.Port.CompareTo(b.Port); });
+            int port = openSeeTarget.listenPort + 1;
+            for (int i = 0; i < inUse.Length; i++) {
+                if (inUse[i].Port < port)
+                    continue;
+                if (inUse[i].Port == port) {
+                    if (port <= openSeeTarget.listenPort + 500 && port <= inUse[i].MaxPort) {
+                        port++;
+                        continue;
+                    } else {
+                        return false;
+                    }
+                }
+                break;
+            }
+            openSeeTarget.listenPort = port;
+        }
+
         arguments.Add("--port");
         arguments.Add(openSeeTarget.listenPort.ToString());
         arguments.Add("--model-dir");
