@@ -10,11 +10,7 @@ As Pytorch 1.3 CPU inference speed on Windows is very low, the model was convert
 
 If anyone is curious, the name is a silly pun on the open seas and seeing faces. There's no deeper meaning.
 
-[Unity sample video](https://twitter.com/emiliana_vt/status/1210622149314203648) | [Sample video](https://www.youtube.com/watch?v=AOPHiAp9DBE) | [Sample video](https://www.youtube.com/watch?v=-cBSuHGdBWQ) | [Model comparison](https://www.youtube.com/watch?v=yMcJszUy7FA)
-
-These sample videos use older versions of the tracking models. Tracking accuracy of the current models is better.
-
-An up to date sample video can be found [here](https://www.youtube.com/watch?v=AaNap_ud_3I&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
+An up to date sample video can be found [here](https://www.youtube.com/watch?v=IBGZXpOQY4w&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
 
 # Usage
 
