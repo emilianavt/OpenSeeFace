@@ -10,7 +10,7 @@ As Pytorch 1.3 CPU inference speed on Windows is very low, the model was convert
 
 If anyone is curious, the name is a silly pun on the open seas and seeing faces. There's no deeper meaning.
 
-An up to date sample video can be found [here](https://www.youtube.com/watch?v=IBGZXpOQY4w&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
+An up to date sample video can be found [here](https://www.youtube.com/watch?v=qp38lJch530&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
 
 # Usage
 
