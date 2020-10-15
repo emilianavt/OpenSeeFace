@@ -306,7 +306,7 @@ public class OpenSeeLauncher : MonoBehaviour {
                 if (inUse[i].Port < port)
                     continue;
                 if (inUse[i].Port == port) {
-                    if (port <= openSeeTarget.listenPort + 500 && port <= inUse[i].MaxPort) {
+                    if (port <= openSeeTarget.listenPort + 500 && port <= IPEndPoint.MaxPort) {
                         port++;
                         continue;
                     } else {
