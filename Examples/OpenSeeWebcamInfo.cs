@@ -180,6 +180,9 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
     #endregion
     
     public List<OpenSeeWebcam> cameras;
+    public bool dumpJson = false;
+    
+    private static bool dumpJsonStatic = false;
     
     static private string ListCameraDetails_x64() {
         System.IntPtr cap = create_capture_x64();
@@ -225,6 +228,11 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
             if (includeBlackMagic)
                 bmJsonData = ListBlackMagicDetails_x86();
         }
+        if (dumpJsonStatic) {
+            UnityEngine.Debug.Log("Camera JSON: " + jsonData);
+            if (includeBlackMagic)
+                UnityEngine.Debug.Log("Blackmagic JSON: " + bmJsonData);
+        }
         List<OpenSeeWebcam> details = JsonConvert.DeserializeObject<List<OpenSeeWebcam>>(jsonData);
         foreach (var cam in details)
             cam.type = OpenSeeWebcamType.DirectShow;
@@ -242,6 +250,7 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
     }
     
     public void Initialize(bool includeBlackMagic) {
+        dumpJsonStatic = dumpJson;
         cameras = ListCameraDetails(includeBlackMagic);
         foreach (var camera in cameras)
             camera.GetPrettyCapabilities();
