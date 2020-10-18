@@ -315,7 +315,7 @@ class FeatureExtractor():
         else:
             features["mouth_corner_inout_r"] = 0.
 
-        f = (np.mean([pts[59, 1], pts[60, 1], pts[61, 1]]) - np.mean([pts[65, 1], pts[64, 1], pts[63, 1]])) / norm_distance_y
+        f = abs(np.mean(pts[[59,60,61], 1], axis=0) - np.mean(pts[[63,64,65], 1], axis=0)) / norm_distance_y
         features["mouth_open"] = self.mouth_open.update(f, now)
 
         f = abs(pts[58, 0] - pts[62, 0]) / norm_distance_x
