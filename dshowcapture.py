@@ -257,24 +257,26 @@ class DShowCapture():
             if not self.flipped:
                 img = cv2.flip(img, 0)
             return img
-        elif self.colorspace == 200:
+        elif self.colorspace == 200 and self.real_size == (3 * self.height // 2) * self.width:
             img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_I420)
-        elif self.colorspace == 201:
+        elif self.colorspace == 201 and self.real_size == (3 * self.height // 2) * self.width:
             img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_NV12)
-        elif self.colorspace == 202:
+        elif self.colorspace == 202 and self.real_size == (3 * self.height // 2) * self.width:
             img = cv2.cvtColor(img.reshape((3 * self.height // 2,self.width,1)), cv2.COLOR_YUV2BGR_YV12)
-        elif self.colorspace == 203:
+        elif self.colorspace == 203 and self.real_size == self.height * self.width:
             img = cv2.cvtColor(img.reshape((self.height,self.width,1)), cv2.COLOR_GRAY2BGR)
-        elif self.colorspace == 300:
+        elif self.colorspace == 300 and self.real_size == self.height * self.width * 2:
             img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_YVYU)
-        elif self.colorspace == 301:
+        elif self.colorspace == 301 and self.real_size == self.height * self.width * 2:
             img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_YUY2)
-        elif self.colorspace == 302:
+        elif self.colorspace == 302 and self.real_size == self.height * self.width * 2:
             img = cv2.cvtColor(img.reshape((self.height,self.width,2)), cv2.COLOR_YUV2BGR_UYVY)
         elif self.colorspace == 303:
             return None
-        elif self.colorspace == 400:
+        elif self.colorspace == 400 and self.real_size > 4:
             img = cv2.imdecode(img, cv2.IMREAD_COLOR);
+        else:
+            return None
         if self.flipped:
             img = cv2.flip(img, 0)
         return img
