@@ -2,6 +2,8 @@
 
 facetracker -l 1
 
+echo Make sure that nothing is accessing your camera before you proceed.
+
 set /p cameraNum=Select your camera from the list above and enter the corresponding number:
 
 facetracker -a %cameraNum%
