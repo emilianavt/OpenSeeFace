@@ -263,11 +263,11 @@ class FeatureExtractor():
         norm_distance_y = np.mean([pts[27, 1] - pts[28, 1], pts[28, 1] - pts[29, 1], pts[29, 1] - pts[30, 1]])
 
         a1, f_pts = self.align_points(pts[42], pts[45], pts[[43, 44, 47, 46]])
-        f = np.clip((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y, 0, None)
+        f = abs((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y)
         features["eye_l"] = self.eye_l.update(f, now)
 
         a2, f_pts = self.align_points(pts[36], pts[39], pts[[37, 38, 41, 40]])
-        f = np.clip((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y, 0, None)
+        f = abs((np.mean([f_pts[0,1], f_pts[1,1]]) - np.mean([f_pts[2,1], f_pts[3,1]])) / norm_distance_y)
         features["eye_r"] = self.eye_r.update(f, now)
 
         if full:
