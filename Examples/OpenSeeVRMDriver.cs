@@ -200,6 +200,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float currentExpressionEyebrowWeight;
     private float currentExpressionVisemeFactor;
     
+    private OpenSeeBlendShapeProxy proxy = new OpenSeeBlendShapeProxy();
     private Animator animator;
     private bool haveJawParameter;
     
@@ -246,6 +247,78 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (interpolateT == updateT || gotData < 2)
                 return 0f;
             return Mathf.Min((interpolateT - updateT) / (float)(currentT - lastT), clamp);
+        }
+    }
+
+    // This class is used to ensure max() based instead of add() based blendshape accumulation and to allow setting animator parameters from blendshape values
+    private class OpenSeeBlendShapeProxy {
+        private VRMBlendShapeProxy proxy = null;
+        private Animator animator = null;
+        private RuntimeAnimatorController animatorController = null;
+        private Dictionary<BlendShapeKey, float> values = new Dictionary<BlendShapeKey, float>();
+        private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
+        
+        private void SetFloat(BlendShapeKey key, float weight) {
+            string name = key.Name.ToUpper();
+            if (animator != null && parameters.ContainsKey(name)) {
+                var parameter = parameters[name];
+                if (parameter.Item2 == AnimatorControllerParameterType.Float)
+                    animator.SetFloat(parameter.Item1, weight);
+                if (parameter.Item2 == AnimatorControllerParameterType.Bool)
+                    animator.SetBool(parameter.Item1, weight > 0.5f);
+            }
+        }
+
+        private void CheckAnimatorController() {
+            if (animator == null)
+                return;
+            if (animatorController != animator.runtimeAnimatorController) {
+                animatorController = animator.runtimeAnimatorController;
+                parameters.Clear();
+                foreach (var parameter in animator.parameters) {
+                    string key = parameter.name.ToUpper();
+                    if (!parameters.ContainsKey(key) && (parameter.type == AnimatorControllerParameterType.Float || parameter.type == AnimatorControllerParameterType.Bool))
+                        parameters.Add(key, new Tuple<string, AnimatorControllerParameterType>(parameter.name, parameter.type));
+                    else
+                        parameters[key] = new Tuple<string, AnimatorControllerParameterType>(parameter.name, parameter.type);
+                }
+            }
+        }
+
+        public void Clear() {
+            CheckAnimatorController();
+            if (proxy != null) {
+                foreach (var pair in proxy.GetValues()) {
+                    proxy.ImmediatelySetValue(pair.Key, 0f);
+                    SetFloat(pair.Key, 0f);
+                }
+                foreach (var pair in values) {
+                    proxy.ImmediatelySetValue(pair.Key, 0f);
+                    SetFloat(pair.Key, 0f);
+                }
+            }
+            values.Clear();
+        }
+        
+        public void Apply() {
+            CheckAnimatorController();
+            foreach (var pair in values) {
+                proxy.AccumulateValue(pair.Key, pair.Value);
+                SetFloat(pair.Key, pair.Value);
+            }
+            proxy.Apply();
+        }
+
+        public void AccumulateValue(BlendShapeKey key, float weight) {
+            if (!values.ContainsKey(key))
+                values.Add(key, weight);
+            else
+                values[key] = Mathf.Max(values[key], weight);
+        }
+
+        public void UpdateAvatar(VRMBlendShapeProxy vrmBlendShapeProxy, Animator animator) {
+            proxy = vrmBlendShapeProxy;
+            this.animator = animator;
         }
     }
 
@@ -335,7 +408,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             }
             float result = lastVisemeValues[i] * visemeFactor * expressionFactor;
             if (result > 0f && i < 5)
-                vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
+                proxy.AccumulateValue(visemePresetMap[i], result);
             if (i == 5 && haveJawParameter) {
                 if (animateJawBone)
                     animator.SetFloat("JawMovement", result * 0.99999f);
@@ -374,7 +447,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             float interpolated = Mathf.Lerp(lastMouthStates[i], currentMouthStates[i], t);
             float result = interpolated * expressionFactor * visemeFactor;
             if (i < 5 && result > 0f)
-                vrmBlendShapeProxy.AccumulateValue(visemePresetMap[i], result);
+                proxy.AccumulateValue(visemePresetMap[i], result);
             if (i == 5 && haveJawParameter) {
                 if (animateJawBone)
                     animator.SetFloat("JawMovement", result * 0.99999f);
@@ -475,9 +548,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
         if (browClips != null && strength > 0f) {
             if (lastBrowUpDown > 0f)
-                vrmBlendShapeProxy.AccumulateValue(browClips[0], strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+                proxy.AccumulateValue(browClips[0], strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
             else if (lastBrowUpDown < 0f)
-                vrmBlendShapeProxy.AccumulateValue(browClips[1], strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+                proxy.AccumulateValue(browClips[1], strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
         }
 
         if (lastBrows < openSeeData.time) {
@@ -570,8 +643,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (lastAvatar == vrmBlendShapeProxy)
             return;
         lastAvatar = vrmBlendShapeProxy;
-        
         animator = lastAvatar.gameObject.GetComponent<Animator>();
+        
+        proxy.UpdateAvatar(lastAvatar, animator);
+
         haveJawParameter = false;
         if (animator != null) {
             for (int i = 0; i < animator.parameterCount; i++) {
@@ -942,7 +1017,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         foreach (var expression in expressionMap.Values) {
             float weight = expression.GetWeight(baseTransitionTime);
             if (weight > 0f) {
-                vrmBlendShapeProxy.AccumulateValue(expression.blendShapeKey, weight);
+                proxy.AccumulateValue(expression.blendShapeKey, weight);
                 
                 // Accumulate limits on expressions
                 currentExpressionEnableBlinking = currentExpressionEnableBlinking && expression.enableBlinking;
@@ -996,21 +1071,21 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             lookLeftRight = -lookLeftRight;
         
         if (leftEye == null && rightEye == null) {
-            vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), 0f);
-            vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookDown), 0f);
-            vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookLeft), 0);
-            vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookRight), 0f);
+            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), 0f);
+            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookDown), 0f);
+            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookLeft), 0);
+            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookRight), 0f);
             if (gazeTracking) {
                 if (lookUpDown > 0f) {
-                    vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), gazeFactor.x * lookUpDown);
+                    proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), gazeFactor.x * lookUpDown);
                 } else {
-                    vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookDown), -gazeFactor.x * lookUpDown);
+                    proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookDown), -gazeFactor.x * lookUpDown);
                 }
                 
                 if (lookLeftRight > 0f) {
-                    vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookLeft), gazeFactor.y * lookLeftRight);
+                    proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookLeft), gazeFactor.y * lookLeftRight);
                 } else {
-                    vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookRight), -gazeFactor.y * lookLeftRight);
+                    proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookRight), -gazeFactor.y * lookLeftRight);
                 }
             }
         } else {
@@ -1053,7 +1128,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (autoBlink || only30Points) {
             if (currentExpressionEnableBlinking) {
                 float blink = eyeBlinker.Blink();
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
+                proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
             }
         } else if (openSeeExpression != null && openSeeExpression.openSee != null && openSeeData != null) {
             if (!currentExpressionEnableBlinking)
@@ -1071,7 +1146,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 if (!(wasLookingDown > 0f))
                     eyeBlinker.Blink();
                 float blink = eyeBlinker.Blink();
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
+                proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), blink);
                 return;
             }
 
@@ -1090,10 +1165,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             
             if (linkBlinks && !allowWinking) {
                 float v = Mathf.Max(left, right);
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), v);
+                proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink), v);
             } else {
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_R), right);
-                vrmBlendShapeProxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_L), left);
+                proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_R), right);
+                proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.Blink_L), left);
             }
 
             if (openSeeData != null && lastBlink < openSeeData.time) {
@@ -1450,11 +1525,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             InitializeLipSync();
             initializeLipSync = false;
         }
-        if (vrmBlendShapeProxy != null) {
-            foreach (var pair in vrmBlendShapeProxy.GetValues()) {
-                vrmBlendShapeProxy.ImmediatelySetValue(pair.Key, 0f);
-            }
-        }
+        proxy.Clear();
         FindFaceMesh();
         UpdateExpression();
         BlinkEyes();
@@ -1466,10 +1537,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (doMouthTracking)
             ApplyMouthShape();
         if (vrmBlendShapeProxy != null && browClips == null)
-            vrmBlendShapeProxy.Apply();
+            proxy.Apply();
         UpdateBrows();
         if (vrmBlendShapeProxy != null && browClips != null)
-            vrmBlendShapeProxy.Apply();
+            proxy.Apply();
     }
     
     void LateUpdate() {
