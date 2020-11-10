@@ -163,6 +163,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private OpenSee.OpenSee.OpenSeeData openSeeData = null;
     private OpenSeeVRMExpression lastExpression = null;
 
+    private bool haveFullVisemeSet = false;
+    private BlendShapeKey[] fullVisemePresets;
+    private Dictionary<OVRLipSync.Viseme, int> ovrMap;
+
     private float turnLeftBoundaryAngle = -30f;
     private float turnRightBoundaryAngle = 20f;
     private float turnDownBoundaryAngle = 205f;
@@ -349,7 +353,42 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             BlendShapeKey.CreateFromPreset(BlendShapePreset.O),
             BlendShapeKey.CreateFromPreset(BlendShapePreset.Unknown)
         };
-        lastVisemeValues = new float[] {0f, 0f, 0f, 0f, 0f, 0f};
+        lastVisemeValues = new float[] {0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f};
+        ovrMap = new Dictionary<OVRLipSync.Viseme, int>() {
+            [OVRLipSync.Viseme.sil] = 0,
+            [OVRLipSync.Viseme.aa] = 1,
+            [OVRLipSync.Viseme.CH] = 2,
+            [OVRLipSync.Viseme.DD] = 3,
+            [OVRLipSync.Viseme.E] = 4,
+            [OVRLipSync.Viseme.FF] = 5,
+            [OVRLipSync.Viseme.ih] = 6,
+            [OVRLipSync.Viseme.kk] = 7,
+            [OVRLipSync.Viseme.nn] = 8,
+            [OVRLipSync.Viseme.oh] = 9,
+            [OVRLipSync.Viseme.ou] = 10,
+            [OVRLipSync.Viseme.PP] = 11,
+            [OVRLipSync.Viseme.RR] = 12,
+            [OVRLipSync.Viseme.SS] = 13,
+            [OVRLipSync.Viseme.TH] = 14
+        };
+        fullVisemePresets = new BlendShapeKey[16] {
+            BlendShapeKey.CreateUnknown("SIL"),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.A),
+            BlendShapeKey.CreateUnknown("CH"),
+            BlendShapeKey.CreateUnknown("DD"),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.E),
+            BlendShapeKey.CreateUnknown("FF"),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.I),
+            BlendShapeKey.CreateUnknown("KK"),
+            BlendShapeKey.CreateUnknown("NN"),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.O),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.U),
+            BlendShapeKey.CreateUnknown("PP"),
+            BlendShapeKey.CreateUnknown("RR"),
+            BlendShapeKey.CreateUnknown("SS"),
+            BlendShapeKey.CreateUnknown("TH"),
+            BlendShapeKey.CreateFromPreset(BlendShapePreset.Unknown)
+        };
     }
 
     OVRLipSync.Viseme GetActiveViseme(out float bestValue) {
@@ -397,8 +436,18 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             weight = Mathf.Clamp(weight * 1.5f, 0f, 1f);
         else
             weight = 1f;
-        float[] values = catsData[current];
-        for (int i = 0; i < 6; i++) {
+
+        float[] values = new float[16];
+        int lastIdx = 5;
+        if (haveFullVisemeSet) {
+            lastIdx = 15;
+            values[ovrMap[current]] = weight;
+            values[lastIdx] = catsData[current][5];
+        } else {
+            Array.Copy(catsData[current], values, 6);
+        }
+
+        for (int i = 0; i <= lastIdx; i++) {
             lastVisemeValues[i] = values[i] * weight * (1f - visemeSmoothing) + lastVisemeValues[i] * visemeSmoothing;
             if (lastVisemeValues[i] < 0f) {
                 lastVisemeValues[i] = 0f;
@@ -407,9 +456,13 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 lastVisemeValues[i] = 1f;
             }
             float result = lastVisemeValues[i] * visemeFactor * expressionFactor;
-            if (result > 0f && i < 5)
-                proxy.AccumulateValue(visemePresetMap[i], result);
-            if (i == 5 && haveJawParameter) {
+            if (result > 0f && i < lastIdx) {
+                if (haveFullVisemeSet)
+                    proxy.AccumulateValue(fullVisemePresets[i], result);
+                else
+                    proxy.AccumulateValue(visemePresetMap[i], result);
+            }
+            if (i == lastIdx && haveJawParameter) {
                 if (animateJawBone)
                     animator.SetFloat("JawMovement", result * 0.99999f);
                 else
@@ -642,6 +695,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void FindFaceMesh() {
         if (lastAvatar == vrmBlendShapeProxy)
             return;
+        if (visemePresetMap == null)
+            InitCatsData();
         lastAvatar = vrmBlendShapeProxy;
         animator = lastAvatar.gameObject.GetComponent<Animator>();
         
@@ -670,16 +725,30 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (vrmBlendShapeProxy == null)
             return;
         
+        HashSet<string> visemeClipNames = new HashSet<string>();
+        foreach (var key in fullVisemePresets)
+            if (key.Preset == BlendShapePreset.Unknown && key.Name != "")
+                visemeClipNames.Add(key.Name.ToUpper());
+
         // Check if the model has set up blendshape clips. Thanks do Deat for this idea!
         string foundClipUp = null;
         string foundClipDown = null;
+        HashSet<string> foundVisemeClips = new HashSet<string>();
         foreach (BlendShapeClip clip in vrmBlendShapeProxy.BlendShapeAvatar.Clips) {
             if (clip.Preset == BlendShapePreset.Unknown && clip.BlendShapeName != null) {
-                if (clip.BlendShapeName.ToUpper() == "BROWS UP")
+                string name = clip.BlendShapeName.ToUpper();
+                if (name == "BROWS UP")
                     foundClipUp = clip.BlendShapeName;
-                if (clip.BlendShapeName.ToUpper() == "BROWS DOWN")
+                if (name == "BROWS DOWN")
                     foundClipDown = clip.BlendShapeName;
+                if (visemeClipNames.Contains(name))
+                    foundVisemeClips.Add(name);
             }
+        }
+        haveFullVisemeSet = false;
+        if (visemeClipNames.SetEquals(foundVisemeClips)) {
+            Debug.Log("Detected full viseme set on avatar.");
+            haveFullVisemeSet = true;
         }
         if (foundClipUp != null && foundClipDown != null) {
             browClips =  new BlendShapeKey[2] {
