@@ -8,9 +8,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// To use this, add the following entry to the dependencies in Packages\manifest.json:
-//       "com.unity.nuget.newtonsoft-json": "2.0.0"
-using Newtonsoft.Json;
+// UniJSON is part of UniVRM (https://github.com/vrm-c/UniVRM)
+using UniJSON;
 
 namespace OpenSee {
 
@@ -233,11 +232,15 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
             if (includeBlackMagic)
                 UnityEngine.Debug.Log("Blackmagic JSON: " + bmJsonData);
         }
-        List<OpenSeeWebcam> details = JsonConvert.DeserializeObject<List<OpenSeeWebcam>>(jsonData);
+        List<OpenSeeWebcam> details = new List<OpenSeeWebcam>();
+        var parsed = JsonParser.Parse(jsonData);
+        parsed.Deserialize(ref details);
         foreach (var cam in details)
             cam.type = OpenSeeWebcamType.DirectShow;
         if (includeBlackMagic) {
-            List<OpenSeeWebcam> bmDetails = JsonConvert.DeserializeObject<List<OpenSeeWebcam>>(bmJsonData);
+            List<OpenSeeWebcam> bmDetails = new List<OpenSeeWebcam>();
+            parsed = JsonParser.Parse(bmJsonData);
+            parsed.Deserialize(ref bmDetails);
             foreach (var cam in bmDetails)
                 cam.type = OpenSeeWebcamType.Blackmagic;
             details.AddRange(bmDetails);
@@ -254,6 +257,14 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
         cameras = ListCameraDetails(includeBlackMagic);
         foreach (var camera in cameras)
             camera.GetPrettyCapabilities();
+    }
+
+    public static void AOTCall() {
+        GenericDeserializer<JsonValue, OpenSeeWebcamCapability[]>.GenericArrayDeserializer<OpenSeeWebcamCapability>(default(ListTreeNode<JsonValue>));
+        JsonObjectValidator.GenericDeserializer<JsonValue, OpenSeeWebcamCapability>.DeserializeField<System.Int32>(default(JsonSchema), default(ListTreeNode<JsonValue>));
+        JsonObjectValidator.GenericDeserializer<JsonValue, OpenSeeWebcamCapability>.DeserializeField<OpenSeeWebcamFormat>(default(JsonSchema), default(ListTreeNode<JsonValue>));
+        GenericDeserializer<JsonValue, OpenSeeWebcam[]>.GenericArrayDeserializer<OpenSeeWebcam>(default(ListTreeNode<JsonValue>));
+        throw new InvalidOperationException("This method is used for AOT code generation only. Do not call it at runtime.");
     }
 }
 }
