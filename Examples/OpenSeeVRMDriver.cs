@@ -22,6 +22,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeIKTarget openSeeIKTarget;
     [Tooltip("This is the target VRM avatar's blend shape proxy.")]
     public VRMBlendShapeProxy vrmBlendShapeProxy;
+    [Tooltip("When this is enabled, no blend shapes are applied.")]
+    public bool skipApply = false;
     [Tooltip("This needs to be enabled when tracking with the fast 30 point model.")]
     public bool only30Points = false;
     //[Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
@@ -261,6 +263,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private RuntimeAnimatorController animatorController = null;
         private Dictionary<BlendShapeKey, float> values = new Dictionary<BlendShapeKey, float>();
         private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
+        private bool skip = false;
         
         private void SetFloat(BlendShapeKey key, float weight) {
             string name = key.Name.ToUpper();
@@ -288,10 +291,14 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 }
             }
         }
+        
+        public void SetSkip(bool skip) {
+            this.skip = skip;
+        }
 
         public void Clear() {
             CheckAnimatorController();
-            if (proxy != null) {
+            if (proxy != null && !skip) {
                 foreach (var pair in proxy.GetValues()) {
                     proxy.ImmediatelySetValue(pair.Key, 0f);
                     SetFloat(pair.Key, 0f);
@@ -305,6 +312,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         
         public void Apply() {
+            if (skip)
+                return;
             CheckAnimatorController();
             foreach (var pair in values) {
                 proxy.AccumulateValue(pair.Key, pair.Value);
@@ -314,6 +323,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
 
         public void AccumulateValue(BlendShapeKey key, float weight) {
+            if (skip)
+                return;
             if (!values.ContainsKey(key))
                 values.Add(key, weight);
             else
@@ -591,14 +602,16 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (currentExpression != null)
             strength *= currentExpressionEyebrowWeight;
         
-        if (browUpIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browUpIndex, strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
-        if (browDownIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browDownIndex, strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
-        if (browAngryIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
-        if (browSorrowIndex > -1 && strength > 0f)
-            faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
+        if (!skipApply && browClips == null) {
+            if (browUpIndex > -1 && strength > 0f)
+                faceMesh.SetBlendShapeWeight(browUpIndex, strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
+            if (browDownIndex > -1 && strength > 0f)
+                faceMesh.SetBlendShapeWeight(browDownIndex, strength * Mathf.Lerp(lastBrowStates[1], currentBrowStates[1], t));
+            if (browAngryIndex > -1 && strength > 0f)
+                faceMesh.SetBlendShapeWeight(browAngryIndex, strength * Mathf.Lerp(lastBrowStates[2], currentBrowStates[2], t));
+            if (browSorrowIndex > -1 && strength > 0f)
+                faceMesh.SetBlendShapeWeight(browSorrowIndex, strength * Mathf.Lerp(lastBrowStates[3], currentBrowStates[3], t));
+        }
         if (browClips != null && strength > 0f) {
             if (lastBrowUpDown > 0f)
                 proxy.AccumulateValue(browClips[0], strength * Mathf.Lerp(lastBrowStates[0], currentBrowStates[0], t));
@@ -1594,6 +1607,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             InitializeLipSync();
             initializeLipSync = false;
         }
+        proxy.SetSkip(skipApply);
         proxy.Clear();
         FindFaceMesh();
         UpdateExpression();
