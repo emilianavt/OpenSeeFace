@@ -24,6 +24,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public VRMBlendShapeProxy vrmBlendShapeProxy;
     [Tooltip("When this is enabled, no blend shapes are applied.")]
     public bool skipApply = false;
+    [Tooltip("When this is enabled in addition to skipApply, expressions from hotkeys or expression detection are still applied.")]
+    public bool stillApplyExpressions = false;
     [Tooltip("This needs to be enabled when tracking with the fast 30 point model.")]
     public bool only30Points = false;
     //[Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
@@ -226,7 +228,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private BlendShapeKey[] browClips;
     
     private float lastAudioTime = -1f;
-    
+
     private class TimeInterpolate {
         private float interpolateT = 0f;
         private float updateT = 0f;
@@ -258,12 +260,26 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     // This class is used to ensure max() based instead of add() based blendshape accumulation and to allow setting animator parameters from blendshape values
     private class OpenSeeBlendShapeProxy {
+        private HashSet<string> browsBlendShapes = new HashSet<string>() { "BROWS UP", "BROWS DOWN", "BROWINNERUP", "BROWDOWNLEFT", "BROWDOWNRIGHT", "BROWOUTERUPLEFT", "BROWOUTERUPRIGHT" };
+        private HashSet<string> eyesBlendShapes = new HashSet<string>() { "BLINK", "BLINK_L", "BLINK_R", "EYELOOKUPLEFT", "EYELOOKUPRIGHT", "EYELOOKDOWNLEFT", "EYELOOKDOWNRIGHT", "EYELOOKINLEFT", "EYELOOKINRIGHT", "EYELOOKOUTLEFT", "EYELOOKOUTRIGHT", "EYEBLINKLEFT", "EYEBLINKRIGHT", "EYESQUINTRIGHT", "EYESQUINTLEFT", "EYEWIDELEFT", "EYEWIDERIGHT" };
+        private HashSet<string> mouthBlendShapes = new HashSet<string>() { "A", "I", "U", "E", "O", "SIL", "CH", "DD", "FF", "KK", "NN", "PP", "RR", "SS", "TH", "JAWOPEN", "JAWFORWARD", "JAWLEFT", "JAWRIGHT", "MOUTHFUNNEL", "MOUTHPUCKER", "MOUTHLEFT", "MOUTHRIGHT", "MOUTHROLLUPPER", "MOUTHROLLLOWER", "MOUTHSHRUGUPPER", "MOUTHSHRUGLOWER", "MOUTHCLOSE", "MOUTHSMILELEFT", "MOUTHSMILERIGHT", "MOUTHFROWNLEFT", "MOUTHFROWNRIGHT", "MOUTHDIMPLELEFT", "MOUTHDIMPLERIGHT", "MOUTHUPPERUPLEFT", "MOUTHUPPERUPRIGHT", "MOUTHLOWERDOWNLEFT", "MOUTHLOWERDOWNRIGHT", "MOUTHPRESSLEFT", "MOUTHPRESSRIGHT", "MOUTHSTRETCHLEFT", "MOUTHSTRETCHRIGHT", "TONGUEOUT" };
+        private bool clearPSBrows = false;
+        private bool clearPSEyes = false;
+        private bool clearPSMouth = false;
+        private Dictionary<BlendShapeKey, float> clearKeys = new Dictionary<BlendShapeKey, float>();
+
         private VRMBlendShapeProxy proxy = null;
         private Animator animator = null;
         private RuntimeAnimatorController animatorController = null;
         private Dictionary<BlendShapeKey, float> values = new Dictionary<BlendShapeKey, float>();
         private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
         private bool skip = false;
+        
+        public void DisableFaceParts(bool brows, bool eyes, bool mouth) {
+            clearPSBrows = brows;
+            clearPSEyes = eyes;
+            clearPSMouth = mouth;
+        }
         
         private void SetFloat(BlendShapeKey key, float weight) {
             string name = key.Name.ToUpper();
@@ -312,9 +328,31 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         
         public void Apply() {
-            if (skip)
+            if (skip || proxy == null)
                 return;
             CheckAnimatorController();
+            if (clearPSBrows || clearPSEyes || clearPSMouth) {
+                bool found = false;
+                clearKeys.Clear();
+                foreach (var pair in proxy.GetValues()) {
+                    string name = pair.Key.Name.ToUpper();
+                    if (clearPSBrows && browsBlendShapes.Contains(name)) {
+                        clearKeys[pair.Key] = 0f;
+                        found = true;
+                    } else if (clearPSEyes && eyesBlendShapes.Contains(name)) {
+                        clearKeys[pair.Key] = 0f;
+                        found = true;
+                    } else if (clearPSMouth && mouthBlendShapes.Contains(name)) {
+                        clearKeys[pair.Key] = 0f;
+                        found = true;
+                    }
+                }
+                if (found)
+                    proxy.SetValues(clearKeys);
+                clearPSBrows = false;
+                clearPSEyes = false;
+                clearPSMouth = false;
+            }
             foreach (var pair in values) {
                 proxy.AccumulateValue(pair.Key, pair.Value);
                 SetFloat(pair.Key, pair.Value);
@@ -1108,6 +1146,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 currentExpressionVisemeFactor = Mathf.Min(currentExpressionVisemeFactor, expression.visemeFactor);
             }
         }
+        proxy.DisableFaceParts(currentExpressionEyebrowWeight < 0.0005f, !currentExpressionEnableBlinking, !currentExpressionEnableVisemes || (currentExpressionVisemeFactor < 0.0005f));
         lastExpression = currentExpression;
     }
     
@@ -1153,10 +1192,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             lookLeftRight = -lookLeftRight;
         
         if (leftEye == null && rightEye == null) {
-            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), 0f);
-            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookDown), 0f);
-            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookLeft), 0);
-            proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookRight), 0f);
             if (gazeTracking) {
                 if (lookUpDown > 0f) {
                     proxy.AccumulateValue(BlendShapeKey.CreateFromPreset(BlendShapePreset.LookUp), gazeFactor.x * lookUpDown);
@@ -1171,8 +1206,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 }
             }
         } else {
-            //vrmLookAtHead.UpdateType = VRM.UpdateType.None;
-            //vrmLookAtHead.RaiseYawPitchChanged(gazeFactor.y * lookLeftRight, gazeFactor.x * lookUpDown);
             if (rightEye != null)
                 rightEye.localRotation = Quaternion.identity;
             if (leftEye != null)
@@ -1610,7 +1643,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         proxy.SetSkip(skipApply);
         proxy.Clear();
         FindFaceMesh();
-        UpdateExpression();
+        if (!skipApply)
+            UpdateExpression();
         BlinkEyes();
         ReadAudio();
         bool doMouthTracking = true;
@@ -1627,10 +1661,19 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
     
     void LateUpdate() {
-        if (gazeTracking && !only30Points)
+        if (!skipApply && gazeTracking && !only30Points) {
             UpdateGaze();
+            proxy.Apply();
+        }
+        // If blendshapes are received over VMC, apply expressions afterwards if they should be applied
+        if (skipApply && stillApplyExpressions) {
+            proxy.SetSkip(false);
+            UpdateExpression();
+            proxy.Apply();
+            proxy.SetSkip(skipApply);
+        }
     }
-
+    
     void FixedUpdate() {
         if (openSeeIKTarget.fixedUpdate) {
             RunUpdates();
