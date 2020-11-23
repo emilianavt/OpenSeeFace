@@ -22,8 +22,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public OpenSeeIKTarget openSeeIKTarget;
     [Tooltip("This is the target VRM avatar's blend shape proxy.")]
     public VRMBlendShapeProxy vrmBlendShapeProxy;
-    [Tooltip("When this is enabled, no blend shapes are applied.")]
+    [Tooltip("When this is enabled, no blendshapes are applied.")]
     public bool skipApply = false;
+    [Tooltip("When this is enabled, no gaze tracking (bone or blendshape) is applied.")]
+    public bool skipApplyEyes = false;
+    [Tooltip("When this is enabled, no jaw bone animation is applied.")]
+    public bool skipApplyJaw = false;
     [Tooltip("When this is enabled in addition to skipApply, expressions from hotkeys or expression detection are still applied.")]
     public bool stillApplyExpressions = false;
     [Tooltip("This needs to be enabled when tracking with the fast 30 point model.")]
@@ -106,6 +110,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public bool maximizeLipSync = false;
     [Tooltip("When enabled and the animator of the avatar has a float parameter called JawMovement, this parameter will be set to values from 0 to 1, corresponding to a closed to open mouth. This can be used for animating jaw bones.")]
     public bool animateJawBone = false;
+    [Tooltip("This should be set to the included mecanim animation, which sets the jaw bone to closed on the first frame and to open on the second frame.")]
+    public AnimationClip jawBoneAnimation;
     [Tooltip("This is the mouth tracking smoothing factor, with 0 being no smoothing and 1 being a fixed mouth.")]
     [Range(0, 1)]
     public float mouthSmoothing = 0.6f;
@@ -210,7 +216,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     
     private OpenSeeBlendShapeProxy proxy = new OpenSeeBlendShapeProxy();
     private Animator animator;
-    private bool haveJawParameter;
+    private Transform jawBone;
+    private Quaternion jawRotation = Quaternion.identity;
+    private HumanBodyBones[] humanBodyBones;
+    private Transform[] humanBodyBoneTransforms;
+    private Quaternion[] humanBodyBoneRotations;
     
     private VRMBlendShapeProxy lastAvatar = null;
     private int eyebrowIsMoving = 0;
@@ -511,14 +521,29 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 else
                     proxy.AccumulateValue(visemePresetMap[i], result);
             }
-            if (i == lastIdx && haveJawParameter) {
+            if (i == lastIdx) {
                 if (animateJawBone)
-                    animator.SetFloat("JawMovement", result * 0.99999f);
+                    SetJaw(result * 0.99999f);
                 else
-                    animator.SetFloat("JawMovement", 0f);
+                    SetJaw(0f);
             }
         }
         return false;
+    }
+    
+    void SetJaw(float v) {
+        if (jawBoneAnimation == null || jawBone == null)
+            return;
+        for (int i = 0; i < humanBodyBones.Length; i++) {
+            if (humanBodyBoneTransforms[i] != null)
+                humanBodyBoneRotations[i] = humanBodyBoneTransforms[i].localRotation;
+        }
+        jawBoneAnimation.SampleAnimation(lastAvatar.gameObject, v / jawBoneAnimation.frameRate);
+        jawRotation = jawBone.localRotation;
+        for (int i = 0; i < humanBodyBones.Length; i++) {
+            if (humanBodyBoneTransforms[i] != null)
+                humanBodyBoneTransforms[i].localRotation = humanBodyBoneRotations[i];
+        }
     }
     
     void ApplyMouthShape(bool fadeOnly) {
@@ -550,11 +575,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             float result = interpolated * expressionFactor * visemeFactor;
             if (i < 5 && result > 0f)
                 proxy.AccumulateValue(visemePresetMap[i], result);
-            if (i == 5 && haveJawParameter) {
+            if (i == 5) {
                 if (animateJawBone)
-                    animator.SetFloat("JawMovement", result * 0.99999f);
+                    SetJaw(result * 0.99999f);
                 else
-                    animator.SetFloat("JawMovement", 0f);
+                    SetJaw(0f);
             }
         }
 
@@ -750,19 +775,19 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             InitCatsData();
         lastAvatar = vrmBlendShapeProxy;
         animator = lastAvatar.gameObject.GetComponent<Animator>();
-        
-        proxy.UpdateAvatar(lastAvatar, animator);
 
-        haveJawParameter = false;
         if (animator != null) {
-            for (int i = 0; i < animator.parameterCount; i++) {
-                if (animator.parameters[i].name == "JawMovement") {
-                    haveJawParameter = true;
-                    break;
-                }
+            jawBone = animator.GetBoneTransform(HumanBodyBones.Jaw);
+            for (int i = 0; i < humanBodyBones.Length; i++) {
+                if (humanBodyBones[i] >= 0 && humanBodyBones[i] < HumanBodyBones.LastBone)
+                    humanBodyBoneTransforms[i] = animator.GetBoneTransform(humanBodyBones[i]);
+                else
+                    humanBodyBoneTransforms[i] = null;
             }
         }
         
+        proxy.UpdateAvatar(lastAvatar, animator);
+
         faceMesh = null;
         faceType = -1;
         browUpIndex = -1;
@@ -1628,6 +1653,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     void Start() {
         InitExpressionMap();
+        humanBodyBones = (HumanBodyBones[])Enum.GetValues(typeof(HumanBodyBones));
+        humanBodyBoneTransforms = new Transform[humanBodyBones.Length];
+        humanBodyBoneRotations = new Quaternion[humanBodyBones.Length];
     }
 
     void RunUpdates() {
@@ -1661,9 +1689,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
     
     void LateUpdate() {
-        if (!skipApply && gazeTracking && !only30Points) {
+        if (!skipApplyEyes && gazeTracking && !only30Points) {
             UpdateGaze();
             proxy.Apply();
+        }
+        if (!skipApplyJaw && jawBone != null && jawBoneAnimation != null) {
+            jawBone.localRotation = jawRotation;
         }
         // If blendshapes are received over VMC, apply expressions afterwards if they should be applied
         if (skipApply && stillApplyExpressions) {
