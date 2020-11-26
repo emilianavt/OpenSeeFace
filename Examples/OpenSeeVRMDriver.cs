@@ -216,6 +216,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     
     private OpenSeeBlendShapeProxy proxy = new OpenSeeBlendShapeProxy();
     private Animator animator;
+    private bool haveJawParameter;
     private Transform jawBone;
     private Quaternion jawRotation = Quaternion.identity;
     private HumanBodyBones[] humanBodyBones;
@@ -532,17 +533,22 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
     
     void SetJaw(float v) {
-        if (jawBoneAnimation == null || jawBone == null)
+        if (haveJawParameter) {
+            animator.SetFloat("JawMovement", v);
             return;
-        for (int i = 0; i < humanBodyBones.Length; i++) {
-            if (humanBodyBoneTransforms[i] != null)
-                humanBodyBoneRotations[i] = humanBodyBoneTransforms[i].localRotation;
         }
-        jawBoneAnimation.SampleAnimation(lastAvatar.gameObject, v / jawBoneAnimation.frameRate);
-        jawRotation = jawBone.localRotation;
-        for (int i = 0; i < humanBodyBones.Length; i++) {
-            if (humanBodyBoneTransforms[i] != null)
-                humanBodyBoneTransforms[i].localRotation = humanBodyBoneRotations[i];
+        if (jawBoneAnimation != null && jawBone != null) {
+            for (int i = 0; i < humanBodyBones.Length; i++) {
+                if (humanBodyBoneTransforms[i] != null)
+                    humanBodyBoneRotations[i] = humanBodyBoneTransforms[i].localRotation;
+            }
+            jawBoneAnimation.SampleAnimation(lastAvatar.gameObject, v / jawBoneAnimation.frameRate);
+            jawRotation = jawBone.localRotation;
+            for (int i = 0; i < humanBodyBones.Length; i++) {
+                if (humanBodyBoneTransforms[i] != null)
+                    humanBodyBoneTransforms[i].localRotation = humanBodyBoneRotations[i];
+            }
+            return;
         }
     }
     
@@ -777,6 +783,13 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         animator = lastAvatar.gameObject.GetComponent<Animator>();
 
         if (animator != null) {
+            haveJawParameter = false;
+            for (int i = 0; i < animator.parameterCount; i++) {
+                if (animator.parameters[i].name == "JawMovement") {
+                    haveJawParameter = true;
+                    break;
+                }
+            }
             jawBone = animator.GetBoneTransform(HumanBodyBones.Jaw);
             for (int i = 0; i < humanBodyBones.Length; i++) {
                 if (humanBodyBones[i] >= 0 && humanBodyBones[i] < HumanBodyBones.LastBone)
