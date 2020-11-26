@@ -1,3 +1,7 @@
+#if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
+#define WINDOWS_BUILD
+#endif
+
 using System;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
@@ -10,10 +14,14 @@ using VRM;
 // No other OVR related components are required.
 
 public class OpenSeeVRMDriver : MonoBehaviour {
+    #if WINDOWS_BUILD
     #region DllImport
     [DllImport("user32.dll", SetLastError = true)]
     static extern ushort GetAsyncKeyState(int vKey);
     #endregion
+    #else
+    static ushort GetAsyncKeyState(int vKey) { return 0; }
+    #endif
     
     [Header("Settings")]
     [Tooltip("This is the OpenSeeExpression module used for expression prediction.")]
@@ -126,8 +134,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public float mouthSquelch = 0.01f;
     [Tooltip("With this, the squelch threshold above can be disabled.")]
     public bool mouthUseSquelch = false;
+    #if WINDOWS_BUILD
     [Tooltip("This allows you to select the OVRLipSync provider.")]
     public OVRLipSync.ContextProviders provider = OVRLipSync.ContextProviders.Enhanced;
+    #endif
     [Tooltip("When enabled, audio will be read from the given audio source, otherwise it will be read from the given mic.")]
     public bool useCanned = false;
     [Tooltip("This is the audio source for canned audio.")]
@@ -153,7 +163,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This shows the current audio volume.")]
     public float audioVolume = 0f;
 
+    #if WINDOWS_BUILD
     private OVRLipSync.Frame visemeData = new OVRLipSync.Frame();
+    #endif
     private float fakeTimeTime = 0f;
     private float volume;
     static private bool inited = false;
@@ -175,7 +187,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     private bool haveFullVisemeSet = false;
     private BlendShapeKey[] fullVisemePresets;
+    #if WINDOWS_BUILD
     private Dictionary<OVRLipSync.Viseme, int> ovrMap;
+    #endif
 
     private float turnLeftBoundaryAngle = -30f;
     private float turnRightBoundaryAngle = 20f;
@@ -386,8 +400,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
     }
 
+    #if WINDOWS_BUILD
     private Dictionary<OVRLipSync.Viseme, float[]> catsData = null;
+    #endif
     void InitCatsData() {
+        #if WINDOWS_BUILD
         catsData = new Dictionary<OVRLipSync.Viseme, float[]>();
         // This is similar to what the Blender CATS plugin does, but with A, I, U, E, O, JawOpen
         catsData.Add(OVRLipSync.Viseme.sil, new float[]{0f, 0f, 0f, 0f, 0f, 0f});
@@ -405,6 +422,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         catsData.Add(OVRLipSync.Viseme.RR, new float[]{0f, 0.5f, 0f, 0f, 0.3f, 0.4f});
         catsData.Add(OVRLipSync.Viseme.SS, new float[]{0f, 0.8f, 0f, 0f, 0f, 0.3f});
         catsData.Add(OVRLipSync.Viseme.TH, new float[]{0.4f, 0f, 0f, 0f, 0.15f, 0.5f});
+        #endif
         visemePresetMap = new BlendShapeKey[6] {
             BlendShapeKey.CreateFromPreset(BlendShapePreset.A),
             BlendShapeKey.CreateFromPreset(BlendShapePreset.I),
@@ -414,6 +432,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             BlendShapeKey.CreateFromPreset(BlendShapePreset.Unknown)
         };
         lastVisemeValues = new float[] {0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f};
+        #if WINDOWS_BUILD
         ovrMap = new Dictionary<OVRLipSync.Viseme, int>() {
             [OVRLipSync.Viseme.sil] = 0,
             [OVRLipSync.Viseme.aa] = 1,
@@ -431,6 +450,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             [OVRLipSync.Viseme.SS] = 13,
             [OVRLipSync.Viseme.TH] = 14
         };
+        #endif
         fullVisemePresets = new BlendShapeKey[16] {
             BlendShapeKey.CreateUnknown("SIL"),
             BlendShapeKey.CreateFromPreset(BlendShapePreset.A),
@@ -451,6 +471,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         };
     }
 
+    #if WINDOWS_BUILD
     OVRLipSync.Viseme GetActiveViseme(out float bestValue) {
         var visemes = Enum.GetValues(typeof(OVRLipSync.Viseme));
         bestValue = -1f;
@@ -463,8 +484,10 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         return bestViseme;
     }
+    #endif
 
     bool ApplyVisemes() {
+        #if WINDOWS_BUILD
         if (vrmBlendShapeProxy == null || catsData == null)
             return true;
         float expressionFactor = 1f;
@@ -529,6 +552,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                     SetJaw(0f);
             }
         }
+        #endif
         return false;
     }
     
@@ -1455,6 +1479,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     public void InitializeLipSync() {
+        #if WINDOWS_BUILD
         active = false;
         lastAudioTime = -1f;
         if (catsData == null)
@@ -1513,6 +1538,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         partialAudio = new float[1024 * channels];
         lastPos = 0;
         active = true;
+        #endif
     }
 
     float[] ReadMic() {
@@ -1544,6 +1570,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void ProcessBuffer(float[] buffer) {
+        #if WINDOWS_BUILD
         if (buffer == null)
             return;
         
@@ -1613,9 +1640,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             Array.Copy(buffer, bufferPos, partialAudio, partialPos, buffer.Length - bufferPos);
             partialPos += (buffer.Length - bufferPos) / channels;
         }
+        #endif
     }
 
     void OnAudioFilterRead(float[] data, int channels) {
+        #if WINDOWS_BUILD
         if (isCanned) {
             if (channels > 3) {
                 Debug.Log("Audio with more than 3 channels is not supported.");
@@ -1633,9 +1662,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (isCanned)
                 ProcessBuffer(buffer);
         }
+        #endif
     }
 
     void ReadAudio() {
+        #if WINDOWS_BUILD
         if (lastAudioTime >= 0f && Time.time > lastAudioTime + 3f && lipSync) {
             Debug.Log("Audio device might have disappeared, reinitializing lip sync.");
             InitializeLipSync();
@@ -1651,9 +1682,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             return;
         if (!isCanned)
             ProcessBuffer(buffer);
+        #endif
     }
 
     void CreateContext() {
+        #if WINDOWS_BUILD
         lock (this) {
             if (context == 0) {
                 if (OVRLipSync.CreateContext(ref context, provider) != OVRLipSync.Result.Success) {
@@ -1662,6 +1695,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 }
             }
         }
+        #endif
     }
 
     void Start() {
@@ -1687,11 +1721,15 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         if (!skipApply)
             UpdateExpression();
         BlinkEyes();
+        #if WINDOWS_BUILD
         ReadAudio();
         bool doMouthTracking = true;
         if (lipSync) {
             doMouthTracking = ApplyVisemes();
         }
+        #else
+        bool doMouthTracking = true;
+        #endif
         if (doMouthTracking)
             ApplyMouthShape();
         if (vrmBlendShapeProxy != null && browClips == null)
@@ -1727,7 +1765,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     void Update() {
         fakeTimeTime = Time.time;
         if (inited && lastSmoothing != smoothAmount) {
+            #if WINDOWS_BUILD
             OVRLipSync.SendSignal(context, OVRLipSync.Signals.VisemeSmoothing, smoothAmount, 0);
+            #endif
             lastSmoothing = smoothAmount;
         }
         if (!openSeeIKTarget.fixedUpdate) {
@@ -1736,6 +1776,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
 
     void DestroyContext() {
+        #if WINDOWS_BUILD
         active = false;
         lock (this) {
             if (context != 0) {
@@ -1745,6 +1786,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 context = 0;
             }
         }
+        #endif
     }
 
     void OnDestroy() {
