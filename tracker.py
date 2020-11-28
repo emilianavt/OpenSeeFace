@@ -531,7 +531,7 @@ class Tracker():
 
         # Multiple faces with single threads
         self.sessions = []
-        self.max_workers = min(max_threads, max_faces)
+        self.max_workers = max(min(max_threads, max_faces), 1)
         extra_threads = max_threads % self.max_workers
         for i in range(self.max_workers):
             options = onnxruntime.SessionOptions()
