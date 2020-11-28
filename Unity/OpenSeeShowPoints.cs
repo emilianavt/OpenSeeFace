@@ -18,6 +18,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
     public bool showLines = false;
     public float lineWidth = 0.01f;
     public Material lineMaterial;
+    public bool receiveShadows = false;
     
     private OpenSee.OpenSeeData openSeeData;
     private GameObject[] gameObjects;
@@ -46,6 +47,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
             gameObjects[i].name = "Point " + (i + 1);
             if (material != null)
                 gameObjects[i].GetComponent<Renderer>().material = material;
+            gameObjects[i].GetComponent<Renderer>().receiveShadows = receiveShadows;
             gameObjects[i].layer = gameObject.layer;
             gameObjects[i].transform.SetParent(transform);
             gameObjects[i].transform.localScale = new Vector3(0.025f, 0.025f, 0.025f);
@@ -53,6 +55,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 GameObject cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 if (material != null)
                     cylinder.GetComponent<Renderer>().material = material;
+                cylinder.GetComponent<Renderer>().receiveShadows = receiveShadows;
                 cylinder.layer = gameObject.layer;
                 cylinder.transform.SetParent(gameObjects[i].transform);
                 cylinder.transform.localEulerAngles = new Vector3(90f, 0f, 0f);
@@ -85,6 +88,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 lineRenderers[i].useWorldSpace = true;
                 lineRenderers[i].generateLightingData = true;
                 lineRenderers[i].material = lineMaterial;
+                lineRenderers[i].receiveShadows = receiveShadows;
                 lineRenderers[i].widthMultiplier = lineWidth;
                 lineRenderers[i].positionCount = 2;
         }
@@ -173,6 +177,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
 
             for (int i = 0; i < 66; i++) {
                 Renderer renderer = gameObjects[i].GetComponent<Renderer>();
+                renderer.receiveShadows = receiveShadows;
                 renderer.material.SetColor("_Color", Color.Lerp(Color.red, Color.green, openSeeData.confidence[i]));
                 float x = openSeeData.points[i].x;
                 float y = -openSeeData.points[i].y;
@@ -206,7 +211,7 @@ public class OpenSeeShowPoints : MonoBehaviour {
                 Color color = Color.Lerp(Color.red, Color.green, Mathf.Lerp(0.5f, openSeeData.confidence[a], openSeeData.confidence[b]));
                 lineRenderers[i].enabled = true;
                 lineRenderers[i].widthMultiplier = lineWidth;
-                //lineRenderers[i].material = lineMaterial;
+                lineRenderers[i].receiveShadows = receiveShadows;
                 lineRenderers[i].material.SetColor("_Color", color);
                 lineRenderers[i].startColor = color;
                 lineRenderers[i].endColor = color;
