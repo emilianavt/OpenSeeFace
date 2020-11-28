@@ -330,7 +330,7 @@ class FaceInfo():
         self.tracker = tracker
         self.contour_pts = [0,1,8,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45]
         self.face_3d = copy.copy(self.tracker.face_3d)
-        if self.tracker.model_type < 0:
+        if self.tracker.model_type == -1:
             self.contour_pts = [0,2,8,14,16,27,30,33]
         self.reset()
         self.alive = False
@@ -401,7 +401,7 @@ class FaceInfo():
         if self.conf < 0.4 or self.pnp_error > 300:
             return
 
-        if self.tracker.model_type > -1 and not self.tracker.static_model:
+        if self.tracker.model_type != -1 and not self.tracker.static_model:
             max_runs = 1
             eligible = np.delete(np.arange(0, 66), [30])
             changed_any = False
@@ -511,6 +511,10 @@ class Tracker():
         model = "lm_modelT_opt.onnx"
         if model_type >= 0:
             model = self.models[self.model_type]
+        if model_type == -2:
+            model = "lm_modelV_opt.onnx"
+        if model_type == -3:
+            model = "lm_modelU_opt.onnx"
         model_base_path = get_model_base_path(model_dir)
 
         if threshold is None:
@@ -670,19 +674,27 @@ class Tracker():
             self.res = 56.
             self.mean_res = np.tile(self.mean, [56, 56, 1])
             self.std_res = np.tile(self.std, [56, 56, 1])
+        if model_type < -1:
+            self.res = 112.
+            self.mean_res = np.tile(self.mean, [112, 112, 1])
+            self.std_res = np.tile(self.std, [112, 112, 1])
         self.res_i = int(self.res)
         self.out_res = 27.
         if model_type < 0:
             self.out_res = 6.
+        if model_type < -1:
+            self.out_res = 13.
         self.out_res_i = int(self.out_res) + 1
         self.logit_factor = 16.
         if model_type < 0:
             self.logit_factor = 8.
+        if model_type < -1:
+            self.logit_factor = 16.
 
         self.no_gaze = no_gaze
         self.debug_gaze = False
         self.feature_level = feature_level
-        if model_type < 0:
+        if model_type == -1:
             self.feature_level = min(feature_level, 1)
         self.max_feature_updates = max_feature_updates
         self.static_model = static_model
@@ -720,7 +732,7 @@ class Tracker():
         avg_conf = 0
         res = self.res - 1
         c0, c1, c2 = 66, 132, 198
-        if self.model_type < 0:
+        if self.model_type == -1:
             c0, c1, c2 = 30, 60, 90
         t_main = tensor[0:c0].reshape((c0,self.out_res_i * self.out_res_i))
         t_m = t_main.argmax(1)
@@ -735,7 +747,7 @@ class Tracker():
         avg_conf = np.average(t_conf)
         lms = np.stack([t_x, t_y, t_conf], 1)
         lms[np.isnan(lms).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
-        if self.model_type < 0:
+        if self.model_type == -1:
             lms = lms[[0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,6,7,7,8,8,9,10,10,11,11,12,21,21,21,22,23,23,23,23,23,13,14,14,15,16,16,17,18,18,19,20,20,24,25,25,25,26,26,27,27,27,24,24,28,28,28,26,29,29,29]]
             #lms[[1,3,4,6,7,9,10,12,13,15,18,20,23,25,38,40,44,46]] += lms[[2,2,5,5,8,8,11,11,14,16,19,21,24,26,39,39,45,45]]
             #lms[[3,4,6,7,9,10,12,13]] += lms[[5,5,8,8,11,11,14,14]]
