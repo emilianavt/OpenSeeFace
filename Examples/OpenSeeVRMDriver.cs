@@ -163,6 +163,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     [Tooltip("This shows the current audio volume.")]
     public float audioVolume = 0f;
 
+    [HideInInspector]
+    public OpenSee.OpenSee.OpenSeeData openSeeData { get; private set; } = null;
+
     #if WINDOWS_BUILD
     private OVRLipSync.Frame visemeData = new OVRLipSync.Frame();
     #endif
@@ -182,7 +185,6 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private BlendShapeKey[] visemePresetMap;
     private Dictionary<string, OpenSeeVRMExpression> expressionMap;
     private OpenSeeVRMExpression currentExpression = null;
-    private OpenSee.OpenSee.OpenSeeData openSeeData = null;
     private OpenSeeVRMExpression lastExpression = null;
 
     private bool haveFullVisemeSet = false;
@@ -1744,7 +1746,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             UpdateGaze();
             proxy.Apply();
         }
-        if (!skipApplyJaw && jawBone != null && jawBoneAnimation != null) {
+        if (!skipApplyJaw && jawBone != null && jawBoneAnimation != null && !haveJawParameter) {
             jawBone.localRotation = jawRotation;
         }
         // If blendshapes are received over VMC, apply expressions afterwards if they should be applied
