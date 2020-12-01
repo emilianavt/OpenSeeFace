@@ -14,6 +14,8 @@ An up to date sample video can be found [here](https://www.youtube.com/watch?v=A
 
 # Usage
 
+A sample Unity project for VRM based avatar animation can be found [here](https://github.com/emilianavt/OpenSeeFaceSample).
+
 The face tracking itself is done by the `facetracker.py` Python 3.7 script. It is a commandline program, so you should start it manually from cmd or write a batch file to start it. If you downloaded a release and are on Windows, you can run the `facetracker.exe` inside the `Binary` folder without having Python installed. You can also use the `run.bat` inside the `Binary` folder for a basic demonstration of the tracker.
 
 The script will perform the tracking on webcam input or video file and send the tracking data over UDP. This design also allows tracking to be done on a separate PC from the one who uses the tracking information. This can be useful to enhance performance and to avoid accidentially revealing camera footage.
