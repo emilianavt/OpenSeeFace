@@ -38,6 +38,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public bool skipApplyJaw = false;
     [Tooltip("When this is enabled in addition to skipApply, expressions from hotkeys or expression detection are still applied.")]
     public bool stillApplyExpressions = false;
+    [Tooltip("This factor is multiplied to all blendshape weights as well as gaze and jaw tracking.")]
+    public float blendShapeWeight = 1f;
     [Tooltip("This needs to be enabled when tracking with the fast 30 point model.")]
     public bool only30Points = false;
     //[Tooltip("When set to true, expression and audio data will be processed in FixedUpdate, otherwise it will be processed in Update.")]
@@ -287,9 +289,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     // This class is used to ensure max() based instead of add() based blendshape accumulation and to allow setting animator parameters from blendshape values
     private class OpenSeeBlendShapeProxy {
-        private HashSet<string> browsBlendShapes = new HashSet<string>() { "BROWS UP", "BROWS DOWN", "BROWINNERUP", "BROWDOWNLEFT", "BROWDOWNRIGHT", "BROWOUTERUPLEFT", "BROWOUTERUPRIGHT" };
-        private HashSet<string> eyesBlendShapes = new HashSet<string>() { "BLINK", "BLINK_L", "BLINK_R", "EYELOOKUPLEFT", "EYELOOKUPRIGHT", "EYELOOKDOWNLEFT", "EYELOOKDOWNRIGHT", "EYELOOKINLEFT", "EYELOOKINRIGHT", "EYELOOKOUTLEFT", "EYELOOKOUTRIGHT", "EYEBLINKLEFT", "EYEBLINKRIGHT", "EYESQUINTRIGHT", "EYESQUINTLEFT", "EYEWIDELEFT", "EYEWIDERIGHT" };
-        private HashSet<string> mouthBlendShapes = new HashSet<string>() { "A", "I", "U", "E", "O", "SIL", "CH", "DD", "FF", "KK", "NN", "PP", "RR", "SS", "TH", "JAWOPEN", "JAWFORWARD", "JAWLEFT", "JAWRIGHT", "MOUTHFUNNEL", "MOUTHPUCKER", "MOUTHLEFT", "MOUTHRIGHT", "MOUTHROLLUPPER", "MOUTHROLLLOWER", "MOUTHSHRUGUPPER", "MOUTHSHRUGLOWER", "MOUTHCLOSE", "MOUTHSMILELEFT", "MOUTHSMILERIGHT", "MOUTHFROWNLEFT", "MOUTHFROWNRIGHT", "MOUTHDIMPLELEFT", "MOUTHDIMPLERIGHT", "MOUTHUPPERUPLEFT", "MOUTHUPPERUPRIGHT", "MOUTHLOWERDOWNLEFT", "MOUTHLOWERDOWNRIGHT", "MOUTHPRESSLEFT", "MOUTHPRESSRIGHT", "MOUTHSTRETCHLEFT", "MOUTHSTRETCHRIGHT", "TONGUEOUT" };
+        private HashSet<string> browsBlendShapes = new HashSet<string>() { "BROWS UP", "BROWS DOWN", "BROWINNERUP", "BROWDOWNLEFT", "BROWDOWNRIGHT", "BROWOUTERUPLEFT", "BROWOUTERUPRIGHT", "NOSESNEERLEFT", "NOSESNEERRIGHT" };
+        private HashSet<string> eyesBlendShapes = new HashSet<string>() { "BLINK", "BLINK_L", "BLINK_R", "EYELOOKUPLEFT", "EYELOOKUPRIGHT", "EYELOOKDOWNLEFT", "EYELOOKDOWNRIGHT", "EYELOOKINLEFT", "EYELOOKINRIGHT", "EYELOOKOUTLEFT", "EYELOOKOUTRIGHT", "EYEBLINKLEFT", "EYEBLINKRIGHT", "EYESQUINTRIGHT", "EYESQUINTLEFT", "EYEWIDELEFT", "EYEWIDERIGHT", "NOSESNEERLEFT", "NOSESNEERRIGHT", "CHEEKSQUITLEFT", "CHEEKSQUINTRIGHT" };
+        private HashSet<string> mouthBlendShapes = new HashSet<string>() { "A", "I", "U", "E", "O", "SIL", "CH", "DD", "FF", "KK", "NN", "PP", "RR", "SS", "TH", "JAWOPEN", "JAWFORWARD", "JAWLEFT", "JAWRIGHT", "MOUTHFUNNEL", "MOUTHPUCKER", "MOUTHLEFT", "MOUTHRIGHT", "MOUTHROLLUPPER", "MOUTHROLLLOWER", "MOUTHSHRUGUPPER", "MOUTHSHRUGLOWER", "MOUTHCLOSE", "MOUTHSMILELEFT", "MOUTHSMILERIGHT", "MOUTHFROWNLEFT", "MOUTHFROWNRIGHT", "MOUTHDIMPLELEFT", "MOUTHDIMPLERIGHT", "MOUTHUPPERUPLEFT", "MOUTHUPPERUPRIGHT", "MOUTHLOWERDOWNLEFT", "MOUTHLOWERDOWNRIGHT", "MOUTHPRESSLEFT", "MOUTHPRESSRIGHT", "MOUTHSTRETCHLEFT", "MOUTHSTRETCHRIGHT", "TONGUEOUT", "CHEEKSQUITLEFT", "CHEEKSQUINTRIGHT" };
         private bool clearPSBrows = false;
         private bool clearPSEyes = false;
         private bool clearPSMouth = false;
@@ -301,6 +303,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private Dictionary<BlendShapeKey, float> values = new Dictionary<BlendShapeKey, float>();
         private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
         private bool skip = false;
+        private float globalWeight = 1f;
+        
+        public void SetWeight(float v) {
+            globalWeight = v;
+        }
         
         public void DisableFaceParts(bool brows, bool eyes, bool mouth) {
             clearPSBrows = brows;
@@ -310,6 +317,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         
         private void SetFloat(BlendShapeKey key, float weight) {
             string name = key.Name.ToUpper();
+            weight *= globalWeight;
             if (animator != null && parameters.ContainsKey(name)) {
                 var parameter = parameters[name];
                 if (parameter.Item2 == AnimatorControllerParameterType.Float)
@@ -381,7 +389,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 clearPSMouth = false;
             }
             foreach (var pair in values) {
-                proxy.AccumulateValue(pair.Key, pair.Value);
+                proxy.AccumulateValue(pair.Key, pair.Value * globalWeight);
                 SetFloat(pair.Key, pair.Value);
             }
             proxy.Apply();
@@ -559,6 +567,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     }
     
     void SetJaw(float v) {
+        v *= blendShapeWeight;
         if (haveJawParameter) {
             animator.SetFloat("JawMovement", v);
             return;
@@ -1275,7 +1284,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (leftEye != null)
                 leftEye.localRotation = Quaternion.identity;
             if (gazeTracking) {
-                Quaternion rotation = Quaternion.AngleAxis(-gazeFactor.x * gazeStrength * lookUpDown, Vector3.right) * Quaternion.AngleAxis(-gazeFactor.y * gazeStrength * lookLeftRight, Vector3.up);
+                Quaternion rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.AngleAxis(-gazeFactor.x * gazeStrength * lookUpDown, Vector3.right) * Quaternion.AngleAxis(-gazeFactor.y * gazeStrength * lookLeftRight, Vector3.up), blendShapeWeight);
                 if (rightEye != null)
                     rightEye.localRotation = rotation;
                 if (leftEye != null)
@@ -1718,6 +1727,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             initializeLipSync = false;
         }
         proxy.SetSkip(skipApply);
+        proxy.SetWeight(blendShapeWeight);
         proxy.Clear();
         FindFaceMesh();
         if (!skipApply)
