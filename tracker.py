@@ -328,10 +328,10 @@ class FaceInfo():
         self.id = id
         self.frame_count = -1
         self.tracker = tracker
-        self.contour_pts = [0,1,8,15,16,27,28,29,30,31,32,33,34,35,36,39,42,45]
+        self.contour_pts = [0,1,15,16,27,28,29,30,31,32,33,34,35]
         self.face_3d = copy.copy(self.tracker.face_3d)
         if self.tracker.model_type == -1:
-            self.contour_pts = [0,2,8,14,16,27,30,33]
+            self.contour_pts = [0,2,14,16,27,30,33]
         self.reset()
         self.alive = False
         self.coord = None
@@ -767,9 +767,13 @@ class Tracker():
         if not face_info.rotation is None:
             success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(face_info.rotation), tvec=np.transpose(face_info.translation), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
+            # Include jaw point for initial estimate to increase stability
+            image_pts = np.array(lms)[face_info.contour_pts + [8], 0:2]
+            contour = np.array(face_info.face_3d[face_info.contour_pts + [8]])
+
             rvec = np.array([0, 0, 0], np.float32)
             tvec = np.array([0, 0, 0], np.float32)
-            success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
+            success, face_info.rotation, face_info.translation = cv2.solvePnP(contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
 
         rotation = face_info.rotation
         translation = face_info.translation
