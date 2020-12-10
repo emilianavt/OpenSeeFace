@@ -41,9 +41,9 @@ public class OpenSee : MonoBehaviour {
         public float rightEyeOpen;
         [Tooltip("This field tells you how likely it is that the left eye is open.")]
         public float leftEyeOpen;
-        [Tooltip("This field tells you how likely it is that the right eye is open.")]
+        [Tooltip("This field contains the rotation of the right eyeball.")]
         public Quaternion rightGaze;
-        [Tooltip("This field tells you how likely it is that the left eye is open.")]
+        [Tooltip("This field contains the rotation of the left eyeball.")]
         public Quaternion leftGaze;
         [Tooltip("This field tells you if 3D points have been successfully estimated from the 2D points. If this is false, do not rely on pose or 3D data.")]
         public bool got3DPoints;
