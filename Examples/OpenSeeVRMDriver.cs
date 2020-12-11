@@ -296,6 +296,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private bool clearPSEyes = false;
         private bool clearPSMouth = false;
         private Dictionary<BlendShapeKey, float> clearKeys = new Dictionary<BlendShapeKey, float>();
+        
+        private bool perfectSync = false;
+        private Dictionary<string, BlendShapeKey> clipMap = new Dictionary<string, BlendShapeKey>();
 
         private VRMBlendShapeProxy proxy = null;
         private Animator animator = null;
@@ -304,6 +307,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
         private bool skip = false;
         private float globalWeight = 1f;
+        
+        public bool HasPerfectSync() {
+            if (proxy == null || animator == null)
+                return false;
+            return perfectSync;
+        }
         
         public void SetWeight(float v) {
             globalWeight = v;
@@ -403,10 +412,33 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             else
                 values[key] = Mathf.Max(values[key], weight);
         }
+        
+        public void AccumulateValue(string key, float weight) {
+            if (!clipMap.ContainsKey(key.ToUpper()))
+                return;
+            AccumulateValue(clipMap[key.ToUpper()], weight);
+        }
 
         public void UpdateAvatar(VRMBlendShapeProxy vrmBlendShapeProxy, Animator animator) {
             proxy = vrmBlendShapeProxy;
             this.animator = animator;
+
+            perfectSync = false;
+            if (proxy == null)
+                return;
+            HashSet<string> perfectSyncNames = new HashSet<string>() { "BROWINNERUP", "BROWDOWNLEFT", "BROWDOWNRIGHT", "BROWOUTERUPLEFT", "BROWOUTERUPRIGHT", "EYELOOKUPLEFT", "EYELOOKUPRIGHT", "EYELOOKDOWNLEFT", "EYELOOKDOWNRIGHT", "EYELOOKINLEFT", "EYELOOKINRIGHT", "EYELOOKOUTLEFT", "EYELOOKOUTRIGHT", "EYEBLINKLEFT", "EYEBLINKRIGHT", "EYESQUINTRIGHT", "EYESQUINTLEFT", "EYEWIDELEFT", "EYEWIDERIGHT", "CHEEKPUFF", "CHEEKSQUINTLEFT", "CHEEKSQUINTRIGHT", "NOSESNEERLEFT", "NOSESNEERRIGHT", "JAWOPEN", "JAWFORWARD", "JAWLEFT", "JAWRIGHT", "MOUTHFUNNEL", "MOUTHPUCKER", "MOUTHLEFT", "MOUTHRIGHT", "MOUTHROLLUPPER", "MOUTHROLLLOWER", "MOUTHSHRUGUPPER", "MOUTHSHRUGLOWER", "MOUTHCLOSE", "MOUTHSMILELEFT", "MOUTHSMILERIGHT", "MOUTHFROWNLEFT", "MOUTHFROWNRIGHT", "MOUTHDIMPLELEFT", "MOUTHDIMPLERIGHT", "MOUTHUPPERUPLEFT", "MOUTHUPPERUPRIGHT", "MOUTHLOWERDOWNLEFT", "MOUTHLOWERDOWNRIGHT", "MOUTHPRESSLEFT", "MOUTHPRESSRIGHT", "MOUTHSTRETCHLEFT", "MOUTHSTRETCHRIGHT", "TONGUEOUT" };
+            clipMap.Clear();
+            foreach (BlendShapeClip clip in vrmBlendShapeProxy.BlendShapeAvatar.Clips) {
+                if (clip.Preset == BlendShapePreset.Unknown && clip.BlendShapeName != null) {
+                    string name = clip.BlendShapeName.ToUpper();
+                    clipMap.Add(name, BlendShapeKey.CreateUnknown(clip.BlendShapeName));
+                    if (perfectSyncNames.Contains(name)) {
+                        perfectSyncNames.Remove(name);
+                    }
+                }
+            }
+            if (perfectSyncNames.Count < 1)
+                perfectSync = true;
         }
     }
 
