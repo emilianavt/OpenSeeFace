@@ -506,7 +506,8 @@ class Tracker():
             "lm_model0_opt.onnx",
             "lm_model1_opt.onnx",
             "lm_model2_opt.onnx",
-            "lm_model3_opt.onnx"
+            "lm_model3_opt.onnx",
+            "lm_model4_opt.onnx"
         ]
         model = "lm_modelT_opt.onnx"
         if model_type >= 0:
