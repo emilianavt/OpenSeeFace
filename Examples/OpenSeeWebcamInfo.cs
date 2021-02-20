@@ -8,9 +8,6 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// UniJSON is part of UniVRM (https://github.com/vrm-c/UniVRM)
-using UniJSON;
-
 namespace OpenSee {
 
 [Serializable]
@@ -178,6 +175,11 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
 	private static extern void bm_get_json_x86([Out] StringBuilder namebuffer, int bufferlength);
     #endregion
     
+    [Serializable]
+    public class OpenSeeWebcamList {
+        public List<OpenSeeWebcam> list;
+    }
+
     public List<OpenSeeWebcam> cameras;
     public bool dumpJson = false;
     
@@ -232,15 +234,11 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
             if (includeBlackMagic)
                 UnityEngine.Debug.Log("Blackmagic JSON: " + bmJsonData);
         }
-        List<OpenSeeWebcam> details = new List<OpenSeeWebcam>();
-        var parsed = JsonParser.Parse(jsonData);
-        parsed.Deserialize(ref details);
+        List<OpenSeeWebcam> details = JsonUtility.FromJson<OpenSeeWebcamList>("{\"list\":" + jsonData + "}").list;
         foreach (var cam in details)
             cam.type = OpenSeeWebcamType.DirectShow;
         if (includeBlackMagic) {
-            List<OpenSeeWebcam> bmDetails = new List<OpenSeeWebcam>();
-            parsed = JsonParser.Parse(bmJsonData);
-            parsed.Deserialize(ref bmDetails);
+            List<OpenSeeWebcam> bmDetails = JsonUtility.FromJson<OpenSeeWebcamList>("{\"list\":" + bmJsonData + "}").list;
             foreach (var cam in bmDetails)
                 cam.type = OpenSeeWebcamType.Blackmagic;
             details.AddRange(bmDetails);
@@ -257,14 +255,6 @@ public class OpenSeeWebcamInfo : MonoBehaviour {
         cameras = ListCameraDetails(includeBlackMagic);
         foreach (var camera in cameras)
             camera.GetPrettyCapabilities();
-    }
-
-    public static void AOTCall() {
-        GenericDeserializer<JsonValue, OpenSeeWebcamCapability[]>.GenericArrayDeserializer<OpenSeeWebcamCapability>(default(ListTreeNode<JsonValue>));
-        JsonObjectValidator.GenericDeserializer<JsonValue, OpenSeeWebcamCapability>.DeserializeField<System.Int32>(default(JsonSchema), default(ListTreeNode<JsonValue>));
-        JsonObjectValidator.GenericDeserializer<JsonValue, OpenSeeWebcamCapability>.DeserializeField<OpenSeeWebcamFormat>(default(JsonSchema), default(ListTreeNode<JsonValue>));
-        GenericDeserializer<JsonValue, OpenSeeWebcam[]>.GenericArrayDeserializer<OpenSeeWebcam>(default(ListTreeNode<JsonValue>));
-        throw new InvalidOperationException("This method is used for AOT code generation only. Do not call it at runtime.");
     }
 }
 }
