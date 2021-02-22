@@ -415,22 +415,18 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             if (perfectSync)
                 InterpolatePerfectSync();
             if (clearPSBrows || clearPSEyes || clearPSMouth) {
-                bool found = false;
                 clearKeys.Clear();
                 foreach (var pair in proxy.GetValues()) {
                     string name = pair.Key.Name.ToUpper();
                     if (clearPSBrows && browsBlendShapes.Contains(name)) {
                         clearKeys[pair.Key] = 0f;
                         values[pair.Key] = 0f;
-                        found = true;
                     } else if (clearPSEyes && eyesBlendShapes.Contains(name)) {
                         clearKeys[pair.Key] = 0f;
                         values[pair.Key] = 0f;
-                        found = true;
                     } else if (clearPSMouth && mouthBlendShapes.Contains(name)) {
                         clearKeys[pair.Key] = 0f;
                         values[pair.Key] = 0f;
-                        found = true;
                     }
                 }
                 clearPSBrows = false;
