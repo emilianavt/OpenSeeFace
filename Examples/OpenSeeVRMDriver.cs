@@ -312,7 +312,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private VRMBlendShapeProxy proxy = null;
         private Animator animator = null;
         private RuntimeAnimatorController animatorController = null;
+        private Dictionary<BlendShapeKey, float> clearMap = new Dictionary<BlendShapeKey, float>();
         private Dictionary<BlendShapeKey, float> values = new Dictionary<BlendShapeKey, float>();
+        private Dictionary<BlendShapeKey, string> clipNames = new Dictionary<BlendShapeKey, string>();
         private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
         private bool interpolatedPerfectSync = false;
         private float defaultWeight = 1f;
@@ -362,7 +364,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         }
         
         private void SetFloat(BlendShapeKey key, float weight, float factor) {
-            string name = key.Name.ToUpper();
+            if (!clipNames.ContainsKey(key))
+                return;
+            string name = clipNames[key];
             weight *= factor;
             if (animator != null && parameters.ContainsKey(name)) {
                 var parameter = parameters[name];
@@ -394,13 +398,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             interpolatedPerfectSync = false;
             if (proxy != null) {
                 foreach (var pair in proxy.GetValues()) {
-                    proxy.ImmediatelySetValue(pair.Key, 0f);
                     SetFloat(pair.Key, 0f);
                 }
                 foreach (var pair in values) {
-                    proxy.ImmediatelySetValue(pair.Key, 0f);
                     SetFloat(pair.Key, 0f);
                 }
+                proxy.SetValues(clearMap);
             }
             values.Clear();
         }
@@ -430,14 +433,12 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                         found = true;
                     }
                 }
-                /*if (found)
-                    proxy.SetValues(clearKeys);*/
                 clearPSBrows = false;
                 clearPSEyes = false;
                 clearPSMouth = false;
             }
+            proxy.SetValues(values);
             foreach (var pair in values) {
-                proxy.AccumulateValue(pair.Key, pair.Value);
                 SetFloat(pair.Key, pair.Value, 1f);
             }
             proxy.Apply();
@@ -473,15 +474,23 @@ public class OpenSeeVRMDriver : MonoBehaviour {
                 return;
             HashSet<string> perfectSyncSet = new HashSet<string>(perfectSyncNames);
             clipMap.Clear();
+            clipNames.Clear();
+            clearMap.Clear();
             perfectSyncMap.Clear();
             //perfectSyncMap.SetSmoothing(0.5f);
             foreach (BlendShapeClip clip in vrmBlendShapeProxy.BlendShapeAvatar.Clips) {
                 if (clip.Preset == BlendShapePreset.Unknown && clip.BlendShapeName != null) {
                     string name = clip.BlendShapeName.ToUpper();
                     clipMap.Add(name, BlendShapeKey.CreateUnknown(clip.BlendShapeName));
+                    clipNames.Add(BlendShapeKey.CreateUnknown(clip.BlendShapeName), name);
+                    clearMap.Add(BlendShapeKey.CreateUnknown(clip.BlendShapeName), 0f);
                     if (perfectSyncSet.Contains(name)) {
                         perfectSyncSet.Remove(name);
                     }
+                } else if (clip.Preset != BlendShapePreset.Unknown) {
+                    string name = clip.BlendShapeName.ToUpper();
+                    clipNames.Add(BlendShapeKey.CreateFromPreset(clip.Preset), name);
+                    clearMap.Add(BlendShapeKey.CreateFromPreset(clip.Preset), 0f);
                 }
             }
             if (perfectSyncSet.Count < 1)
