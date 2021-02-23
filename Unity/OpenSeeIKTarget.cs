@@ -10,6 +10,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     public OpenSee openSee;
     [Tooltip("When this is set to another game object, its kinematic interpolation component will get updated from values of this.")]
     public OpenSeeKinematicInterpolation kinematicInterpolation;
+    [Tooltip("When set, the this object will follow the specified transform instead and automatically recalibrate based on it.")]
+    public Transform externalTarget = null;
     [Tooltip("This can be used to skip the first few tracking frames.")]
     public int skipFirst = 5;
     [Tooltip("When set to true, the next rotation and translation values will be set as zero rotation and zero translation.")]
@@ -23,8 +25,6 @@ public class OpenSeeIKTarget : MonoBehaviour
     [Tooltip("This smoothed out the detected motion. Values can be between 0 (no smoothing) and 1 (no motion). The appropriate value probably depends on the camera's frame rate.")]
     [Range(0, 1)]
     public float smooth = 0.2f;
-    [Tooltip("When set to true, a Kalman filter is used for smoothing.")]
-    public bool kalman = false;
     [Tooltip("When enabled, tracking will lag by one video capture frame, but the captured motion information is interpolated between frames, making things look smoother and less jittery and jumpy.")]
     public bool interpolate = true;
     [Tooltip("When set to true, the transform will be updated in FixedUpdate, otherwise it will be updated in Update.")]
@@ -85,17 +85,7 @@ public class OpenSeeIKTarget : MonoBehaviour
     private bool skippedPosition = false;
     private float skipStartTimePosition = -1f;
     
-    // Kalman
-    private float frameTime = 0f;
-    private bool kalmanInit = false;
-    private float kalmanSmooth = -1f;
-    private KF kalmanPVX;
-    private KF kalmanPVY;
-    private KF kalmanPVZ;
-    private KF kalmanRVX;
-    private KF kalmanRVY;
-    private KF kalmanRVZ;
-    private Vector3 kalmanLastRot = Vector3.zero;
+    private Transform lastExternalTarget = null;
     
     public void Calibrate() {
         calibrate = true;
@@ -119,30 +109,11 @@ public class OpenSeeIKTarget : MonoBehaviour
     }
     
     Vector3 FilterPos(Vector3 a, Vector3 b) {
-        if (!kalman || frameTime > 1f)
-            return Vector3.Lerp(a, b, 1f - smooth);
-        else {
-            Vector3 v = (b - a) / frameTime;
-            v.x = kalmanPVX.Update(v.x);
-            v.y = kalmanPVY.Update(v.y);
-            v.z = kalmanPVZ.Update(v.z);
-            return a + v * frameTime;
-        }
+        return Vector3.Lerp(a, b, 1f - smooth);
     }
     
     Quaternion FilterRot(Quaternion a, Quaternion b) {
-        if (!kalman || frameTime > 1f)
-            return Quaternion.Lerp(a, b, 1f - smooth);
-        else {
-            Vector3 rotA = PrettyEuler(kalmanLastRot, a.eulerAngles);
-            Vector3 rotB = PrettyEuler(rotA, b.eulerAngles);
-            kalmanLastRot = rotA;
-            Vector3 v = Mathf.Deg2Rad * (rotB - rotA) / frameTime;
-            v.x = kalmanRVX.Update(v.x);
-            v.y = kalmanRVY.Update(v.y);
-            v.z = kalmanRVZ.Update(v.z);
-            return Quaternion.Euler(rotA + Mathf.Rad2Deg * v * frameTime);
-        }
+        return Quaternion.Lerp(a, b, 1f - smooth);
     }
 
     void Interpolate() {
@@ -166,43 +137,33 @@ public class OpenSeeIKTarget : MonoBehaviour
 
     void RunUpdate() {
         var openSeeData = openSee.GetOpenSeeData(faceId);
-        if (openSeeData == null || openSeeData.fit3DError > openSee.maxFit3DError)
-            return;
-        if (openSeeData.time > updated) {
-            frameTime = (float)(openSeeData.time - updated);
-            updated = openSeeData.time;
-            trackingFrames++;
-            if (trackingFrames < skipFirst)
-                return;
-        } else {
-            Interpolate();
-            return;
-        }
+        Quaternion convertedQuaternion;
+        Vector3 t;
+        Vector3 convertedTranslation;
         
-        if (!kalmanInit) {
-            kalmanPVX = new KF(smooth);
-            kalmanPVY = new KF(smooth);
-            kalmanPVZ = new KF(smooth);
-            kalmanRVX = new KF(smooth);
-            kalmanRVY = new KF(smooth);
-            kalmanRVZ = new KF(smooth);
-            kalmanInit = true;
+        if (externalTarget == null) {
+            if (openSeeData == null || openSeeData.fit3DError > openSee.maxFit3DError)
+                return;
+            if (openSeeData.time > updated) {
+                updated = openSeeData.time;
+                trackingFrames++;
+                if (trackingFrames < skipFirst)
+                    return;
+            } else {
+                Interpolate();
+                return;
+            }
+            
+            convertedQuaternion = new Quaternion(-openSeeData.rawQuaternion.y, -openSeeData.rawQuaternion.x, openSeeData.rawQuaternion.z, openSeeData.rawQuaternion.w);
+            t = openSeeData.translation;
+            t.x = -t.x;
+            t.z = -t.z;
+            convertedTranslation = new Vector3(t.x, t.y, t.z);
+        } else {
+            convertedQuaternion = externalTarget.localRotation;
+            convertedTranslation = externalTarget.localPosition;
+            t = convertedTranslation;
         }
-        if (smooth != kalmanSmooth) {
-            kalmanPVX.SetSmoothness(smooth);
-            kalmanPVY.SetSmoothness(smooth);
-            kalmanPVZ.SetSmoothness(smooth);
-            kalmanRVX.SetSmoothness(smooth);
-            kalmanRVY.SetSmoothness(smooth);
-            kalmanRVZ.SetSmoothness(smooth);
-            kalmanSmooth = smooth;
-        }
-
-        Quaternion convertedQuaternion = new Quaternion(-openSeeData.rawQuaternion.y, -openSeeData.rawQuaternion.x, openSeeData.rawQuaternion.z, openSeeData.rawQuaternion.w);
-        Vector3 t = openSeeData.translation;
-        t.x = -t.x;
-        t.z = -t.z;
-        Vector3 convertedTranslation = new Vector3(t.x, t.y, t.z);
         
         // Check for angular outliers
         if (gotAccepted) {
@@ -267,6 +228,9 @@ public class OpenSeeIKTarget : MonoBehaviour
             outlierSkipsDistance += 1;
             return;
         }
+        
+        calibrate = calibrate || (externalTarget != lastExternalTarget);
+        lastExternalTarget = externalTarget;
 
         if (calibrate) {
             dR = convertedQuaternion;
@@ -302,7 +266,7 @@ public class OpenSeeIKTarget : MonoBehaviour
         lastT = transform.localPosition;
         lastR = transform.localRotation;
         if (interpolateState > 0) {
-            currentT = FilterPos(currentT, (t - dT) * translationScale);
+            currentT = FilterPos(transform.localPosition, (t - dT) * translationScale);
             currentR = FilterRot(transform.localRotation, convertedQuaternion * dR);
         } else {
             currentT = (t - dT) * translationScale;
@@ -347,34 +311,6 @@ public class OpenSeeIKTarget : MonoBehaviour
     {
         if (!fixedUpdate)
             RunUpdate();
-    }
-    
-    class KF {
-        private float R, P, Q, x;
-
-        public KF(float smooth) {
-            P = 1f;
-            x = 0f;
-            SetSmoothness(smooth);
-        }
-        
-        public void SetSmoothness(float smooth) {
-            P = 1f;
-            Q = 0.3f;// * (Mathf.Exp(3f * smooth) + 1f);
-            R = 0.000001f + Mathf.Exp(smooth * 5f);
-        }
-
-        public float Update(float input) {
-            //x = x * A;
-            //P = A * P * A;
-            
-            float K = P / (P + R);
-            x = x + K * (input - x);
-            //Debug.Log("P = " + P + " 1-K = " + (1f - K));
-            P = (1f - K) * P + Q;
-
-            return x;
-        }
     }
 }
 
