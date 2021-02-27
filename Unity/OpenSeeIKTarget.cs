@@ -18,6 +18,8 @@ public class OpenSeeIKTarget : MonoBehaviour
     public bool calibrate = true;
     [Tooltip("This sets which face id to look for in the OpenSee data.")]
     public int faceId = 0;
+    [Tooltip("When enabled, the IK target will not move up and down.")]
+    public bool preventVerticalMotion = false;
     [Tooltip("When this is enabled, rotations and movement are mirrored.")]
     public bool mirrorMotion = false;
     [Tooltip("Often, the translation vector's scale is too high. Setting this somewhere between 0.05 to 0.3 seems stabilize things, but it also reduces the range of motion.")]
@@ -274,13 +276,21 @@ public class OpenSeeIKTarget : MonoBehaviour
         }
         if (interpolateState < 2)
             interpolateState++;
-
+        
         if (interpolate) {
             Interpolate();
         } else {
             transform.localPosition = FilterPos(transform.localPosition, (t - dT) * translationScale);
             transform.localRotation = FilterRot(transform.localRotation, convertedQuaternion * dR);
         }
+
+       if (preventVerticalMotion) {
+           currentT.y = 0f;
+            Vector3 pos = transform.localPosition;
+            pos.y = 0f;
+            transform.localPosition = pos;
+        }
+
         if (kinematicInterpolation != null && kinematicInterpolation.gameObject != gameObject) {
             if (interpolate)
                 kinematicInterpolation.UpdateKI(updated, currentT, currentR);
@@ -299,6 +309,10 @@ public class OpenSeeIKTarget : MonoBehaviour
             rotationOffset = new Vector3(dR.eulerAngles.x, dR.eulerAngles.y, dR.eulerAngles.z);
             translationOffset = new Vector3(dT.x, dT.y, dT.z);
        }
+    }
+    
+    public void SetPreventVerticalMotion(bool v) {
+        preventVerticalMotion = v;
     }
 
     void FixedUpdate()
