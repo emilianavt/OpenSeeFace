@@ -122,6 +122,8 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public bool hybridLipSync = false;
     [Tooltip("When enabled, viseme size will not depend on the OVR Lip Sync weight.")]
     public bool maximizeLipSync = false;
+    [Tooltip("When enabled, mouth blendshapes are normalized if they add up to a value above 1.")]
+    public bool visemeNormalization = true;
     [Tooltip("When enabled and the animator of the avatar has a float parameter called JawMovement, this parameter will be set to values from 0 to 1, corresponding to a closed to open mouth. This can be used for animating jaw bones.")]
     public bool animateJawBone = false;
     [Tooltip("This should be set to the included mecanim animation, which sets the jaw bone to closed on the first frame and to open on the second frame.")]
@@ -236,7 +238,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     private float currentExpressionEyebrowWeight;
     private float currentExpressionVisemeFactor;
     
-    private OpenSeeBlendShapeProxy proxy = new OpenSeeBlendShapeProxy();
+    private OpenSeeBlendShapeProxy proxy = null;
     private Animator animator;
     private bool haveJawParameter;
     private Transform jawBone;
@@ -305,6 +307,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private Dictionary<BlendShapeKey, float> clearKeys = new Dictionary<BlendShapeKey, float>();
         
         private bool perfectSync = false;
+        private HashSet<string> visemeBlendShapes = new HashSet<string>() { "A", "I", "U", "E", "O", "SIL", "CH", "DD", "FF", "KK", "NN", "PP", "RR", "SS", "TH" };
         private string[] perfectSyncNames = new string[] { "BROWINNERUP", "BROWDOWNLEFT", "BROWDOWNRIGHT", "BROWOUTERUPLEFT", "BROWOUTERUPRIGHT", "EYELOOKUPLEFT", "EYELOOKUPRIGHT", "EYELOOKDOWNLEFT", "EYELOOKDOWNRIGHT", "EYELOOKINLEFT", "EYELOOKINRIGHT", "EYELOOKOUTLEFT", "EYELOOKOUTRIGHT", "EYEBLINKLEFT", "EYEBLINKRIGHT", "EYESQUINTRIGHT", "EYESQUINTLEFT", "EYEWIDELEFT", "EYEWIDERIGHT", "CHEEKPUFF", "CHEEKSQUINTLEFT", "CHEEKSQUINTRIGHT", "NOSESNEERLEFT", "NOSESNEERRIGHT", "JAWOPEN", "JAWFORWARD", "JAWLEFT", "JAWRIGHT", "MOUTHFUNNEL", "MOUTHPUCKER", "MOUTHLEFT", "MOUTHRIGHT", "MOUTHROLLUPPER", "MOUTHROLLLOWER", "MOUTHSHRUGUPPER", "MOUTHSHRUGLOWER", "MOUTHCLOSE", "MOUTHSMILELEFT", "MOUTHSMILERIGHT", "MOUTHFROWNLEFT", "MOUTHFROWNRIGHT", "MOUTHDIMPLELEFT", "MOUTHDIMPLERIGHT", "MOUTHUPPERUPLEFT", "MOUTHUPPERUPRIGHT", "MOUTHLOWERDOWNLEFT", "MOUTHLOWERDOWNRIGHT", "MOUTHPRESSLEFT", "MOUTHPRESSRIGHT", "MOUTHSTRETCHLEFT", "MOUTHSTRETCHRIGHT", "TONGUEOUT" };
         private InterpolatedMap<string, InterpolatedFloat, float> perfectSyncMap = new InterpolatedMap<string, InterpolatedFloat, float>();
         private Dictionary<string, BlendShapeKey> clipMap = new Dictionary<string, BlendShapeKey>();
@@ -318,6 +321,11 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         private Dictionary<string, Tuple<string, AnimatorControllerParameterType>> parameters = new Dictionary<string, Tuple<string, AnimatorControllerParameterType>>();
         private bool interpolatedPerfectSync = false;
         private float defaultWeight = 1f;
+        private OpenSeeVRMDriver vrmDriver = null;
+        
+        public OpenSeeBlendShapeProxy(OpenSeeVRMDriver vrmDriver) {
+            this.vrmDriver = vrmDriver;
+        }
         
         void InterpolatePerfectSync() {
             if (!HasPerfectSync() || interpolatedPerfectSync)
@@ -408,12 +416,31 @@ public class OpenSeeVRMDriver : MonoBehaviour {
             values.Clear();
         }
         
+        void NormalizeVisemes() {
+            float total = 0f;
+            foreach (var pair in values) {
+                string name = pair.Key.Name.ToUpper();
+                if (visemeBlendShapes.Contains(name))
+                    total += pair.Value;
+            }
+            if (total > 1f) {
+                var keys = new List<BlendShapeKey>(values.Keys);
+                foreach (var key in keys) {
+                    string name = key.Name.ToUpper();
+                    if (visemeBlendShapes.Contains(name))
+                        values[key] = values[key] / total;
+                }
+            }
+        }
+        
         public void Apply() {
             if (proxy == null)
                 return;
             CheckAnimatorController();
             if (perfectSync)
                 InterpolatePerfectSync();
+            if (vrmDriver != null && vrmDriver.visemeNormalization)
+                NormalizeVisemes();
             if (clearPSBrows || clearPSEyes || clearPSMouth) {
                 clearKeys.Clear();
                 foreach (var pair in proxy.GetValues()) {
@@ -579,7 +606,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
         return bestViseme;
     }
     #endif
-
+    
     bool ApplyVisemes() {
         #if WINDOWS_BUILD
         trackMouth = false;
@@ -1927,6 +1954,7 @@ public class OpenSeeVRMDriver : MonoBehaviour {
 
     void Start() {
         InitExpressionMap();
+        proxy = new OpenSeeBlendShapeProxy(this);
         humanBodyBones = (HumanBodyBones[])Enum.GetValues(typeof(HumanBodyBones));
         humanBodyBoneTransforms = new Transform[humanBodyBones.Length];
         humanBodyBoneRotations = new Quaternion[humanBodyBones.Length];
@@ -2046,4 +2074,9 @@ public class OpenSeeVRMDriver : MonoBehaviour {
     public void SetGazeSmoothing(float v) {
         gazeSmoothing = v;
     }
+
+    public void SetVisemeNormalization(bool v) {
+        visemeNormalization = v;
+    }
+
 }
