@@ -57,15 +57,25 @@ public class OpenSeeWebcam {
     public List<string> prettyCaps = null;
     
     private List<Tuple<OpenSeeWebcamCapability, int>> splitCaps = null;
+    
+    bool ge(bool a, bool b) {
+        return a || (!a && !b);
+    }
 
     private int CompareCaps(OpenSeeWebcamCapability a, OpenSeeWebcamCapability b) {
-        if (a.rating < b.rating)
+        int aRes = a.minCX * a.minCY;
+        int bRes = b.minCX * b.minCY;
+        bool aGoodFps = a.minInterval <= 670000;
+        bool bGoodFps = a.minInterval <= 670000;
+        bool aGoodRes = aRes >= 850000 && aRes <= 2200000;
+        bool bGoodRes = bRes >= 850000 && bRes <= 2200000;
+        if (a.rating < b.rating && ge(aGoodFps, bGoodFps) && ge(aGoodRes, bGoodRes))
             return -1;
-        if (a.rating > b.rating)
+        if (a.rating > b.rating && ge(bGoodFps, aGoodFps) && ge(bGoodRes, aGoodRes))
             return 1;
-        if (a.minCX * a.minCY > b.minCX * b.minCY)
+        if (aRes > bRes && ge(aGoodFps, bGoodFps) && ge(aGoodRes, bGoodRes))
             return -1;
-        if (a.minCX * a.minCY < b.minCX * b.minCY)
+        if (aRes < bRes && ge(bGoodFps, aGoodFps) && ge(bGoodRes, aGoodRes))
             return 1;
         if (a.minInterval < b.minInterval)
             return -1;
