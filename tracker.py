@@ -50,7 +50,7 @@ def compensate(p1, p2):
 def rotate_image(image, a, center):
     (h, w) = image.shape[:2]
     a = np.rad2deg(a)
-    M = cv2.getRotationMatrix2D((center[0], center[1]), a, 1.0)
+    M = cv2.getRotationMatrix2D((float(center[0]), float(center[1])), a, 1.0)
     rotated = cv2.warpAffine(image, M, (w, h))
     return rotated
 
