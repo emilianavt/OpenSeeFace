@@ -48,7 +48,7 @@ namespace OpenSee {
             map[key].UpdateValue(v);
         }
 
-        public void Store(T key, U v, float nowT) {
+        public void Store(T key, U v, double nowT) {
             if (!map.ContainsKey(key)) {
                 map.Add(key, new V());
                 map[key].SetSmoothing(smoothing);
@@ -79,8 +79,8 @@ namespace OpenSee {
     abstract public class InterpolatedValue<V> {
         private float interpolateT = 0f;
         private float updateT = 0f;
-        private float lastT = 0f;
-        private float currentT = 0f;
+        private double lastT = 0f;
+        private double currentT = 0f;
         private float clamp = 1f;
         private float smoothing = 0f;
         private int gotData = 0;
@@ -133,7 +133,7 @@ namespace OpenSee {
             UpdateValue(v, Time.realtimeSinceStartup);
         }
         
-        public void UpdateValue(V v, float nowT) {
+        public void UpdateValue(V v, double nowT) {
             if (nowT < 0f)
                 return;
             lock (this) {
