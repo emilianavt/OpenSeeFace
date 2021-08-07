@@ -36,7 +36,7 @@ class EscapiReader(VideoReader):
         self.fps = fps
         self.device = capture
         escapi.count_capture_devices()
-        self.name = str(escapi.device_name(self.device).decode('utf8'))
+        self.name = str(escapi.device_name(self.device).decode('utf8', 'surrogateescape'))
         self.buffer = escapi.init_camera(self.device, self.width, self.height, self.fps)
         escapi.do_capture(self.device)
     def is_open(self):
@@ -212,7 +212,7 @@ class InputReader():
                         devices = escapi.count_capture_devices()
                         found = None
                         for i in range(devices):
-                            escapi_name = str(escapi.device_name(i).decode('utf8'))
+                            escapi_name = str(escapi.device_name(i).decode('utf8', 'surrogateescape'))
                             if name == escapi_name:
                                 found = i
                         if found is None:

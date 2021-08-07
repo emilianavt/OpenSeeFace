@@ -104,7 +104,7 @@ class DShowCapture():
 
     def get_device(self, device_number):
         self.lib.get_device(self.cap, device_number, self.name_buffer, 255)
-        name_str = str(self.name_buffer.value.decode('utf8'))
+        name_str = str(self.name_buffer.value.decode('utf8', 'surrogateescape'))
         return name_str
 
     def get_info(self):
@@ -113,7 +113,7 @@ class DShowCapture():
         json_length = self.lib.get_json_length(self.cap);
         json_buffer = create_string_buffer(json_length)
         self.lib.get_json(self.cap, json_buffer, json_length);
-        json_text = str(json_buffer.value.decode('utf8'))
+        json_text = str(json_buffer.value.decode('utf8', 'surrogateescape'))
         self.info = json.loads(json_text)
         for cam in self.info:
             cam["type"] = "DirectShow"
@@ -124,7 +124,7 @@ class DShowCapture():
             json_length = self.bm_lib.get_json_length();
             json_buffer = create_string_buffer(json_length)
             self.bm_lib.get_json(json_buffer, json_length);
-            json_text = str(json_buffer.value.decode('utf8'))
+            json_text = str(json_buffer.value.decode('utf8', 'surrogateescape'))
             bm_info = json.loads(json_text)
             dshow_len = len(self.info)
             for cam in bm_info:
