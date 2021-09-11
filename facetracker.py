@@ -305,9 +305,9 @@ try:
                     packet.extend(bytearray(struct.pack("f", x)))
                     if not log is None:
                         log.write(f",{y},{x},{c}")
-                    if pt_num == 66 and (f.eye_blink[0] < 0.30 or c < 0.30):
+                    if pt_num == 66 and (f.eye_blink[0] < 0.30 or c < 0.20):
                         continue
-                    if pt_num == 67 and (f.eye_blink[1] < 0.30 or c < 0.30):
+                    if pt_num == 67 and (f.eye_blink[1] < 0.30 or c < 0.20):
                         continue
                     x = int(x + 0.5)
                     y = int(y + 0.5)
