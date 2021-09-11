@@ -140,7 +140,7 @@ def worker_thread(session, frame, input, crop_info, queue, input_name, idx, trac
     conf, lms = tracker.landmarks(output[0], crop_info)
     if conf > tracker.threshold:
         try:
-            eye_state = tracker.get_eye_state(frame, lms, single=True)
+            eye_state = tracker.get_eye_state(frame, lms)
         except:
             eye_state = [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         queue.put((session, conf, (lms, eye_state), crop_info, idx))
@@ -548,14 +548,12 @@ class Tracker():
         self.input_name = self.session.get_inputs()[0].name
 
         options = onnxruntime.SessionOptions()
-        options.inter_op_num_threads = 1
-        options.intra_op_num_threads = max(max_threads,4)
+        #options.intra_op_num_threads = max(max_threads,4)
+        options.intra_op_num_threads = 1
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
         self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
-        options.intra_op_num_threads = 1
-        self.gaze_model_single = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
 
         self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options)
         self.faces = []
@@ -922,7 +920,7 @@ class Tracker():
         frame = frame[y1:y2, x1:x2]
         return frame, lms, offset
 
-    def get_eye_state(self, frame, lms, single=False):
+    def get_eye_state(self, frame, lms):
         if self.no_gaze:
             return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         lms = np.array(lms)
@@ -938,10 +936,7 @@ class Tracker():
             return [(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)]
         both_eyes = np.concatenate((right_eye, left_eye))
         results = None
-        if single:
-            results = self.gaze_model_single.run([], {self.input_name: both_eyes})
-        else:
-            results = self.gaze_model.run([], {self.input_name: both_eyes})
+        results = self.gaze_model.run([], {self.input_name: both_eyes})
         open = [0, 0]
         open[0] = 1#results[1][0].argmax()
         open[1] = 1#results[1][1].argmax()
