@@ -13,12 +13,12 @@ if os.name == 'nt':
     parser.add_argument("-a", "--list-dcaps", type=int, help="Set this to -1 to list all cameras and their available capabilities, set this to a camera id to list that camera's capabilities", default=None)
     parser.add_argument("-W", "--width", type=int, help="Set camera and raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set camera and raw RGB height", default=360)
-    parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
     parser.add_argument("-D", "--dcap", type=int, help="Set which device capability line to use or -1 to use the default camera settings", default=None)
     parser.add_argument("-B", "--blackmagic", type=int, help="When set to 1, special support for Blackmagic devices is enabled", default=0)
 else:
     parser.add_argument("-W", "--width", type=int, help="Set raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
+parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
 parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default="0")
 parser.add_argument("-M", "--mirror-input", action="store_true", help="Process a mirror image of the input video")
 parser.add_argument("-m", "--max-threads", type=int, help="Set the maximum number of threads", default=1)
@@ -153,18 +153,17 @@ target_port = args.port
 if args.faces >= 40:
     print("Transmission of tracking data over network is not supported with 40 or more faces.")
 
-fps = 0
+fps = args.fps
 dcap = None
 use_dshowcapture_flag = False
 if os.name == 'nt':
-    fps = args.fps
     dcap = args.dcap
     use_dshowcapture_flag = True if args.use_dshowcapture == 1 else False
     input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag, dcap=dcap)
     if args.dcap == -1 and type(input_reader) == DShowCaptureReader:
         fps = min(fps, input_reader.device.get_fps())
 else:
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps)
 if type(input_reader.reader) == VideoReader:
     fps = 0
 
