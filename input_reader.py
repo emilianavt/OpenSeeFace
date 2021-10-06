@@ -111,6 +111,7 @@ class OpenCVReader(VideoReader):
         super(OpenCVReader, self).__init__(capture, camera=True)
         self.cap.set(3, width)
         self.cap.set(4, height)
+        self.cap.set(38, 1)
     def is_open(self):
         return super(OpenCVReader, self).is_open()
     def is_ready(self):
