@@ -548,7 +548,7 @@ class Tracker():
         self.input_name = self.session.get_inputs()[0].name
 
         options = onnxruntime.SessionOptions()
-        #options.intra_op_num_threads = max(max_threads,4)
+        options.inter_op_num_threads = 1
         options.intra_op_num_threads = 1
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
