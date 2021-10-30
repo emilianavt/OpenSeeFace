@@ -30,7 +30,7 @@ A simple demonstration can be achieved by creating a new scene in Unity, adding 
 
     python facetracker.py --visualize 3 --pnp-points 1 --max-threads 4 -c video.mp4
 
-__Note__: If dependencies were installed using [poetry](https://python-poetry.org/), they have to be launched from a `poetry shell` or have to be prefixed with `poetry run`.
+__Note__: If dependencies were installed using [poetry](https://python-poetry.org/), the commands have to be executed from a `poetry shell` or have to be prefixed with `poetry run`.
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
