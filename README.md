@@ -156,6 +156,8 @@ Additional training has been done on the WFLW dataset after reducing it to 66 po
 
 For the training the gaze and blink detection model, the [MPIIGaze](https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/gaze-based-human-computer-interaction/appearance-based-gaze-estimation-in-the-wild/) dataset was used. Additionally, around 125000 synthetic eyes generated with [UnityEyes](https://www.cl.cam.ac.uk/research/rainbow/projects/unityeyes/) were used during training.
 
+It should be noted that additional custom data was also used during the training process and that the reference landmarks from the original datasets have been modified in certain ways to address various issues. It is likely not possible to reproduce these models with just the original LS3D-W and WFLW datasets, however the additional data is not redistributable.
+
 The heatmap regression based face detection model was trained on random 224x224 crops from the WIDER FACE dataset.
 
 	@inproceedings{yang2016wider,
