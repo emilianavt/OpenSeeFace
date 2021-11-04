@@ -30,6 +30,8 @@ A simple demonstration can be achieved by creating a new scene in Unity, adding 
 
     python facetracker.py --visualize 3 --pnp-points 1 --max-threads 4 -c video.mp4
 
+__Note__: If dependencies were installed using [poetry](https://python-poetry.org/), the commands have to be executed from a `poetry shell` or have to be prefixed with `poetry run`.
+
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
 The included `OpenSeeLauncher` component allows starting the face tracker program from Unity. It is designed to work with the pyinstaller created executable distributed in the binary release bundles. It provides three public API functions:
@@ -130,6 +132,12 @@ The release builds contain a custom build of ONNX Runtime without telemetry.
 The required libraries can be installed using pip:
 
      pip install onnxruntime opencv-python pillow numpy
+
+Alternatively poetry can be used to 
+install all dependencies for this project in a separate virtual env:
+
+     poetry install
+
 
 # References
 
