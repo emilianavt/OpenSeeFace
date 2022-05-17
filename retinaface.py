@@ -66,7 +66,8 @@ class RetinaFaceDetector():
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
-        self.session = onnxruntime.InferenceSession(model_path, sess_options=options)
+        providersList = onnxruntime.capi._pybind_state.get_available_providers()
+        self.session = onnxruntime.InferenceSession(model_path, sess_options=options, providers=providersList)
         self.res_w, self.res_h = res
         with open(json_path, "r") as prior_file:
             self.priorbox = np.array(json.loads(prior_file.read()))
