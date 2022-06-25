@@ -8,7 +8,7 @@ python-versions = "*"
 
 [[package]]
 name = "numpy"
-version = "1.21.3"
+version = "1.22"
 description = "NumPy is the fundamental package for array computing with Python."
 category = "main"
 optional = false
