@@ -18,7 +18,7 @@ Since the landmarks used by OpenSeeFace are a bit different from those used by o
 
 Anecdotically, OpenSeeFace performs well in adverse conditions (low light, high noise, low resolution) and keeps tracking faces through a very wide range of head poses. Compared to MediaPipe, OpenSeeFace landmarks remain more stable in challenging conditions and it accurately represents a wider range of mouth poses. However, tracking of the eye region can be a bit worse.
 
-I ran OpenSeeFace on a sample clip from the video presentation for [3D Face Reconstruction with Dense Landmarks](https://microsoft.github.io/DenseLandmarks/) by Wood et al. to compare it to MediaPipe and their approach. You can watch the result [ħere](https://cdn.discordapp.com/attachments/720652345540870237/1016320201807106118/OSFMediaPipe3DFR.mp4).
+I ran OpenSeeFace on a sample clip from the video presentation for [3D Face Reconstruction with Dense Landmarks](https://microsoft.github.io/DenseLandmarks/) by Wood et al. to compare it to MediaPipe and their approach. You can watch the result [here](https://cdn.discordapp.com/attachments/720652345540870237/1016320201807106118/OSFMediaPipe3DFR.mp4).
 
 # Usage
 
