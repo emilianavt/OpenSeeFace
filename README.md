@@ -14,9 +14,9 @@ An up to date sample video can be found [here](https://www.youtube.com/watch?v=A
 
 # Tracking quality
 
-Since the landmarks used by OpenSeeFace are a bit different from those used by other approaches (they are close to iBUG 68, with two less points in the mouth corners and quasi-3D face contours instead of face contours that follow the visible outline) it is hard to numerically compare its accuracy to that of other approaches found commonly in scientific literature.
+Since the landmarks used by OpenSeeFace are a bit different from those used by other approaches (they are close to iBUG 68, with two less points in the mouth corners and quasi-3D face contours instead of face contours that follow the visible outline) it is hard to numerically compare its accuracy to that of other approaches found commonly in scientific literature. The tracking performance is also more optimized for making landmarks that are useful for animating an avatar than for exactly fitting the face image. For example, as long as the eye landmarks show whether the eyes are opened or closed, even if their location is somewhat off, they can still be useful for this purpose.
 
-Anecdotically, OpenSeeFace performs well in adverse conditions (low light, high noise, low resolution) and keeps tracking faces through a very wide range of head poses. Compared to MediaPipe, OpenSeeFace landmarks remain more stable in challenging conditions and it accurately represents a wider range of mouth poses. However, tracking of the eye region can be a bit worse.
+From general observation, OpenSeeFace performs well in adverse conditions (low light, high noise, low resolution) and keeps tracking faces through a very wide range of head poses with relatively high stability of landmark positions. Compared to MediaPipe, OpenSeeFace landmarks remain more stable in challenging conditions and it accurately represents a wider range of mouth poses. However, tracking of the eye region can be less accurate.
 
 I ran OpenSeeFace on a sample clip from the video presentation for [3D Face Reconstruction with Dense Landmarks](https://microsoft.github.io/DenseLandmarks/) by Wood et al. to compare it to MediaPipe and their approach. You can watch the result [here](https://cdn.discordapp.com/attachments/720652345540870237/1016320201807106118/OSFMediaPipe3DFR.mp4).
 
