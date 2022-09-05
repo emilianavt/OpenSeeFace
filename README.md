@@ -12,6 +12,14 @@ If anyone is curious, the name is a silly pun on the open seas and seeing faces.
 
 An up to date sample video can be found [here](https://www.youtube.com/watch?v=AaNap_ud_3I&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
 
+# Tracking quality
+
+Since the landmarks used by OpenSeeFace are a bit different from those used by other approaches (they are close to iBUG 68, with two less points in the mouth corners and quasi-3D face contours instead of face contours that follow the visible outline) it is hard to numerically compare its accuracy to that of other approaches found commonly in scientific literature.
+
+Anecdotically, OpenSeeFace performs well in adverse conditions (low light, high noise, low resolution) and keeps tracking faces through a very wide range of head poses. Compared to MediaPipe, OpenSeeFace landmarks remain more stable in challenging conditions and it accurately represents a wider range of mouth poses. However, tracking of the eye region can be a bit worse.
+
+I ran OpenSeeFace on a sample clip from the video presentation for [3D Face Reconstruction with Dense Landmarks](https://microsoft.github.io/DenseLandmarks/) by Wood et al. to compare it to MediaPipe and their approach. You can watch the result [ħere](https://cdn.discordapp.com/attachments/720652345540870237/1016320201807106118/OSFMediaPipe3DFR.mp4).
+
 # Usage
 
 A sample Unity project for VRM based avatar animation can be found [here](https://github.com/emilianavt/OpenSeeFaceSample).
