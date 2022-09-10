@@ -1,0 +1,39 @@
+name: Package using PyInstaller
+on:
+  push:
+    tags:
+      - v**
+  workflow_dispatch:
+
+env:
+  dist-folder-path: dist/OpenSeeFace
+
+jobs:
+  build-all:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Pull OpenSeeFace
+        uses: actions/checkout@v3
+
+      - name: Create binary
+        shell: bash
+        run: |
+          chmod +x make_exe.sh
+          ./make_exe.sh
+
+      - name: Move and zip files
+        shell: bash # Using bash for all OSs should be fine, even on Windows
+        run: |
+          mv dist/facetracker ${{ env.dist-folder-path }}
+          cp -r models ${{ env.dist-folder-path }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.os }}
+          path: ${{ env.dist-folder-path }}
+          if-no-files-found: error
