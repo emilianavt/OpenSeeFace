@@ -14,7 +14,8 @@ pip install wheel
 pip install onnxruntime opencv-python==4.5.4.60 pillow numpy pyinstaller
 
 echo "Running pyinstaller"
-pyinstaller facetracker.py --onedir ^
+pyinstaller facetracker.py --clean ^
+    --onedir ^
     --add-binary dshowcapture/*.dll;. ^
     --add-binary escapi/*.dll;. ^
     --add-binary venv/lib/site-packages/onnxruntime/capi/*.dll;onnxruntime\capi ^

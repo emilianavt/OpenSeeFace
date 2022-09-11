@@ -49,6 +49,12 @@ jobs:
           mkdir ${{ env.artifact-path }}
           mv ${{ env.dist-folder-path }} ${{ env.artifact-path }}
 
+      # Sometimes the executable bit doesn't get set for Unix builds for some reason
+      - name: Set executable bit
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: chmod +x ${{ env.artifact-path }}/*
+
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
