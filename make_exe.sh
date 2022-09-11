@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 PYTHON_BINARY=$(which python3)
 
 if [[ -z "$PYTHON_BINARY" ]]; then
@@ -12,18 +14,18 @@ if [[ -z "$PYTHON_BINARY" ]]; then
 fi
 
 echo "Creating venv"
-
 "$PYTHON_BINARY" -m venv venv
 
 source venv/bin/activate
 
 echo "Installing packages"
+pip install wheel # Make sure this is installed beforehand
 
 pip install onnxruntime opencv-python==4.5.4.60 pillow numpy pyinstaller
 
 echo "Creating binary"
-
-pyinstaller --clean facetracker.py
+pyinstaller --onedir --clean facetracker.py \
+    --add-binary venv/lib/python3.*/site-packages/onnxruntime/capi/*.so:onnxruntime/capi
 
 echo "Files should be available in the dist/ folder"
 echo "Done!"

@@ -40,7 +40,7 @@ jobs:
 
           make_exe.bat
 
-      - name: Move and zip files
+      - name: Move files for uploading
         shell: bash # Using bash for all OSs should be fine, even on Windows
         run: |
           mv dist/facetracker ${{ env.dist-folder-path }}
