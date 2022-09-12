@@ -34,11 +34,10 @@ jobs:
           cp -r models ${{ env.dist-path }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: ./.github/actions/upload-dated-artifact
         with:
-          name: windows-latest
+          name: windows
           path: dist # Add the parent directory to prevent a tarbomb
-          if-no-files-found: error
 
   # Files must be packed into a tar in order for file permissions to be preserved
   build-unix:
@@ -48,7 +47,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - name: linux
+            os: ubuntu-latest
+          - name: mac
+            os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Pull OpenSeeFace
@@ -78,8 +81,7 @@ jobs:
         run: tar -cvf ${{ env.tar-path }} ${{ env.artifact-path }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: ./.github/actions/upload-dated-artifact
         with:
-          name: ${{ matrix.os }}
+          name: ${{ matrix.name }}
           path: ${{ env.tar-path }}
-          if-no-files-found: error
