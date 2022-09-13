@@ -1,0 +1,26 @@
+name: Upload dated artifact
+description: Uploads an artifact with a datetime
+
+inputs:
+  name:
+    description: The name of the artifact
+    required: true
+  path:
+    description: The path to the file/folder to upload
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # https://stackoverflow.com/questions/60942067/get-current-date-and-time-in-github-workflows
+    - name: Get current datetime
+      id: date
+      shell: bash
+      run: echo "::set-output name=date::$(date '+%Y-%m-%d_%H-%M-%S')"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ inputs.name }}_${{ steps.date.outputs.date }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error

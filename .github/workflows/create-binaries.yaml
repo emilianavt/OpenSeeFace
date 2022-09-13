@@ -1,0 +1,87 @@
+name: Package using PyInstaller
+on:
+  push:
+    tags:
+      - v**
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    env:
+      dist-path: dist/OpenSeeFace
+    runs-on: windows-latest
+    steps:
+      - name: Pull OpenSeeFace
+        uses: actions/checkout@v3
+
+      - name: Create binary
+        shell: cmd
+        run: |
+          choco install vcredist140
+
+          xcopy c:\Windows\System32\msvcp140.dll .
+          xcopy c:\Windows\System32\vcomp140.dll .
+          xcopy c:\Windows\System32\concrt140.dll .
+          xcopy c:\Windows\System32\vccorlib140.dll .
+
+          make_exe.bat
+
+      - name: Move files for uploading
+        shell: bash
+        run: |
+          # Prevents the parent dist/ directory from being included
+          mv dist/facetracker ${{ env.dist-path }}
+          cp -r models ${{ env.dist-path }}
+
+      - name: Upload artifact
+        uses: ./.github/actions/upload-dated-artifact
+        with:
+          name: windows
+          path: dist # Add the parent directory to prevent a tarbomb
+
+  # Files must be packed into a tar in order for file permissions to be preserved
+  build-unix:
+    env:
+      artifact-path: OpenSeeFace
+      tar-path: OpenSeeFace.tar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+          - name: mac
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Pull OpenSeeFace
+        uses: actions/checkout@v3
+
+      - name: Create binary
+        shell: bash
+        run: |
+          chmod +x make_exe.sh
+          ./make_exe.sh
+
+      - name: Move files for uploading
+        shell: bash
+        run: |
+          # Prevents the parent dist/ directory from being included
+          mv dist/facetracker ${{ env.artifact-path }}
+          cp -r models ${{ env.artifact-path }}
+
+      - name: Fix permissions from PyInstaller
+        shell: bash
+        run: |
+          find ${{ env.artifact-path }} -type f -exec chmod -x {} +
+          chmod +x ${{ env.artifact-path }}/facetracker
+
+      - name: Pack files into tar
+        shell: bash
+        run: tar -cvf ${{ env.tar-path }} ${{ env.artifact-path }}
+
+      - name: Upload artifact
+        uses: ./.github/actions/upload-dated-artifact
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ env.tar-path }}
