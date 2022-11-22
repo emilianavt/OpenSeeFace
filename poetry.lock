@@ -40,7 +40,7 @@ numpy = ">=1.21.2"
 
 [[package]]
 name = "pillow"
-version = "9.0.1"
+version = "9.3.0"
 description = "Python Imaging Library (Fork)"
 category = "main"
 optional = false
