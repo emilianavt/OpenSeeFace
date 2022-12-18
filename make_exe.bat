@@ -11,7 +11,7 @@ call venv\Scripts\activate.bat
 echo "Installing dependencies"
 pip install wheel
 
-pip install onnxruntime opencv-python==4.5.4.60 pillow numpy pyinstaller
+pip install onnxruntime opencv-python==4.5.4.60 pillow numpy==1.23.0 pyinstaller
 
 echo "Running pyinstaller"
 pyinstaller facetracker.py --clean ^
