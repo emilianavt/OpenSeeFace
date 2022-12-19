@@ -21,7 +21,7 @@ source venv/bin/activate
 echo "Installing packages"
 pip install wheel # Make sure this is installed beforehand
 
-pip install onnxruntime opencv-python==4.5.4.60 pillow numpy pyinstaller
+pip install onnxruntime opencv-python==4.5.4.60 pillow numpy==1.23.0 pyinstaller
 
 echo "Creating binary"
 pyinstaller --onedir --clean facetracker.py \
