@@ -2,7 +2,7 @@
 
 # Overview
 
-**Note**: This is a tracking library, **not** a stand-alone avatar puppeteering program. I'm also working on [VSeeFace](https://www.vseeface.icu/), which allows animating [VRM](https://vrm.dev/en/how_to_make_vrm/) and [VSFAvatar](https://www.youtube.com/watch?v=jhQ8DF87I5I) 3D models by using OpenSeeFace tracking. [VTube Studio](https://denchisoft.com/) uses OpenSeeFace for webcam based tracking to animate Live2D models. A renderer for the Godot engine can be found [here](https://github.com/you-win/openseeface-gd).
+**Note**: This is a tracking library, **not** a stand-alone avatar puppeteering program. I'm also working on [VSeeFace](https://www.vseeface.icu/), which allows animating [VRM](https://vrm.dev/en/how_to_make_vrm/) and [VSFAvatar](https://www.youtube.com/watch?v=jhQ8DF87I5I) 3D models by using OpenSeeFace tracking. [VTube Studio](https://denchisoft.com/) uses OpenSeeFace for webcam based tracking to animate Live2D models. A renderer for the Godot engine can be found [here](https://github.com/virtual-puppet-project/vpuppr).
 
 This project implements a facial landmark detection model based on MobileNetV3.
 
@@ -11,6 +11,14 @@ As Pytorch 1.3 CPU inference speed on Windows is very low, the model was convert
 If anyone is curious, the name is a silly pun on the open seas and seeing faces. There's no deeper meaning.
 
 An up to date sample video can be found [here](https://www.youtube.com/watch?v=AaNap_ud_3I&vq=hd1080), showing the default tracking model's performance under different noise and light levels.
+
+# Tracking quality
+
+Since the landmarks used by OpenSeeFace are a bit different from those used by other approaches (they are close to iBUG 68, with two less points in the mouth corners and quasi-3D face contours instead of face contours that follow the visible outline) it is hard to numerically compare its accuracy to that of other approaches found commonly in scientific literature. The tracking performance is also more optimized for making landmarks that are useful for animating an avatar than for exactly fitting the face image. For example, as long as the eye landmarks show whether the eyes are opened or closed, even if their location is somewhat off, they can still be useful for this purpose.
+
+From general observation, OpenSeeFace performs well in adverse conditions (low light, high noise, low resolution) and keeps tracking faces through a very wide range of head poses with relatively high stability of landmark positions. Compared to MediaPipe, OpenSeeFace landmarks remain more stable in challenging conditions and it accurately represents a wider range of mouth poses. However, tracking of the eye region can be less accurate.
+
+I ran OpenSeeFace on a sample clip from the video presentation for [3D Face Reconstruction with Dense Landmarks](https://microsoft.github.io/DenseLandmarks/) by Wood et al. to compare it to MediaPipe and their approach. You can watch the result [here](https://cdn.discordapp.com/attachments/720652345540870237/1016320201807106118/OSFMediaPipe3DFR.mp4).
 
 # Usage
 
@@ -29,6 +37,8 @@ Run the python script with `--help` to learn about the possible options you can 
 A simple demonstration can be achieved by creating a new scene in Unity, adding an empty game object and both the `OpenSee` and `OpenSeeShowPoints` components to it. While the scene is playing, run the face tracker on a video file:
 
     python facetracker.py --visualize 3 --pnp-points 1 --max-threads 4 -c video.mp4
+
+__Note__: If dependencies were installed using [poetry](https://python-poetry.org/), the commands have to be executed from a `poetry shell` or have to be prefixed with `poetry run`.
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
@@ -119,9 +129,8 @@ When distributing it, you should also distribute the `Licenses` folder along wit
 
 The release builds contain a custom build of ONNX Runtime without telemetry.
 
-# Dependencies
+# Dependencies (Python 3.6 - 3.9)
 
-* Python 3.7
 * ONNX Runtime
 * OpenCV
 * Pillow
@@ -130,6 +139,22 @@ The release builds contain a custom build of ONNX Runtime without telemetry.
 The required libraries can be installed using pip:
 
      pip install onnxruntime opencv-python pillow numpy
+
+Alternatively poetry can be used to 
+install all dependencies for this project in a separate virtual env:
+
+     poetry install
+
+# Dependencies (Python 3.10 and above)
+
+* ort-nightly
+* OpenCV
+* Pillow
+* Numpy
+
+The required libraries can be installed using pip:
+ 
+	pip install ort-nightly opencv-python pillow numpy
 
 # References
 
@@ -155,6 +180,8 @@ Additional training has been done on the WFLW dataset after reducing it to 66 po
     }
 
 For the training the gaze and blink detection model, the [MPIIGaze](https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/research/gaze-based-human-computer-interaction/appearance-based-gaze-estimation-in-the-wild/) dataset was used. Additionally, around 125000 synthetic eyes generated with [UnityEyes](https://www.cl.cam.ac.uk/research/rainbow/projects/unityeyes/) were used during training.
+
+It should be noted that additional custom data was also used during the training process and that the reference landmarks from the original datasets have been modified in certain ways to address various issues. It is likely not possible to reproduce these models with just the original LS3D-W and WFLW datasets, however the additional data is not redistributable.
 
 The heatmap regression based face detection model was trained on random 224x224 crops from the WIDER FACE dataset.
 
