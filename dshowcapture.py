@@ -77,7 +77,7 @@ class DShowCapture():
                 bm_lib.stop_capture_single.argtypes = []
                 bm_lib.get_json_length.argtypes = []
                 bm_lib.get_json.argtypes = [c_char_p, c_int]
-                if not bm_options is None:
+                if bm_options is not None:
                     bm_lib.set_options.argtypes = [c_char_p]
                     bm_lib.set_options(bm_options.encode())
         self.lib = lib
@@ -93,7 +93,7 @@ class DShowCapture():
         self.type = None
 
     def __del__(self):
-        if not self.buffer is None:
+        if self.buffer is not None:
             del self.buffer
         del self.name_buffer
         self.destroy_capture()
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     
     while True:
         img = cap.get_frame(1000)
-        if not img is None:
+        if img is not None:
             cv2.imshow("DShowCapture", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 sys.exit(0)

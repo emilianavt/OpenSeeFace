@@ -767,7 +767,7 @@ class Tracker():
         image_pts = np.array(lms)[face_info.contour_pts, 0:2]
 
         success = False
-        if not face_info.rotation is None:
+        if face_info.rotation is not None:
             success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(face_info.rotation), tvec=np.transpose(face_info.translation), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
             rvec = np.array([0, 0, 0], np.float32)
