@@ -317,16 +317,7 @@ try:
                         if pt_num >= 66:
                             color = (255, 255, 0)
                         if not (x < 0 or y < 0 or x >= height or y >= width):
-                            frame[int(x), int(y)] = color
-                        x += 1
-                        if not (x < 0 or y < 0 or x >= height or y >= width):
-                            frame[int(x), int(y)] = color
-                        y += 1
-                        if not (x < 0 or y < 0 or x >= height or y >= width):
-                            frame[int(x), int(y)] = color
-                        x -= 1
-                        if not (x < 0 or y < 0 or x >= height or y >= width):
-                            frame[int(x), int(y)] = color
+                            cv2.circle(frame, (y, x), 1, color, -1)
                 if args.pnp_points != 0 and (args.visualize != 0 or out is not None) and f.rotation is not None:
                     if args.pnp_points > 1:
                         projected = cv2.projectPoints(f.face_3d[0:66], f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
