@@ -920,7 +920,7 @@ class Tracker():
         x1, y1 = clamp_to_im(center - radius, h, w)
         x2, y2 = clamp_to_im(center + radius + 1, h, w)
         offset = np.array((x1, y1))
-        lms = (lms[:, 0:2] - offset).astype(np.int)
+        lms = (lms[:, 0:2] - offset).astype(int)
         frame = frame[y1:y2, x1:x2]
         return frame, lms, offset
 
