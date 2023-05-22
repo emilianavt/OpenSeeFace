@@ -251,7 +251,7 @@ def AdapWingLoss(pre_hm, gt_hm):
         img_dilate = cv2.morphologyEx(img_merge, cv2.MORPH_DILATE, kernel)
         img_dilate[img_dilate < 51] = 1  # 0*W+1
         img_dilate[img_dilate >= 51] = 11  # 1*W+1
-        img_dilate = np.array(img_dilate, dtype=np.int)
+        img_dilate = np.array(img_dilate, dtype=int)
         img_dilate = img_dilate.transpose(2, 0, 1)
         dilated = torch.from_numpy(img_dilate).float()
         if first:
