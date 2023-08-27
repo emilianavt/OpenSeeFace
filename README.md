@@ -145,16 +145,16 @@ install all dependencies for this project in a separate virtual env:
 
      poetry install
 
-# Dependencies (Python 3.10 and above)
+# Dependencies
 
-* ort-nightly
+* onnxruntime
 * OpenCV
 * Pillow
 * Numpy
 
 The required libraries can be installed using pip:
  
-	pip install ort-nightly opencv-python pillow numpy
+	pip install onnxruntime opencv-python pillow numpy
 
 # References
 
