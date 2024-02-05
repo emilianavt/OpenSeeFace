@@ -43,7 +43,7 @@ onnxruntime
   -VTS communication is also handled via a helper thread
 -Added image pre-processing
   -I'm now applying a gamma curve to the webcam output to make faces more visible
-  -The gamma curve is calculated after face tracking is done, it uses a copy of the webcam frame and face location data so get the average brightness of the face
+  -The gamma curve is calculated after face tracking is done, it uses a copy of the webcam frame and face location data so get the average   brightness of the face
   -This has drasitcally improved low light performance
   -It also lets me run the webcam with no gain
 -Removed the separate library that handled the webcam, then broke that off into a separate library again
