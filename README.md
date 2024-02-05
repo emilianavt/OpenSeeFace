@@ -28,7 +28,7 @@ onnxruntime
 <br>
 
 # Changes (in no particular order):<br>
-<br>
+I tried to make this nice but indents don't exist here I guess<br>
 -Major restructure<br>
 ...-I've broken out major chunks of functionality into separate files to make them easier to deal with and read<br>
 ...-I've tried to break functions down into multiple smaller parts when possible<br>
