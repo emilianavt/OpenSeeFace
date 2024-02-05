@@ -27,6 +27,45 @@ onnxruntime
 
 
 
+# Changes (in no particular order):
+
+-Major restructure
+  -I've broken out major chunks of functionality into separate files to make them easier to deal with and read
+  -I've tried to break functions down into multiple smaller parts when possible
+  -I've taken a more object oriented approach in some places
+  -I've removed features that didn't fit my needs
+  -Removed functionlaity for tracking multiple faces
+  -Removed options I didn't forsee myself using (this was intended to be just for me)
+-Added more threading and multi-processing
+  -The webcam (and some new image processing) are now on a separate process
+  -Previews are now a separate process because I didn't want to deal with the related performance weirdness
+  -Console messages are now handled via a helper thread, idk if it does any good, but it can't hurt
+  -VTS communication is also handled via a helper thread
+-Added image pre-processing
+  -I'm now applying a gamma curve to the webcam output to make faces more visible
+  -The gamma curve is calculated after face tracking is done, it uses a copy of the webcam frame and face location data so get the average brightness of the face
+  -This has drasitcally improved low light performance
+  -It also lets me run the webcam with no gain
+-Removed the separate library that handled the webcam, then broke that off into a separate library again
+  -The stuff around the webcam is still simpler now, most of the existing cases didn't apply to my use case
+-Revamped the way features are calculated and normalized
+  -This was kind of my original intent, my eyes kept registering as closed when they were not
+  -Removed features that didn't seem to be used by Vtube Studio
+  -Added functionality to apply response curves to features
+  -Removed the calibration period in favor of a system where the limits of features slowly decay towards a center point
+  -Removed the average from the way featured are normalized
+-Added a feature to prevent errant eye movements
+  -Each eye has an average confidence and standard deviation calculated every frame
+  -eye movements more than two standard deviations below average are severely restricted
+  -The restriction is based on how far the confidence is from the cutoff point
+-Added early exits to situations where subsequent steps will fail
+-The main process skips frames when the webcam falls behind, once webcam latency is long enough to be late it will remain behind otherwise
+-Added warnings to various states such as late webcam frames, longer than ideal frames, and early exits
+-Changed which stats are shown on exit, added some stats that get tracked like webcam latency
+-Added conditions to skip steps when they are unnecessary, such as not rotating the eye images for small angles
+
+I'll list more as I remember them
+
 
 
 ![OSF.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/OSF.png)
