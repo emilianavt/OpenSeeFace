@@ -30,12 +30,12 @@ onnxruntime
 # Changes (in no particular order):<br>
 <br>
 -Major restructure<br>
-  -I've broken out major chunks of functionality into separate files to make them easier to deal with and read<br>
-  -I've tried to break functions down into multiple smaller parts when possible<br>
-  -I've taken a more object oriented approach in some places<br>
-  -I've removed features that didn't fit my needs<br>
-  -Removed functionlaity for tracking multiple faces<br>
-  -Removed options I didn't forsee myself using (this was intended to be just for me)<br>
+	-I've broken out major chunks of functionality into separate files to make them easier to deal with and read<br>
+	-I've tried to break functions down into multiple smaller parts when possible<br>
+	-I've taken a more object oriented approach in some places<br>
+  	-I've removed features that didn't fit my needs<br>
+  	-Removed functionlaity for tracking multiple faces<br>
+  	-Removed options I didn't forsee myself using (this was intended to be just for me)<br>
 -Added more threading and multi-processing<br>
   -The webcam (and some new image processing) are now on a separate process<br>
   -Previews are now a separate process because I didn't want to deal with the related performance weirdness<br>
