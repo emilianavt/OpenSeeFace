@@ -17,6 +17,14 @@ This will do a rock steady 30fps on my system as long as my cpu isn't completely
 
 I'll update this readme to explain more later, but first I need to actually upload all my changes. I didn't expect this to turn into something I wanted to upload. 
 
+Packages you'll need
+
+Numpy
+
+OpenCV
+
+onnxruntime
+
 
 
 
