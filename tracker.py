@@ -4,8 +4,9 @@ import time
 import facedetection
 import eyes
 import landmarks
-import feature
 import face
+import featureExtractor
+
 
 #this file is so much smaller than it used to be, lol
 #I moved most of the functionality into separate files so they're easier to work with
@@ -37,7 +38,7 @@ class Tracker():
         self.FaceDetector = facedetection.FaceDetector(detection_threshold = detection_threshold)
         self.EyeTracker = eyes.EyeTracker()
         self.Landmarks = landmarks.Landmarks(width, height, model_type, threshold)
-        self.FeatureExtractor = feature.FeatureExtractor()
+        self.FeatureExtractor = featureExtractor.FeatureExtractor()
 
         # Image normalization constants
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))

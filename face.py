@@ -1,6 +1,6 @@
 import numpy as np
 import math
-import feature
+import featureExtractor
 
 class FaceInfo():
     def __init__(self, id, tracker):
@@ -100,7 +100,7 @@ class FaceInfo():
         self.pts_3d = None
         self.eye_blink = None
         self.pnp_error = 0
-        self.features = feature.FeatureExtractor()
+        self.features = featureExtractor.FeatureExtractor()
         self.current_features = {}
         self.contour = np.zeros((21,3))
         self.update_contour()
