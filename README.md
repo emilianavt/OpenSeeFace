@@ -31,33 +31,33 @@ onnxruntime
 I tried to make this nice but indents don't exist here I guess<br>
 -Major restructure<br>
 -I've broken out major chunks of functionality into separate files to make them easier to deal with and read<br>
- -I've tried to break functions down into multiple smaller parts when possible<br>
- -I've taken a more object oriented approach in some places<br>
- -I've removed features that didn't fit my needs<br>
- -Removed functionlaity for tracking multiple faces<br>
- -Removed options I didn't forsee myself using (this was intended to be just for me)<br>
+---I've tried to break functions down into multiple smaller parts when possible<br>
+---I've taken a more object oriented approach in some places<br>
+---I've removed features that didn't fit my needs<br>
+---Removed functionlaity for tracking multiple faces<br>
+---Removed options I didn't forsee myself using (this was intended to be just for me)<br>
 -Added more threading and multi-processing<br>
- -The webcam (and some new image processing) are now on a separate process<br>
- -Previews are now a separate process because I didn't want to deal with the related performance weirdness<br>
- -Console messages are now handled via a helper thread, idk if it does any good, but it can't hurt<br>
- -VTS communication is also handled via a helper thread<br>
+---The webcam (and some new image processing) are now on a separate process<br>
+---Previews are now a separate process because I didn't want to deal with the related performance weirdness<br>
+---Console messages are now handled via a helper thread, idk if it does any good, but it can't hurt<br>
+-V--TS communication is also handled via a helper thread<br>
 -Added image pre-processing<br>
- -I'm now applying a gamma curve to the webcam output to make faces more visible<br>
- -The gamma curve is calculated after face tracking is done, it uses a copy of the webcam frame and face location data so get the average   brightness of the face<br>
- -This has drasitcally improved low light performance<br>
- -It also lets me run the webcam with no gain<br>
- -Removed the separate library that handled the webcam, then broke that off into a separate library again<br>
- -The stuff around the webcam is still simpler now, most of the existing cases didn't apply to my use case<br>
+---I'm now applying a gamma curve to the webcam output to make faces more visible<br>
+---The gamma curve is calculated after face tracking is done, it uses a copy of the webcam frame and face location data so get the average   brightness of the face<br>
+---This has drasitcally improved low light performance<br>
+---It also lets me run the webcam with no gain<br>
+---Removed the separate library that handled the webcam, then broke that off into a separate library again<br>
+---The stuff around the webcam is still simpler now, most of the existing cases didn't apply to my use case<br>
 -Revamped the way features are calculated and normalized<br>
- -This was kind of my original intent, my eyes kept registering as closed when they were not<br>
- -Removed features that didn't seem to be used by Vtube Studio<br>
- -Added functionality to apply response curves to features<br>
- -Removed the calibration period in favor of a system where the limits of features slowly decay towards a center point<br>
- -Removed the average from the way featured are normalized<br>
+---This was kind of my original intent, my eyes kept registering as closed when they were not<br>
+---Removed features that didn't seem to be used by Vtube Studio<br>
+---Added functionality to apply response curves to features<br>
+---Removed the calibration period in favor of a system where the limits of features slowly decay towards a center point<br>
+---Removed the average from the way featured are normalized<br>
 -Added a feature to prevent errant eye movements<br>
- -Each eye has an average confidence and standard deviation calculated every frame<br>
- -eye movements more than two standard deviations below average are severely restricted<br>
- -The restriction is based on how far the confidence is from the cutoff poin<br>t
+---Each eye has an average confidence and standard deviation calculated every frame<br>
+---eye movements more than two standard deviations below average are severely restricted<br>
+---The restriction is based on how far the confidence is from the cutoff poin<br>t
 -Added early exits to situations where subsequent steps will fail<br>
 -The main process skips frames when the webcam falls behind, once webcam latency is long enough to be late it will remain behind otherwise<br>
 -Added warnings to various states such as late webcam frames, longer than ideal frames, and early exits<br>
