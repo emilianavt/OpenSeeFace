@@ -33,19 +33,124 @@ def rotate_image(image, a, center): #twice per frame, 0.2ms - 0.25ms each, impro
     image = cv2.warpAffine(image, M, (w, h), flags = cv2.INTER_CUBIC)
     return image
 
+
+
+
+class Eye():
+    def __init__(self,index):
+
+        self.eye_tracking_frames = 0
+
+        self.index = index
+        self.state = [1.,0.,0.,0.]
+        self.image = None
+        self.info = None
+        self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
+        self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
+        self.results = None
+        self.condifence = 0
+        self.standardDeviation = 0.
+        self.averageEyeConfidence = 1.
+        self.averageEyeConfidenceVariance = 0
+        self.lastEyeState = [0.,0.]
+
+    def prepare_eye(self, faceFrame, outer_pt, inner_pt):
+        im = faceFrame
+        (x1, y1), (x2, y2), center,  reference, a = self.corners_to_eye((outer_pt, inner_pt), im.shape[1], im.shape[0])
+        #rotating an image is expensive and reduces clarity
+        #so I just don't if it's a relatively small angle
+        if math.degrees(a) > 7.5 and math.degrees(a) < 352.5:
+            im = rotate_image(im, a, reference)
+
+        im = im[int(y1):int(y2), int(x1):int(x2)]
+        if np.prod(im.shape) < 1:
+            return None, None, None, None, None, None
+        if self.index == 1:
+            im = cv2.flip(im, 1)
+        scale = [(x2 - x1)/ 32., (y2 - y1)/ 32.]
+        im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_CUBIC)
+        im = im.astype(np.float32) * self.std + self.mean
+        im = np.expand_dims(im, 0)
+        self.image = np.transpose(im, (0,3,2,1))
+        self.info = [x1, y1, scale, reference, a]
+        return
+
+    def corners_to_eye(self,corners, w, h):
+        c1, c2 = np.array(corners, dtype=float)
+        a = math.atan2(*(c2 - c1)[::-1]) % (2*math.pi)
+        c2 = rotate(c1, c2, a)
+        center = (c1 + c2) / 2.0
+        radius = np.linalg.norm(c1 - c2)
+        radius = [radius * 0.7, radius * 0.6]
+        upper_left = clamp_to_im(center - radius, w, h)
+        lower_right = clamp_to_im(center + radius, w, h)
+        return upper_left, lower_right, center,  c1, a
+
+    def calculateEye(self):
+
+        e_x, e_y, scale, reference, angles = self.info
+        confidenceThreshold = self.averageEyeConfidence - 2 * self.standardDeviation
+
+        m = self.results[0].argmax()
+        x = m // 8
+        y = m % 8
+
+        p=self.results[1][x, y]
+        p = clamp(p, 0.00001, 0.9999)
+        off_x = math.log(p/(1-p))
+        eye_x = 4.0 *(x + off_x)
+
+        p=self.results[2][x, y]
+        p = clamp(p, 0.00001, 0.9999)
+        off_y = math.log(p/(1-p))
+        eye_y = 4.0 * (y + off_y)
+
+        #I'm proud of this
+        #if eye movements are below 2 standard deviations of the average the movement is severely limited
+        #the eyes are handled independenly because my testing showed that one eye tended to have a higher condifence than the other
+        limit = max((self.results[0][x,y]- 0.5)*(2/confidenceThreshold),0)
+        if self.results[0][x,y] < confidenceThreshold:
+            Delta = eye_y - self.lastEyeState[0]
+            eye_y = self.lastEyeState[0] + clamp(Delta, -limit, limit)
+            Delta = eye_x - self.lastEyeState[1]
+            eye_x = self.lastEyeState[1] + clamp(Delta, -limit, limit)
+
+        self.lastEyeState = [eye_y, eye_x]
+
+        if self.index == 1:
+            eye_x = (32. - eye_x)
+        eye_x = e_x + scale[0] * eye_x
+        eye_y = e_y + scale[1] * eye_y
+
+        eye_x, eye_y = rotate(reference, (eye_x, eye_y), -angles)
+        eye_x, eye_y = (eye_x, eye_y) + self.offset
+
+        self.condifence = self.results[0][x,y]
+        self.calculateStandardDeviation()
+        self.state  = [1.0, eye_y, eye_x, self.condifence]
+        return
+
+    def calculateStandardDeviation(self):
+        self.eye_tracking_frames+=1
+
+        avgRatio = 1/self.eye_tracking_frames
+        self.averageEyeConfidence = (self.averageEyeConfidence*(1-avgRatio))+ (self.condifence * avgRatio)
+
+        avgRatio = 1/(self.eye_tracking_frames + 1)
+        self.averageEyeConfidenceVariance  = pow(((self.condifence - self.averageEyeConfidence) * avgRatio) + (self.averageEyeConfidenceVariance  * (1-avgRatio)), 2)
+
+        self.standardDeviation = math.sqrt(self.averageEyeConfidenceVariance)
+
+
 class EyeTracker():
     def __init__(self):
-        self.last_eye_state = [[0.,0.],[0.,0.]]
-        self.average_eye_confidence = [1.0,1.0]
-        self.average_eye_confidence_variance = [0.0,0.0]
-        self.eye_std_dev = [0.0,0.0]
-        self.eye_tracking_frames = 0
+        self.leftEye = Eye(1)
+        self.rightEye = Eye(0)
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
         self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
         self.faceFrame = None
         self.eyeState = None
         self.offset = None
-        self.results = None
         self.faceCenter = None
         self.faceRadius = None
 
@@ -65,108 +170,26 @@ class EyeTracker():
 
         lms = self.extract_face(frame, np.array(lms)[:,0:2][:,::-1])
 
-        self.eye_tracking_frames+=1
+        self.rightEye.offset = self.offset
+        self.leftEye.offset = self.offset
 
-        #I've tried to thread this because they don't need to happen in sequence
-        #but it doesn't do any good because python threads kinda suck
-        #I'd need a persistent right eye and left eye process and that feels excessive
-        right_eye, REyeInfo = self.prepare_eye(lms[36,0:2], lms[39,0:2], False)
-        left_eye, LEyeInfo = self.prepare_eye(lms[42,0:2],  lms[45,0:2], True)
 
-        if right_eye is None or left_eye is None:
+        self.rightEye.prepare_eye(self.faceFrame, lms[36,0:2], lms[39,0:2])
+        self.leftEye.prepare_eye(self.faceFrame, lms[42,0:2],  lms[45,0:2])
+
+        if self.rightEye.image is None or self.leftEye.image is None:
             return eye_state    #Early exit if one of the eyes doesn't have data
-        both_eyes = np.concatenate((right_eye, left_eye))
+        both_eyes = np.concatenate((self.rightEye.image, self.leftEye.image))
 
-        self.results = self.gaze_model.run([], {"input": both_eyes})[0]
-        self.calculateEye( REyeInfo, 0)
-        self.calculateEye( LEyeInfo, 1)
+        self.rightEye.results, self.leftEye.results = self.gaze_model.run([], {"input": both_eyes})[0]
+
+
+        self.rightEye.calculateEye()
+        self.leftEye.calculateEye()
+
+        self.eyeState = [self.rightEye.state, self.leftEye.state]
+
         return self.eyeState
-
-    def calculateStandardDeviation(self, conf, eye):
-
-
-        avgRatio = 1/self.eye_tracking_frames
-        self.average_eye_confidence[eye] = (self.average_eye_confidence[eye]*(1-avgRatio))+ (conf * avgRatio)
-
-        avgRatio = 1/(self.eye_tracking_frames + 1)
-        self.average_eye_confidence_variance[eye] = pow(((conf - self.average_eye_confidence[eye]) * avgRatio) + (self.average_eye_confidence_variance[eye] * (1-avgRatio)), 2)
-
-        self.eye_std_dev[eye] = math.sqrt(self.average_eye_confidence_variance[eye])
-
-    def calculateEye(self, eye_info, eye):
-
-        e_x, e_y, scale, reference, angles = eye_info
-        confidenceThreshold = self.average_eye_confidence[eye] - 2 * self.eye_std_dev[eye]
-
-        m = self.results[eye][0].argmax()
-        x = m // 8
-        y = m % 8
-
-        p=self.results[eye][1][x, y]
-        p = clamp(p, 0.00001, 0.9999)
-        off_x = math.log(p/(1-p))
-        eye_x = 4.0 *(x + off_x)
-
-        p=self.results[eye][2][x, y]
-        p = clamp(p, 0.00001, 0.9999)
-        off_y = math.log(p/(1-p))
-        eye_y = 4.0 * (y + off_y)
-
-        #I'm proud of this
-        #if eye movements are below 2 standard deviations of the average the movement is severely limited
-        #the eyes are handled independenly because my testing showed that one eye tended to have a higher condifence than the other
-        limit = max((self.results[eye][0][x,y]- 0.5)*(2/confidenceThreshold),0)
-        if self.results[eye][0][x,y] < confidenceThreshold:
-            Delta = eye_y - self.last_eye_state[eye][0]
-            eye_y = self.last_eye_state[eye][0] + clamp(Delta, -limit, limit)
-            Delta = eye_x - self.last_eye_state[eye][1]
-            eye_x = self.last_eye_state[eye][1] + clamp(Delta, -limit, limit)
-
-        self.last_eye_state[eye] = [eye_y, eye_x]
-
-        if eye == 1:
-            eye_x = (32. - eye_x)
-        eye_x = e_x + scale[0] * eye_x
-        eye_y = e_y + scale[1] * eye_y
-
-        eye_x, eye_y = rotate(reference, (eye_x, eye_y), -angles)
-        eye_x, eye_y = (eye_x, eye_y) + self.offset
-
-        conf = self.results[eye][0][x,y]
-        self.calculateStandardDeviation(conf, eye)
-        self.eyeState[eye]  = [1.0, eye_y, eye_x, conf]
-        return
-
-    def prepare_eye(self, outer_pt, inner_pt, flip):
-        im = self.faceFrame
-        (x1, y1), (x2, y2), center,  reference, a = self.corners_to_eye((outer_pt, inner_pt), im.shape[1], im.shape[0])
-        #rotating an image is expensive and reduces clarity
-        #so I just don't if it's a relatively small angle
-        if math.degrees(a) > 7.5 and math.degrees(a) < 352.5:
-            im = rotate_image(im, a, reference)
-
-        im = im[int(y1):int(y2), int(x1):int(x2)]
-        if np.prod(im.shape) < 1:
-            return None, None, None, None, None, None
-        if flip:
-            im = cv2.flip(im, 1)
-        scale = [(x2 - x1)/ 32., (y2 - y1)/ 32.]
-        im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_CUBIC)
-        im = im.astype(np.float32) * self.std + self.mean
-        im = np.expand_dims(im, 0)
-        im = np.transpose(im, (0,3,2,1))
-        return [im, [x1, y1, scale, reference, a]]
-
-    def corners_to_eye(self,  corners, w, h):
-        c1, c2 = np.array(corners, dtype=float)
-        a = math.atan2(*(c2 - c1)[::-1]) % (2*math.pi)
-        c2 = rotate(c1, c2, a)
-        center = (c1 + c2) / 2.0
-        radius = np.linalg.norm(c1 - c2)
-        radius = [radius * 0.7, radius * 0.6]
-        upper_left = clamp_to_im(center - radius, w, h)
-        lower_right = clamp_to_im(center + radius, w, h)
-        return upper_left, lower_right, center,  c1, a
 
 
     def extract_face(self, frame, lms):
