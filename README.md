@@ -67,10 +67,14 @@ I tried to make this nice but indents don't exist here I guess<br>
 I'll list more as I remember them<br>
 <br>
 
-###Installation<br>
-I haven't tested how this works on windows, but on Linux:<br>
--Download and extract the code<br>
--
+##Installation
+I haven't tested how this works on windows, but on Linux
+*Download and extract the code   
+*Open a terminal in the directory
+*Create a virtual environment
+
+
+
 
 
 For documentation on how openseeface works and the computer vision models, go see https://github.com/emilianavt/OpenSeeFace
