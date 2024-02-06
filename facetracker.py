@@ -3,6 +3,7 @@ import os
 #limits the threads used by numpy to 1
 #setting this and the landmarks model to use 1 means the cpu usage is pretty low
 
+os.environ["OMP_NUM_THREADS"] = str(1)
 import argparse
 import traceback
 import threading
