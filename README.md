@@ -40,7 +40,7 @@ I tried to make this nice but indents don't exist here I guess<br>
 ---The webcam (and some new image processing) are now on a separate process<br>
 ---Previews are now a separate process because I didn't want to deal with the related performance weirdness<br>
 ---Console messages are now handled via a helper thread, idk if it does any good, but it can't hurt<br>
--V--TS communication is also handled via a helper thread<br>
+---VTS communication is also handled via a helper thread<br>
 -Added image pre-processing<br>
 ---I'm now applying a gamma curve to the webcam output to make faces more visible<br>
 ---The gamma curve is calculated after face tracking is done, it uses a copy of the webcam frame and face location data so get the average   brightness of the face<br>
