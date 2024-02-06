@@ -1,9 +1,11 @@
 import numpy as np
 import math
 import featureExtractor
+import emilianaFeatureExtractor
 
 class FaceInfo():
-    def __init__(self, id, tracker):
+    def __init__(self, id, tracker, featureType):
+        self.featureType = featureType
         self.id = id
         self.tracker = tracker
         self.face_3d = np.array([
@@ -100,7 +102,11 @@ class FaceInfo():
         self.pts_3d = None
         self.eye_blink = None
         self.pnp_error = 0
-        self.features = featureExtractor.FeatureExtractor()
+        if self.featureType == 0:
+            self.features = featureExtractor.FeatureExtractor()
+        else:
+            self.features = emilianaFeatureExtractor.FeatureExtractor()
+
         self.current_features = {}
         self.contour = np.zeros((21,3))
         self.update_contour()
@@ -140,4 +146,6 @@ class FaceInfo():
 
         self.pts_3d = self.normalize_pts3d(self.pts_3d)
         self.current_features = self.features.update(self.pts_3d[:, 0:2])
-        self.eye_blink = [self.current_features["eye_r"],self.current_features["eye_l"] ]
+        self.eye_blink = []
+        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_r"]), 1))
+        self.eye_blink.append(1 - min(max(0, -self.current_features["eye_l"]), 1))

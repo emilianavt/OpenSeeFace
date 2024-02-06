@@ -1,22 +1,39 @@
 import numpy as np
+import time
+import math
+import emilianaFeature
 
+def angle(p1, p2):
+    p1 = np.array(p1)
+    p2 = np.array(p2)
+    a = np.arctan2(*(p2 - p1)[::-1])
+    return (a % (2 * np.pi))
+
+def rotate(origin, point, a):
+    a = -a
+    ox, oy = origin
+    px, py = point
+
+    qx = ox + math.cos(a) * (px - ox) - math.sin(a) * (py - oy)
+    qy = oy + math.sin(a) * (px - ox) + math.cos(a) * (py - oy)
+    return qx, qy
 
 class FeatureExtractor():
     def __init__(self, max_feature_updates=0):
-        self.eye_l = Feature(max_feature_updates=max_feature_updates)
-        self.eye_r = Feature(max_feature_updates=max_feature_updates)
-        self.eyebrow_updown_l = Feature(max_feature_updates=max_feature_updates)
-        self.eyebrow_updown_r = Feature(max_feature_updates=max_feature_updates)
-        self.eyebrow_quirk_l = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
-        self.eyebrow_quirk_r = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
-        self.eyebrow_steepness_l = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
-        self.eyebrow_steepness_r = Feature(threshold=0.05, max_feature_updates=max_feature_updates)
-        self.mouth_corner_updown_l = Feature(max_feature_updates=max_feature_updates)
-        self.mouth_corner_updown_r = Feature(max_feature_updates=max_feature_updates)
-        self.mouth_corner_inout_l = Feature(threshold=0.02, max_feature_updates=max_feature_updates)
-        self.mouth_corner_inout_r = Feature(threshold=0.02, max_feature_updates=max_feature_updates)
-        self.mouth_open = Feature(max_feature_updates=max_feature_updates)
-        self.mouth_wide = Feature(threshold=0.02, max_feature_updates=max_feature_updates)
+        self.eye_l = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.eye_r = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.eyebrow_updown_l = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.eyebrow_updown_r = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.eyebrow_quirk_l = emilianaFeature.Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.eyebrow_quirk_r = emilianaFeature.Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.eyebrow_steepness_l = emilianaFeature.Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.eyebrow_steepness_r = emilianaFeature.Feature(threshold=0.05, max_feature_updates=max_feature_updates)
+        self.mouth_corner_updown_l = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.mouth_corner_updown_r = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.mouth_corner_inout_l = emilianaFeature.Feature(threshold=0.02, max_feature_updates=max_feature_updates)
+        self.mouth_corner_inout_r = emilianaFeature.Feature(threshold=0.02, max_feature_updates=max_feature_updates)
+        self.mouth_open = emilianaFeature.Feature(max_feature_updates=max_feature_updates)
+        self.mouth_wide = emilianaFeature.Feature(threshold=0.02, max_feature_updates=max_feature_updates)
 
     def align_points(self, a, b, pts):
         a = tuple(a)

@@ -77,10 +77,10 @@ class FeatureExtractor():
 
         f_pts = self.align_points(pts[42], pts[45], pts[[43, 44, 47, 46]])
         f = (f_pts[0][1]/2 + f_pts[1][1]/2) - (f_pts[2][1]/2 + f_pts[3][1]/2)
-        features["eye_l"] =  self.eye_l.update(f)
+        features["eye_l"] =  -self.eye_l.update(f)
         f_pts = self.align_points(pts[36], pts[39], pts[[37, 38, 41, 40]])
         f = (f_pts[0][1]/2 + f_pts[1][1]/2) - (f_pts[2][1]/2 + f_pts[3][1]/2)
-        features["eye_r"] = self.eye_r.update(f)
+        features["eye_r"] = -self.eye_r.update(f)
 
         f = ((pts[22][1]/2 + pts[26][1]/2) - (pts[42][1]/2 + pts[45][1]/2))/norm_distance_y
         features["eyebrow_updown_l"] = self.eyebrow_updown_l.update(f)

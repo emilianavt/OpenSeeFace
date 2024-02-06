@@ -31,6 +31,8 @@ parser.add_argument("-d", "--detection-threshold", type=float, help="Set minimum
 parser.add_argument("-s", "--silent", type=int, help="Set this to 1 to prevent text output on the console", default=0)
 parser.add_argument("--model", type=int, help="This can be used to select the tracking model. Higher numbers are models with better tracking quality, but slower speed, except for model 4, which is wink optimized.", default=3, choices=[0, 1, 2, 3, 4])
 parser.add_argument("--preview", type=int, help="Preview the frames sent to the tracker", default=0)
+parser.add_argument("--feature-type", type=int, help="Sets which version of feature extraction is used. 0 is my new version that works well for me and allows for some customization, 1 is EmilianaVT's version aka, normal OpenSeeFace operation", default=0, choices=[0, 1])
+
 args = parser.parse_args()
 
 
@@ -48,6 +50,7 @@ height = args.height
 width = args.width
 previewFlag = (args.preview == 1)
 mirror_input = args.mirror_input
+featureType = args.feature_type
 
 #I make a minor tweak to the framerate to help the camera out
 #it's an inpercetible amount of time per frame
@@ -110,7 +113,7 @@ peak_camera_latency = 0.0
 total_camera_latency = 0.0
 failures = 0
 
-tracker = Tracker(width, height, messageQueue, threshold=args.threshold, silent=silent, model_type=args.model, detection_threshold=args.detection_threshold)
+tracker = Tracker(width, height, messageQueue, featureType,  threshold=args.threshold, silent=silent, model_type=args.model, detection_threshold=args.detection_threshold)
 
 #don't start until the webcam is ready
 while frameQueue.qsize() < 1:

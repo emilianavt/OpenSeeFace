@@ -6,6 +6,7 @@ import eyes
 import landmarks
 import face
 import featureExtractor
+import emilianaFeatureExtractor
 
 
 #this file is so much smaller than it used to be, lol
@@ -33,12 +34,16 @@ def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005m
     return (int(x),int(y+1))
 
 class Tracker():
-    def __init__(self, width, height, messageQueue, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
+    def __init__(self, width, height, messageQueue, featureType, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
         self.FaceDetector = facedetection.FaceDetector(detection_threshold = detection_threshold)
         self.EyeTracker = eyes.EyeTracker()
         self.Landmarks = landmarks.Landmarks(width, height, model_type, threshold)
-        self.FeatureExtractor = featureExtractor.FeatureExtractor()
+        if featureType == 0:
+            self.FeatureExtractor = featureExtractor.FeatureExtractor()
+        else:
+            self.FeatureExtractor = emilianaFeatureExtractor.FeatureExtractor()
+
 
         # Image normalization constants
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
@@ -52,7 +57,7 @@ class Tracker():
         self.threshold = threshold
 
         self.faces = []
-        self.face_info = [face.FaceInfo(0, self)]
+        self.face_info = [face.FaceInfo(0, self, featureType)]
         self.messageQueue = messageQueue
 
     def preprocess(self, im):
