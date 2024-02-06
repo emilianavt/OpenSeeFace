@@ -13,6 +13,7 @@ import multiprocessing
 import webcam
 import vts
 import preview
+import cv2
 
 #overall, my changes seem to have memory usage up from about 140mb to 180mb
 #but cpu usage seems to be down
@@ -34,16 +35,39 @@ parser.add_argument("--preview", type=int, help="Preview the frames sent to the 
 parser.add_argument("--feature-type", type=int, help="Sets which version of feature extraction is used. 0 is my new version that works well for me and allows for some customization, 1 is EmilianaVT's version aka, normal OpenSeeFace operation", default=0, choices=[0, 1])
 parser.add_argument("--numpy-threads", type=int, help="Numer of threads Numpy can use, doesn't seem to effect much", default=1)
 parser.add_argument("--landmark-detection-threads", type=int, help="Numer of threads used for landmark detection. Default is 1 (~15ms per frame on my computer), 2 gets slightly faster frames (~10ms on my computer), more than 2 doesn't seem to help much", default=1)
-
+parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visualize the tracking", default=0)
 
 
 args = parser.parse_args()
 
 os.environ["OMP_NUM_THREADS"] = str(args.landmark_detection_threads)
+
 def messaging(messageQueue):
     while True:
         message = messageQueue.get()
         print(message)
+
+
+def visualize(frame, face, previewFrameQueue, face_center, face_radius):
+
+    y1 = int(face_center[1] - face_radius[1])
+    y2 = int(face_center[1] + face_radius[1])
+    x1 = int(face_center[0] - face_radius[0])
+    x2 = int(face_center[0] + face_radius[0])
+    bbox = (y1, x1, y2 - y1, x2 - x1)
+    frame = cv2.putText(frame, str(face.id), (int(bbox[1]), int(bbox[0])), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255,0,255))
+    frame = cv2.putText(frame, f"{face.conf:.4f}", (int(bbox[1] + 18), int(bbox[0] - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,255))
+    for pt_num, (x,y,c) in enumerate(face.lms):
+        x = int(x + 0.5)
+        y = int(y + 0.5)
+        frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
+        color = (0, 255, 0)
+        if pt_num >= 66:
+            color = (255, 255, 0)
+        if not (x < 0 or y < 0 or x >= height or y >= width):
+            cv2.circle(frame, (y, x), 1, color, -1)
+    previewFrameQueue.put(frame)
+
 
 #processing args
 #For Vtube Studio: ip 127.0.0.1 port 11573
@@ -55,6 +79,7 @@ width = args.width
 previewFlag = (args.preview == 1)
 mirror_input = args.mirror_input
 featureType = args.feature_type
+visualizeFlag = (args.visualize == 1)
 
 #I make a minor tweak to the framerate to help the camera out
 #it's an inpercetible amount of time per frame
@@ -101,7 +126,7 @@ webcamProcess.daemon = True
 webcamProcess.start()
 
 #This is it's own process because it's super weird performance wise
-if previewFlag:
+if previewFlag or visualizeFlag:
     previewFrameQueue = multiprocessing.Queue(maxsize=1)
     previewProcess = multiprocessing.Process(target=preview.startProcess, args = (previewFrameQueue, target_duration,))
     previewProcess.daemon = True
@@ -164,6 +189,8 @@ try:
                 #but I don't want to let that build a queue
                 if faceQueue.qsize() < 1:
                     faceQueue.put([face_center, face_radius])
+                if visualizeFlag:
+                    visualize(frame, face, previewFrameQueue, face_center, face_radius)
         else:
             messageQueue.put("Camera behind, skipping frame")
 
