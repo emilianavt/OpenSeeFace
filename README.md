@@ -27,7 +27,7 @@ onnxruntime
 <br>
 <br>
 
-# Changes (in no particular order):<br>
+### Changes (in no particular order):<br>
 I tried to make this nice but indents don't exist here I guess<br>
 -Major restructure<br>
 -I've broken out major chunks of functionality into separate files to make them easier to deal with and read<br>
@@ -66,6 +66,12 @@ I tried to make this nice but indents don't exist here I guess<br>
 <br>
 I'll list more as I remember them<br>
 <br>
+
+###Installation<br>
+I haven't tested how this works on windows, but on Linux:<br>
+-Download and extract the code<br>
+-
+
 
 For documentation on how openseeface works and the computer vision models, go see https://github.com/emilianavt/OpenSeeFace
 I don't want to leave documentation here that makes it seem like this is all my work
