@@ -28,7 +28,6 @@ onnxruntime
 <br>
 
 ### Changes (in no particular order):<br>
-I tried to make this nice but indents don't exist here I guess<br>
 -Major restructure<br>
 -I've broken out major chunks of functionality into separate files to make them easier to deal with and read<br>
 ---I've tried to break functions down into multiple smaller parts when possible<br>
@@ -64,21 +63,14 @@ I tried to make this nice but indents don't exist here I guess<br>
 -Changed which stats are shown on exit, added some stats that get tracked like webcam latency<br>
 -Added conditions to skip steps when they are unnecessary, such as not rotating the eye images for small angles<br>
 <br>
-I'll list more as I remember them<br>
-<br>
-
-##Installation
-I haven't tested how this works on windows, but on Linux
-*Download and extract the code   
-*Open a terminal in the directory
-*Create a virtual environment
-
-
-
-
 
 For documentation on how openseeface works and the computer vision models, go see https://github.com/emilianavt/OpenSeeFace
 I don't want to leave documentation here that makes it seem like this is all my work
 
 
 Seriously, emilianavt did all the hard work
+
+
+I was going to do more documentation but github's markdown does not work in any sensical way
+
+idk, I'll add a readme or something, but I tried to make install instructions and it randomly started bolding list items
