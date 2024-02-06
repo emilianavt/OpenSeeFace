@@ -2,7 +2,7 @@
 import os
 #limits the threads used by numpy to 1
 #setting this and the landmarks model to use 1 means the cpu usage is pretty low
-os.environ["OMP_NUM_THREADS"] = str(1)
+
 import argparse
 import traceback
 import threading
@@ -32,10 +32,14 @@ parser.add_argument("-s", "--silent", type=int, help="Set this to 1 to prevent t
 parser.add_argument("--model", type=int, help="This can be used to select the tracking model. Higher numbers are models with better tracking quality, but slower speed, except for model 4, which is wink optimized.", default=3, choices=[0, 1, 2, 3, 4])
 parser.add_argument("--preview", type=int, help="Preview the frames sent to the tracker", default=0)
 parser.add_argument("--feature-type", type=int, help="Sets which version of feature extraction is used. 0 is my new version that works well for me and allows for some customization, 1 is EmilianaVT's version aka, normal OpenSeeFace operation", default=0, choices=[0, 1])
+parser.add_argument("--numpy-threads", type=int, help="Numer of threads Numpy can use, doesn't seem to effect much", default=1)
+parser.add_argument("--landmark-detection-threads", type=int, help="Numer of threads used for landmark detection. Default is 1 (~15ms per frame on my computer), 2 gets slightly faster frames (~10ms on my computer), more than 2 doesn't seem to help much", default=1)
+
+
 
 args = parser.parse_args()
 
-
+os.environ["OMP_NUM_THREADS"] = str(args.landmark_detection_threads)
 def messaging(messageQueue):
     while True:
         message = messageQueue.get()
