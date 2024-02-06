@@ -121,7 +121,6 @@ class Tracker():
 
         eye_state = self.EyeTracker.get_eye_state(frame, lms)
 
-
         self.face_info[0].update((conf, (lms, eye_state)), np.array(lms)[:, 0:2].mean(0))
 
         duration_model = 1000 * (time.perf_counter() - start_model)

@@ -5,8 +5,6 @@ import cv2
 import onnxruntime
 import time
 
-
-
 def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005ms
     x=max(pt[0],0)
     y=max(pt[1],0)
@@ -33,14 +31,10 @@ def rotate_image(image, a, center): #twice per frame, 0.2ms - 0.25ms each, impro
     image = cv2.warpAffine(image, M, (w, h), flags = cv2.INTER_CUBIC)
     return image
 
-
-
-
 class Eye():
     def __init__(self,index):
 
         self.eye_tracking_frames = 0
-
         self.index = index
         self.state = [1.,0.,0.,0.]
         self.image = None
@@ -67,7 +61,9 @@ class Eye():
 
         im = im[int(y1):int(y2), int(x1):int(x2)]
         if np.prod(im.shape) < 1:
-            return None, None, None, None, None, None
+            self.image = None
+            self.info = None
+
         if self.index == 1:
             im = cv2.flip(im, 1)
         scale = [(x2 - x1)/ 32., (y2 - y1)/ 32.]
@@ -144,7 +140,6 @@ class Eye():
         self.averageEyeConfidenceVariance  = pow(((self.condifence - self.averageEyeConfidence) * avgRatio) + (self.averageEyeConfidenceVariance  * (1-avgRatio)), 2)
 
         self.standardDeviation = math.sqrt(self.averageEyeConfidenceVariance)
-
 
 class EyeTracker():
     def __init__(self):
