@@ -41,8 +41,7 @@ class Tracker():
         self.height = height
 
         self.threshold = threshold
-
-        self.faces = []
+        self.face = None
         self.face_info = [face.FaceInfo(0, self, featureType)]
         self.messageQueue = messageQueue
 
@@ -81,39 +80,32 @@ class Tracker():
 
     def early_exit(self, reason, start):
         self.messageQueue.put(reason)
-        self.faces = []
+        self.face = None
         duration = (time.perf_counter() - start) * 1000
         self.messageQueue.put(f"Took {duration:.2f}ms")
         return None, None, None
 
-    def predict(self, frame, face = None):
+    def predict(self, frame):
         start = time.perf_counter()
         duration_fd = 0.0
         duration_pp = 0.0
         duration_model = 0.0
         duration_pnp = 0.0
 
-        new_faces = []
-        new_faces.extend(self.faces)
-        if face is not None:
-            new_faces.append(face)
-
-        if len(new_faces) < 1:
+        if self.face is None:
             start_fd = time.perf_counter()
-            new_faces.extend(self.FaceDetector.detect_faces(frame))
+            self.face = self.FaceDetector.detect_faces(frame)
             duration_fd = 1000 * (time.perf_counter() - start_fd)
-        if len(new_faces) < 1:
-            return self.early_exit("No faces found", start)
+            if self.face is None:
+                return self.early_exit("No faces found", start)
 
-        crop, crop_info, duration_pp = self.cropFace(new_faces[0], frame)
+        crop, crop_info, duration_pp = self.cropFace(self.face, frame)
 
         #Early exit if crop fails, If the crop fails there's nothing to track
         if  crop is None:
             return self.early_exit("No valid crops", start)
 
         start_model = time.perf_counter()
-        #self.Landmarks
-
         conf, lms = self.Landmarks.run(crop , crop_info )
         #Early exit if below confidence threshold
         if conf < self.threshold:
@@ -135,7 +127,7 @@ class Tracker():
                 lms = face_info.lms[:, 0:2]
                 x1, y1 = lms[0:66].min(0)
                 x2, y2 = lms[0:66].max(0)
-                self.faces = [[y1, x1, y2 - y1, x2 - x1]]
+                self.face = [y1, x1, y2 - y1, x2 - x1]
                 duration_pnp += 1000 * (time.perf_counter() - start_pnp)
                 duration = (time.perf_counter() - start) * 1000
                 self.messageQueue.put(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}ms, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")

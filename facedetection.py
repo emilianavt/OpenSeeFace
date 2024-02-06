@@ -51,10 +51,10 @@ class FaceDetector():
                 return []
 
             r = outputs[1, y, x] * 112.
-            results= [(((x * 4) - r, (y * 4) - r, r*2,r*2))]
+            results= (((x * 4) - r, (y * 4) - r, r*2,r*2))
             results = np.array(results).astype(np.float32)
-            results[:, [0,2]] *= frame.shape[1] / 224.
-            results[:, [1,3]] *= frame.shape[0] / 224.
+            results[ [0,2]] *= frame.shape[1] / 224.
+            results[ [1,3]] *= frame.shape[0] / 224.
             return results
 
     def resizeImage(self, frame):
