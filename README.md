@@ -21,7 +21,7 @@ Packages you'll need
 
 Numpy
 
-OpenCV
+OpenCV-python
 
 onnxruntime
 <br>
