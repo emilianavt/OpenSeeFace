@@ -11,18 +11,6 @@ import emilianaFeatureExtractor
 
 #this file is so much smaller than it used to be, lol
 #I moved most of the functionality into separate files so they're easier to work with
-def extract_face( frame, lms):
-    x1, y1 = lms.min(0)
-    x2, y2 = lms.max(0)
-    radius = np.array([(x2 - x1), (y2 - y1)])*0.6
-    center = (np.array((x1, y1)) + np.array((x2, y2))) / 2.0
-    w, h, _ = frame.shape
-    x1, y1 = clamp_to_im(center - radius, h, w)
-    x2, y2 = clamp_to_im(center + radius + 1, h, w)
-    offset = np.array((x1, y1))
-    lms = (lms[:, 0:2] - offset).astype(int)
-    frame = frame[y1:y2, x1:x2]
-    return frame, lms, offset, center, radius
 
 def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005ms
     x=max(pt[0],0)
@@ -49,8 +37,6 @@ class Tracker():
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
         self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
 
-        self.camera = np.array([[width, 0, width/2], [0, width, height/2], [0, 0, 1]], np.float32)
-        self.inverse_camera = np.linalg.inv(self.camera)
         self.width = width
         self.height = height
 
@@ -133,9 +119,8 @@ class Tracker():
         if conf < self.threshold:
             return self.early_exit("Confidence below threshold", start)
 
-        #lms is short for landmarks
-        face_frame, face_lms, face_offset,face_center, face_radius = extract_face(frame, np.array(lms)[:,0:2][:,::-1])
-        eye_state = self.EyeTracker.get_eye_state(face_frame, face_lms, face_offset)
+        eye_state = self.EyeTracker.get_eye_state(frame, lms)
+
 
         self.face_info[0].update((conf, (lms, eye_state)), np.array(lms)[:, 0:2].mean(0))
 
@@ -155,7 +140,7 @@ class Tracker():
                 duration_pnp += 1000 * (time.perf_counter() - start_pnp)
                 duration = (time.perf_counter() - start) * 1000
                 self.messageQueue.put(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}ms, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
-                return face_info, face_center, face_radius
+                return face_info, self.EyeTracker.faceCenter, self.EyeTracker.faceRadius
 
         #Combined multiple failures into one catch all exit
         return self.early_exit("Face info not valid", start)

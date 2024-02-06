@@ -42,6 +42,12 @@ class EyeTracker():
         self.eye_tracking_frames = 0
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
         self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
+        self.faceFrame = None
+        self.eyeState = None
+        self.offset = None
+        self.results = None
+        self.faceCenter = None
+        self.faceRadius = None
 
         model_base_path = os.path.join(os.path.dirname(__file__), os.path.join("models"))
         providersList = onnxruntime.capi._pybind_state.get_available_providers()
@@ -54,26 +60,30 @@ class EyeTracker():
         self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
 
 
-    def get_eye_state(self,face_frame, lms, offset):
-        eye_state = [[1.,0.,0.,0.],[1.,0.,0.,0.]]   #Array constructed early so it can be used for an early exit
+    def get_eye_state(self,frame, lms):
+        self.eyeState = [[1.,0.,0.,0.],[1.,0.,0.,0.]]   #Array constructed early so it can be used for an early exit
+
+        lms = self.extract_face(frame, np.array(lms)[:,0:2][:,::-1])
+
         self.eye_tracking_frames+=1
 
         #I've tried to thread this because they don't need to happen in sequence
         #but it doesn't do any good because python threads kinda suck
         #I'd need a persistent right eye and left eye process and that feels excessive
-        right_eye, REyeInfo = self.prepare_eye(face_frame, lms[36,0:2], lms[39,0:2], False)
-        left_eye, LEyeInfo = self.prepare_eye(face_frame,lms[42,0:2],  lms[45,0:2], True)
+        right_eye, REyeInfo = self.prepare_eye(lms[36,0:2], lms[39,0:2], False)
+        left_eye, LEyeInfo = self.prepare_eye(lms[42,0:2],  lms[45,0:2], True)
 
         if right_eye is None or left_eye is None:
             return eye_state    #Early exit if one of the eyes doesn't have data
         both_eyes = np.concatenate((right_eye, left_eye))
 
-        results = self.gaze_model.run([], {"input": both_eyes})[0]
-        eye_state[0] = self.calculateEye(results[0], REyeInfo, offset,0)
-        eye_state[1] = self.calculateEye(results[1], LEyeInfo, offset,1)
-        return eye_state
+        self.results = self.gaze_model.run([], {"input": both_eyes})[0]
+        self.calculateEye( REyeInfo, 0)
+        self.calculateEye( LEyeInfo, 1)
+        return self.eyeState
 
     def calculateStandardDeviation(self, conf, eye):
+
 
         avgRatio = 1/self.eye_tracking_frames
         self.average_eye_confidence[eye] = (self.average_eye_confidence[eye]*(1-avgRatio))+ (conf * avgRatio)
@@ -83,31 +93,30 @@ class EyeTracker():
 
         self.eye_std_dev[eye] = math.sqrt(self.average_eye_confidence_variance[eye])
 
-    def calculateEye(self, results, eye_info , offset, eye):
+    def calculateEye(self, eye_info, eye):
 
         e_x, e_y, scale, reference, angles = eye_info
         confidenceThreshold = self.average_eye_confidence[eye] - 2 * self.eye_std_dev[eye]
 
-        m = results[0].argmax()
+        m = self.results[eye][0].argmax()
         x = m // 8
         y = m % 8
 
-        p=results[1][x, y]
+        p=self.results[eye][1][x, y]
         p = clamp(p, 0.00001, 0.9999)
         off_x = math.log(p/(1-p))
         eye_x = 4.0 *(x + off_x)
 
-        p=results[2][x, y]
+        p=self.results[eye][2][x, y]
         p = clamp(p, 0.00001, 0.9999)
         off_y = math.log(p/(1-p))
         eye_y = 4.0 * (y + off_y)
 
         #I'm proud of this
-        #it's my "anti-Cali" functionality
         #if eye movements are below 2 standard deviations of the average the movement is severely limited
         #the eyes are handled independenly because my testing showed that one eye tended to have a higher condifence than the other
-        limit = max((results[0][x,y]- 0.5)*(2/confidenceThreshold),0)
-        if results[0][x,y] < confidenceThreshold:
+        limit = max((self.results[eye][0][x,y]- 0.5)*(2/confidenceThreshold),0)
+        if self.results[eye][0][x,y] < confidenceThreshold:
             Delta = eye_y - self.last_eye_state[eye][0]
             eye_y = self.last_eye_state[eye][0] + clamp(Delta, -limit, limit)
             Delta = eye_x - self.last_eye_state[eye][1]
@@ -121,11 +130,15 @@ class EyeTracker():
         eye_y = e_y + scale[1] * eye_y
 
         eye_x, eye_y = rotate(reference, (eye_x, eye_y), -angles)
-        eye_x, eye_y = (eye_x, eye_y) + offset
-        self.calculateStandardDeviation(results[0][x,y], eye)
-        return [1.0, eye_y, eye_x, results[0][x,y]]
+        eye_x, eye_y = (eye_x, eye_y) + self.offset
 
-    def prepare_eye(self,im, outer_pt, inner_pt, flip):
+        conf = self.results[eye][0][x,y]
+        self.calculateStandardDeviation(conf, eye)
+        self.eyeState[eye]  = [1.0, eye_y, eye_x, conf]
+        return
+
+    def prepare_eye(self, outer_pt, inner_pt, flip):
+        im = self.faceFrame
         (x1, y1), (x2, y2), center,  reference, a = self.corners_to_eye((outer_pt, inner_pt), im.shape[1], im.shape[0])
         #rotating an image is expensive and reduces clarity
         #so I just don't if it's a relatively small angle
@@ -154,3 +167,18 @@ class EyeTracker():
         upper_left = clamp_to_im(center - radius, w, h)
         lower_right = clamp_to_im(center + radius, w, h)
         return upper_left, lower_right, center,  c1, a
+
+
+    def extract_face(self, frame, lms):
+        x1, y1 = lms.min(0)
+        x2, y2 = lms.max(0)
+        self.faceRadius  = np.array([(x2 - x1), (y2 - y1)])*0.6
+        self.faceCenter = (np.array((x1, y1)) + np.array((x2, y2))) / 2.0
+        w, h, _ = frame.shape
+        x1, y1 = clamp_to_im(self.faceCenter - self.faceRadius , h, w)
+        x2, y2 = clamp_to_im(self.faceCenter + self.faceRadius  + 1, h, w)
+        self.offset = np.array((x1, y1))
+        lms = (lms[:, 0:2] - self.offset).astype(int)
+        frame = frame[y1:y2, x1:x2]
+        self.faceFrame = frame
+        return lms
