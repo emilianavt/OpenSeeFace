@@ -16,5 +16,5 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 #the openseeface command
-python3 facetracker.py  --fps 30 --ip 127.0.0.1 --port 11573 --model 3 -W 1920 -H 1080 #-W 1920 -H 1080  #-W 640 -H 480 #--preview 1
+python3 facetracker.py  --fps 30 --ip 127.0.0.1 --port 11573 --model 3 -W 640 -H 480 #-W 1920 -H 1080  #-W 640 -H 480 #--preview 1
 

@@ -112,27 +112,27 @@ frame_start = 0.0
 peak_time_between = 0.0
 peak_camera_latency = 0.0
 total_camera_latency = 0.0
+sleepTimer = 0.0
+
 failures = 0
 
 tracker = Tracker(width, height, featureType,  threshold=args.threshold, silent=silent, model_type=args.model, detection_threshold=args.detection_threshold)
 
-#don't start until the webcam is ready
+#don't start until the webcam is ready, then give it a little more time to fill it's buffer
 while frameQueue.qsize() < 1:
-    time.sleep(0.2)
+    time.sleep(0.1)
+time.sleep(0.1)
 face = None
-
+totalFrameLatency = 0
 try:
     while True:
         #clearing these so there's no stale data to confuse the checks
         packet = None
         frame_start = time.perf_counter()
         frame_count += 1
-        #if the camera process doesn't have a frame for us we just skip everything
-        #in my testing the camera was consistently waiting on the main process
-        #so if it's *that far behind* it probably needs a frame or two to catch up
-        if frameQueue.qsize() > 0:
-            frame, camera_latency = frameQueue.get()
-
+        if True:
+            frame, camera_latency, totalFrameLatency = frameQueue.get()
+            frame_get = time.perf_counter()
             #If I don't wait a few frames to start tracking I get wild peak frame times, like 500ms
             if frame_count > 5:
                 peak_camera_latency = max(camera_latency, peak_camera_latency)
@@ -164,15 +164,15 @@ try:
             if visualizeFlag:
                 visualize(frame, face, previewFrameQueue, face_center, face_radius)
 
-        duration = time.perf_counter() - frame_start
+        duration = time.perf_counter() - frame_get
 
         total_active_time += duration
         peak_frame_time = max(peak_frame_time, duration)
-        if duration < target_duration:
-            time.sleep(target_duration - duration)
-        else:
-            #all caps because if this is consistently happening it's an issue
-            print("CANNOT MAINTAIN FRAMERATE!")
+
+
+        sleepTimer = max(time.perf_counter() - frame_get, sleepTimer)
+        time.sleep(max(peak_frame_time - duration, 0))
+        sleepTimer -= 0.0001
 
         peak_time_between = max(peak_time_between, time.perf_counter() -frame_start)
         total_run_time += time.perf_counter() -frame_start
@@ -182,6 +182,7 @@ try:
             packetQueue.put(packet)
         else:
             print("No data sent to VTS")
+        print(time.perf_counter() - totalFrameLatency)
 
 except KeyboardInterrupt:
     if not silent:

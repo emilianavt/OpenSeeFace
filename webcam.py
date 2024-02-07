@@ -20,14 +20,12 @@ class Webcam():
             self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         else:
             self.cap = cv2.VideoCapture(0)
-        #tbh, these settings will make things way slower and frametimes will suffer
-        #but they're the only way frames bigger than 480p will work
+
         if height > 480:
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        else:
-            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
 
-        self.cap.set(38, 2)
+        self.webcamBuffer = 2
+        self.cap.set(38, self.webcamBuffer)
         self.cap.set(3, width)
         self.cap.set(4, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
@@ -46,6 +44,7 @@ class Webcam():
     def start(self):
         while self.cap.isOpened():
             frameStart= time.perf_counter()
+            totalFrameLatency = time.perf_counter()
             frame = self.getFrame()
             self.cameraLatency = time.perf_counter() - frameStart
             if self.ret:
@@ -53,7 +52,7 @@ class Webcam():
                 if self.mirror:
                     frame = cv2.flip(frame, 1)
                 #this line is where this process sits 90% of the time
-                self.frameQueue.put([frame, self.cameraLatency])
+                self.frameQueue.put([frame, self.cameraLatency, totalFrameLatency])
                 if self.faceQueue.qsize() > 0:
                     self.updateGamma()
             sleepTime = self.targetFrameTime - (time.perf_counter() - frameStart)
