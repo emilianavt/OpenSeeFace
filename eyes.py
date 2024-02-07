@@ -149,17 +149,7 @@ class EyeTracker():
         self.faceCenter = None
         self.faceRadius = None
 
-        model_base_path = os.path.join(os.path.dirname(__file__), os.path.join("models"))
-        providersList = onnxruntime.capi._pybind_state.get_available_providers()
-        options = onnxruntime.SessionOptions()
-        options.inter_op_num_threads = 1
-        options.intra_op_num_threads = 1
-        options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        options.log_severity_level = 3
-        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
-
-    def get_eye_state(self,frame, lms):
+    def get_eye_state(self, models, frame, lms):
 
         lms = self.extract_face(frame, np.array(lms)[:,0:2][:,::-1])
 
@@ -177,7 +167,7 @@ class EyeTracker():
             return [[1.,0.,0.,0.],[1.,0.,0.,0.]]    #Early exit if one of the eyes doesn't have data
         both_eyes = np.concatenate((self.rightEye.image, self.leftEye.image))
 
-        self.rightEye.results, self.leftEye.results = self.gaze_model.run([], {"input": both_eyes})[0]
+        self.rightEye.results, self.leftEye.results = models.gazeTracker.run([], {"input": both_eyes})[0]
 
         self.rightEye.calculateEye()
         self.leftEye.calculateEye()

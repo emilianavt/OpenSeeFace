@@ -30,7 +30,7 @@ class VTS():
             print(f"Confidence: {face.conf:.4f} / 3D fitting error: {face.pnp_error:.4f} / Eyes: {left_state}, {right_state}")
         now = time.time()
         packet.extend(bytearray(struct.pack("d", now)))
-        packet.extend(bytearray(struct.pack("i", face.id)))
+        packet.extend(bytearray(struct.pack("i", 0)))
         packet.extend(bytearray(struct.pack("f", self.width)))
         packet.extend(bytearray(struct.pack("f", self.height)))
         packet.extend(bytearray(struct.pack("f", face.eye_blink[0])))

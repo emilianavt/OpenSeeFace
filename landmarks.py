@@ -28,37 +28,13 @@ def matrix_to_quaternion(m):
 #not because I didn't try to improve things
 #but because I caused problems when I did
 class Landmarks():
-    def __init__(self, width, height, model_type, threshold):
-        #removed all the tracking levels below 0
-        #because they were so feature bare that they just didn't seem usable
-        #I beleive the selection should be equivalent to VTS, just 0 indexed
-        self.model_type = model_type
-        self.models = [
-            "lm_model0_opt.onnx",
-            "lm_model1_opt.onnx",
-            "lm_model2_opt.onnx",
-            "lm_model3_opt.onnx",
-            "lm_model4_opt.onnx"]
-
-        model = self.models[self.model_type]
-        model_base_path = os.path.join(os.path.dirname(__file__), os.path.join("models"))
-        providersList = onnxruntime.capi._pybind_state.get_available_providers()
-        options = onnxruntime.SessionOptions()
-        options.inter_op_num_threads = 1
-        #the only num_threads that seems to matter
-        #Doesn't seem to scale well beyond 2
-        options.intra_op_num_threads = 1
-        options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        options.log_severity_level = 3
-
-        self.session = onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options, providers=providersList)
-        self.input_name = self.session.get_inputs()[0].name
+    def __init__(self, width, height, threshold):
 
         self.camera = np.array([[width, 0, width/2], [0, width, height/2], [0, 0, 1]], np.float32)
         self.inverse_camera = np.linalg.inv(self.camera)
         self.width = width
         self.height = height
+        self.confidence = 0
 
         self.face_3d = np.array([
             [ 0.4551769692672  ,  0.300895790030204, -0.764429433974752],
@@ -138,10 +114,11 @@ class Landmarks():
         self.fail_count = 0
 
 
-    def run(self, crop, crop_info):
-        output = self.session.run([], {self.input_name: crop})[0][0]
-        conf, lms = self.landmarks(output, crop_info)
-        return (conf, lms)
+    def run(self, models, crop, crop_info):
+
+        output = models.landmarks.run([], {"input": crop})[0][0]
+        self.confidence, lms = self.landmarks(output, crop_info)
+        return ( lms)
 
     def landmarks(self, tensor, crop_info):
         crop_x1, crop_y1, scale_x, scale_y = crop_info

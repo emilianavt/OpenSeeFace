@@ -4,10 +4,8 @@ import featureExtractor
 import emilianaFeatureExtractor
 
 class FaceInfo():
-    def __init__(self, id, tracker, featureType):
+    def __init__(self, featureType):
         self.featureType = featureType
-        self.id = id
-        self.tracker = tracker
         self.face_3d = np.array([
             [ 0.4551769692672  ,  0.300895790030204, -0.764429433974752],
             [ 0.448998827123556,  0.166995837790733, -0.765143004071253],

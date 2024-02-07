@@ -1,12 +1,12 @@
+import os
 import numpy as np
+import onnxruntime
 import cv2
 import time
 import facedetection
 import eyes
 import landmarks
 import face
-import featureExtractor
-import emilianaFeatureExtractor
 
 
 #this file is so much smaller than it used to be, lol
@@ -21,38 +21,63 @@ def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005m
         y = h-1
     return (int(x),int(y+1))
 
+
+
+class Models():
+    def __init__(self, model_type=3):
+        self.model_type = model_type
+        self.models = [
+            "lm_model0_opt.onnx",
+            "lm_model1_opt.onnx",
+            "lm_model2_opt.onnx",
+            "lm_model3_opt.onnx",
+            "lm_model4_opt.onnx"]
+
+        model = self.models[self.model_type]
+        model_base_path = os.path.join(os.path.dirname(__file__), os.path.join("models"))
+        providersList = onnxruntime.capi._pybind_state.get_available_providers()
+        options = onnxruntime.SessionOptions()
+        options.inter_op_num_threads = 1
+        options.intra_op_num_threads = 1
+        options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        options.log_severity_level = 3
+
+        self.landmarks = onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options, providers=providersList)
+
+        self.faceDetection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options, providers=providersList)
+
+        self.gazeTracker = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
+
 class Tracker():
     def __init__(self, width, height, messageQueue, featureType, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
         self.FaceDetector = facedetection.FaceDetector(detection_threshold = detection_threshold)
         self.EyeTracker = eyes.EyeTracker()
-        self.Landmarks = landmarks.Landmarks(width, height, model_type, threshold)
-        if featureType == 0:
-            self.FeatureExtractor = featureExtractor.FeatureExtractor()
-        else:
-            self.FeatureExtractor = emilianaFeatureExtractor.FeatureExtractor()
-
+        self.Landmarks = landmarks.Landmarks(width, height, threshold)
+        self.model = Models(model_type = model_type)
 
         # Image normalization constants
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
         self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
-
+        self.targetimageSize = [224, 224]
         self.width = width
         self.height = height
 
         self.threshold = threshold
         self.face = None
-        self.face_info = [face.FaceInfo(0, self, featureType)]
+        self.face_info = face.FaceInfo(featureType)
         self.messageQueue = messageQueue
 
+    #scales cropped frame before sending to landmarks
     def preprocess(self, im):
-        im = cv2.resize(im, (224, 224), interpolation=cv2.INTER_CUBIC) * self.std + self.mean
+        im = cv2.resize(im ,self.targetimageSize , interpolation=cv2.INTER_CUBIC) * self.std + self.mean
         im = np.expand_dims(im, 0)
         return np.transpose(im, (0,3,1,2))
 
-    def cropFace(self,face, im):
+    def cropFace(self, im):
         duration_pp = 0.0
-        x,y,w,h = face
+        x,y,w,h = self.face
 
         wint = int(w * 0.1)
         hint = int(h * 0.125)
@@ -94,30 +119,29 @@ class Tracker():
 
         if self.face is None:
             start_fd = time.perf_counter()
-            self.face = self.FaceDetector.detect_faces(frame)
+            self.face = self.FaceDetector.detect_faces(frame, self.model)
             duration_fd = 1000 * (time.perf_counter() - start_fd)
             if self.face is None:
                 return self.early_exit("No faces found", start)
 
-        crop, crop_info, duration_pp = self.cropFace(self.face, frame)
+        crop, crop_info, duration_pp = self.cropFace(frame)
 
         #Early exit if crop fails, If the crop fails there's nothing to track
         if  crop is None:
             return self.early_exit("No valid crops", start)
-
         start_model = time.perf_counter()
-        conf, lms = self.Landmarks.run(crop , crop_info )
+        lms = self.Landmarks.run(self.model, crop, crop_info)
         #Early exit if below confidence threshold
-        if conf < self.threshold:
+        if self.Landmarks.confidence < self.threshold:
             return self.early_exit("Confidence below threshold", start)
 
-        eye_state = self.EyeTracker.get_eye_state(frame, lms)
+        eye_state = self.EyeTracker.get_eye_state(self.model, frame, lms)
 
-        self.face_info[0].update((conf, (lms, eye_state)), np.array(lms)[:, 0:2].mean(0))
+        self.face_info.update((self.Landmarks.confidence, (lms, eye_state)), np.array(lms)[:, 0:2].mean(0))
 
         duration_model = 1000 * (time.perf_counter() - start_model)
         start_pnp = time.perf_counter()
-        face_info = self.face_info[0]
+        face_info = self.face_info
 
         if face_info.alive:
             face_info.success, face_info.quaternion, face_info.euler, face_info.pnp_error, face_info.pts_3d, face_info.lms = self.Landmarks.estimate_depth(face_info)
