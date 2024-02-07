@@ -16,10 +16,6 @@ import vts
 import preview
 import cv2
 
-#overall, my changes seem to have memory usage up from about 140mb to 180mb
-#but cpu usage seems to be down
-#and it's more resilent to low performance scenarios
-
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data", default="127.0.0.1")
 parser.add_argument("-p", "--port", type=int, help="Set port for sending tracking data", default=11573)
@@ -40,14 +36,6 @@ parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visual
 
 
 args = parser.parse_args()
-
-os.environ["OMP_NUM_THREADS"] = str(args.landmark_detection_threads)
-
-def messaging(messageQueue):
-    while True:
-        message = messageQueue.get()
-        print(message)
-
 
 def visualize(frame, face, previewFrameQueue, face_center, face_radius):
 
@@ -103,17 +91,10 @@ if fps > 30:
 #creating queues
 frameQueue = multiprocessing.Queue(maxsize=frameQueueSize)
 faceQueue = multiprocessing.Queue(maxsize=1)
-messageQueue = queue.Queue()
 packetQueue = queue.Queue()
 
-#creating threads
-#probably doesn't need it's own thread, but it can't hurt
-messageThread = threading.Thread(target = messaging, args = [ messageQueue],)
-messageThread.daemon = True
-messageThread.start()
-
 #I want to decouple the requests so they don't block anything else if they're slow
-VTS = vts.VTS(target_ip, target_port, silent, height, width, packetQueue, messageQueue)
+VTS = vts.VTS(target_ip, target_port, silent, height, width, packetQueue)
 packetSenderThread = threading.Thread(target = VTS.packetSender, args = [],)
 packetSenderThread.daemon = True
 packetSenderThread.start()
@@ -122,7 +103,7 @@ packetSenderThread.start()
 #not a very active process, it's blocked by the main thread 90% of the time
 #but putting it in it's own process means there's a little bit less occupying the same core as the main thread
 #which helps when the system is under load
-webcamProcess = multiprocessing.Process(target=webcam.startProcess,args = (frameQueue, faceQueue, fps, targetBrightness, width, height,  mirror_input,messageQueue, ))
+webcamProcess = multiprocessing.Process(target=webcam.startProcess,args = (frameQueue, faceQueue, fps, targetBrightness, width, height,  mirror_input, ))
 webcamProcess.daemon = True
 webcamProcess.start()
 
@@ -143,7 +124,7 @@ peak_camera_latency = 0.0
 total_camera_latency = 0.0
 failures = 0
 
-tracker = Tracker(width, height, messageQueue, featureType,  threshold=args.threshold, silent=silent, model_type=args.model, detection_threshold=args.detection_threshold)
+tracker = Tracker(width, height, featureType,  threshold=args.threshold, silent=silent, model_type=args.model, detection_threshold=args.detection_threshold)
 
 #don't start until the webcam is ready
 while frameQueue.qsize() < 1:
@@ -170,14 +151,13 @@ try:
                 #there's no reason to ever wait on this process or give it much of a queue
                 if previewFrameQueue.qsize() < 1:
                     previewFrameQueue.put(frame)
-
             try:
                 face, face_center, face_radius = tracker.predict(frame)
                 failures = 0
             except Exception as e:
                 if e.__class__ == KeyboardInterrupt:
                     if not silent:
-                        messageQueue.put("Quitting")
+                        print("Quitting")
                     break
                 traceback.print_exc()
                 failures += 1
@@ -186,14 +166,12 @@ try:
 
             if face is not None:
                 packet = VTS.preparePacket(face)
-                #this can maybe cause weirdness in the gamma calculations
-                #but I don't want to let that build a queue
                 if faceQueue.qsize() < 1:
                     faceQueue.put([face_center, face_radius])
                 if visualizeFlag:
                     visualize(frame, face, previewFrameQueue, face_center, face_radius)
         else:
-            messageQueue.put("Camera behind, skipping frame")
+            print("Camera behind, skipping frame")
 
         duration = time.perf_counter() - frame_start
 
@@ -203,7 +181,7 @@ try:
             time.sleep(target_duration - duration)
         else:
             #all caps because if this is consistently happening it's an issue
-            messageQueue.put("CANNOT MAINTAIN FRAMERATE!")
+            print("CANNOT MAINTAIN FRAMERATE!")
 
         peak_time_between = max(peak_time_between, time.perf_counter() -frame_start)
         total_run_time += time.perf_counter() -frame_start
@@ -212,7 +190,7 @@ try:
         if(packet is not None):
             packetQueue.put(packet)
         else:
-            messageQueue.put("No data sent to VTS")
+            print("No data sent to VTS")
 
 except KeyboardInterrupt:
     if not silent:

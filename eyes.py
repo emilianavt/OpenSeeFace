@@ -142,14 +142,13 @@ class EyeTracker():
         self.rightEye = Eye(0)
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
         self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
-        self.faceFrame = None
         self.offset = None
         self.faceCenter = None
         self.faceRadius = None
 
     def get_eye_state(self, models, frame, lms):
 
-        lms = self.extract_face(frame, np.array(lms)[:,0:2][:,::-1])
+        lms, faceFrame = self.extract_face(frame, np.array(lms)[:,0:2][:,::-1])
 
         self.rightEye.offset = self.offset
         self.leftEye.offset = self.offset
@@ -158,8 +157,8 @@ class EyeTracker():
         self.leftEye.innerPoint = lms[45,0:2]
         self.leftEye.outerPoint = lms[42,0:2]
 
-        self.rightEye.prepare_eye(self.faceFrame)
-        self.leftEye.prepare_eye(self.faceFrame)
+        self.rightEye.prepare_eye(faceFrame)
+        self.leftEye.prepare_eye(faceFrame)
 
         if self.rightEye.image is None or self.leftEye.image is None:
             return [[1.,0.,0.,0.],[1.,0.,0.,0.]]    #Early exit if one of the eyes doesn't have data
@@ -182,5 +181,4 @@ class EyeTracker():
         x2, y2 = clamp_to_im(self.faceCenter + self.faceRadius  + 1, h, w)
         self.offset = np.array((x1, y1))
         lms = (lms[:, 0:2] - self.offset).astype(int)
-        self.faceFrame = frame[y1:y2, x1:x2]
-        return lms
+        return lms, frame[y1:y2, x1:x2]

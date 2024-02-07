@@ -3,7 +3,7 @@ import socket
 import struct
 
 class VTS():
-    def __init__(self, target_ip, target_port, silent, height, width, packetQueue, messageQueue):
+    def __init__(self, target_ip, target_port, silent, height, width, packetQueue):
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.target_ip = target_ip
@@ -12,7 +12,6 @@ class VTS():
         self.features = ["eye_l", "eye_r", "eyebrow_steepness_l", "eyebrow_updown_l", "eyebrow_quirk_l", "eyebrow_steepness_r", "eyebrow_updown_r", "eyebrow_quirk_r", "mouth_corner_updown_l", "mouth_corner_inout_l", "mouth_corner_updown_r", "mouth_corner_inout_r", "mouth_open", "mouth_wide"]
         self.width = width
         self.height = height
-        self.messageQueue = messageQueue
         self.packetQueue = packetQueue
 
     def packetSender(self):
@@ -68,5 +67,5 @@ class VTS():
         try:
             self.sock.sendto(packet, (self.target_ip, self.target_port))
         except:
-            self.messageQueue.put("Failed to send packet")
+            print("Failed to send packet")
         return

@@ -1,10 +1,6 @@
 import numpy as np
 import cv2
 
-
-
-
-
 def detect_faces(frame, model, detection_threshold ):
 
         image = resizeImage(frame)

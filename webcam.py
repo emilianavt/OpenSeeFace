@@ -6,12 +6,12 @@ import math
 
 
 #this is just here for conveience
-def startProcess(frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput, messageQueue):
-    webcam = Webcam(frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput, messageQueue)
+def startProcess(frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput):
+    webcam = Webcam(frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput)
     webcam.start()
 
 class Webcam():
-    def __init__(self, frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput, messageQueue):
+    def __init__(self, frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput):
         self.cap = cv2.VideoCapture(0)
         #tbh, these settings will make things way slower and frametimes will suffer
         #but they're the only way frames bigger than 480p will work
@@ -31,7 +31,6 @@ class Webcam():
         self.cameraLatency = 0
         self.brightnessFrame = None #a copy of the brightness channel for gamma calculations
         self.targetBrightness = targetBrightness    #the target average brightness of the face, used in gamma calculations
-        self.messageQueue = messageQueue    #outgoing queue, unused, but I wanted it here in case I wanted it
         self.width = width  #unused, but it seemed useful to have around
         self.height = height    #unused, but it seemed useful to have around
         self.frame = None

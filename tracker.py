@@ -21,8 +21,6 @@ def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005m
         y = h-1
     return (int(x),int(y+1))
 
-
-
 class Models():
     def __init__(self, model_type=3):
         self.model_type = model_type
@@ -50,7 +48,7 @@ class Models():
         self.gazeTracker = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
 
 class Tracker():
-    def __init__(self, width, height, messageQueue, featureType, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
+    def __init__(self, width, height, featureType, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
         self.detection_threshold = detection_threshold
         self.EyeTracker = eyes.EyeTracker()
@@ -66,7 +64,6 @@ class Tracker():
         self.threshold = threshold
         self.face = None
         self.face_info = face.FaceInfo(featureType)
-        self.messageQueue = messageQueue
 
     #scales cropped frame before sending to landmarks
     def preprocess(self, im):
@@ -103,10 +100,10 @@ class Tracker():
         return (crop, crop_info, duration_pp )
 
     def early_exit(self, reason, start):
-        self.messageQueue.put(reason)
+        print(reason)
         self.face = None
         duration = (time.perf_counter() - start) * 1000
-        self.messageQueue.put(f"Took {duration:.2f}ms")
+        print(f"Took {duration:.2f}ms")
         return None, None, None
 
     def predict(self, frame):
@@ -129,6 +126,7 @@ class Tracker():
         if  crop is None:
             return self.early_exit("No valid crops", start)
         start_model = time.perf_counter()
+
         confidence, lms = landmarks.run(self.model, crop, crop_info)
         #Early exit if below confidence threshold
         if confidence < self.threshold:
@@ -153,7 +151,7 @@ class Tracker():
                 self.face = [y1, x1, y2 - y1, x2 - x1]
                 duration_pnp += 1000 * (time.perf_counter() - start_pnp)
                 duration = (time.perf_counter() - start) * 1000
-                self.messageQueue.put(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}ms, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
+                print(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}ms, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
                 return face_info, self.EyeTracker.faceCenter, self.EyeTracker.faceRadius
 
         #Combined multiple failures into one catch all exit
