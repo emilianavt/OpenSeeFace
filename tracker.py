@@ -52,7 +52,7 @@ class Models():
 class Tracker():
     def __init__(self, width, height, messageQueue, featureType, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
-        self.FaceDetector = facedetection.FaceDetector(detection_threshold = detection_threshold)
+        self.detection_threshold = detection_threshold
         self.EyeTracker = eyes.EyeTracker()
         self.Landmarks = landmarks.Landmarks(width, height, threshold)
         self.model = Models(model_type = model_type)
@@ -119,7 +119,7 @@ class Tracker():
 
         if self.face is None:
             start_fd = time.perf_counter()
-            self.face = self.FaceDetector.detect_faces(frame, self.model)
+            self.face = facedetection.detect_faces(frame, self.model, self.detection_threshold)
             duration_fd = 1000 * (time.perf_counter() - start_fd)
             if self.face is None:
                 return self.early_exit("No faces found", start)
