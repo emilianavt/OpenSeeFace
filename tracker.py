@@ -22,7 +22,7 @@ def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005m
     return (int(x),int(y+1))
 
 class Models():
-    def __init__(self, model_type=3):
+    def __init__(self, threads,  model_type=3):
         self.model_type = model_type
         self.models = [
             "lm_model0_opt.onnx",
@@ -36,7 +36,7 @@ class Models():
         providersList = onnxruntime.capi._pybind_state.get_available_providers()
         options = onnxruntime.SessionOptions()
         options.inter_op_num_threads = 1
-        options.intra_op_num_threads = 1
+        options.intra_op_num_threads = threads
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
@@ -48,11 +48,11 @@ class Models():
         self.gazeTracker = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
 
 class Tracker():
-    def __init__(self, width, height, featureType, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
+    def __init__(self, width, height, featureType, threads, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
         self.detection_threshold = detection_threshold
         self.EyeTracker = eyes.EyeTracker()
-        self.model = Models(model_type = model_type)
+        self.model = Models(threads, model_type = model_type)
 
         # Image normalization constants
         self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))

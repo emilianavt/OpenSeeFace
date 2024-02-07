@@ -40,19 +40,19 @@ class Webcam():
         self.width = width  #unused, but it seemed useful to have around
         self.height = height    #unused, but it seemed useful to have around
         self.ret = 0
+        self.frame = None
 
     def start(self):
         while self.cap.isOpened():
             frameStart= time.perf_counter()
             totalFrameLatency = time.perf_counter()
-            frame = self.getFrame()
+            self.getFrame()
             self.cameraLatency = time.perf_counter() - frameStart
             if self.ret:
-                frame = self.applyGamma(frame)
+                self.applyGamma()
                 if self.mirror:
-                    frame = cv2.flip(frame, 1)
-                #this line is where this process sits 90% of the time
-                self.frameQueue.put([frame, self.cameraLatency, totalFrameLatency])
+                    self.frame = cv2.flip(self.frame, 1)
+                self.frameQueue.put([self.frame, self.cameraLatency, totalFrameLatency])
                 if self.faceQueue.qsize() > 0:
                     self.updateGamma()
             sleepTime = self.targetFrameTime - (time.perf_counter() - frameStart)
@@ -67,15 +67,15 @@ class Webcam():
         #keeping track of how long it takes to get frames from the webcam
         #because that one line is the cause of 90% of late frames
         cameraStart = time.perf_counter()
-        self.ret, frame = self.cap.read()
+        self.ret, self.frame = self.cap.read()
         self.cameraLatency = time.perf_counter() - cameraStart
-        return(frame)
+        return
 
     #Applies a gamma curve to the frame
     #Uses a lookup table because that's way faster than actually calculating every pixel
     #Immensely improves tracking in low light situations
-    def applyGamma(self, frame):
-        img_yuv = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
+    def applyGamma(self):
+        img_yuv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2YUV)
         #saving a copy of the brightness channel so I can use it to adjust the gamma based on where the face is in that frame
         self.brightnessFrame = img_yuv[:,:,0].copy()
         #building a lookup table on the fly
@@ -84,8 +84,8 @@ class Webcam():
         lookupTable = np.power(loopupTable, self.gamma)*255
         img_yuv[:,:,0] = lookupTable[img_yuv[:,:,0]]
         #I convert the image to RBG here because it was getting repeatedly converted in the face tracking
-        frame = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
-        return frame
+        self.frame = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
+
 
 
     #calculate the ideal gamma based on the brightness of the user's face
