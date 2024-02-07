@@ -1,4 +1,6 @@
 import os
+
+os.environ["OMP_NUM_THREADS"] = str(1)
 import dshowcapture
 import cv2
 import multiprocessing
@@ -20,15 +22,16 @@ class Webcam():
             self.cap = cv2.VideoCapture(0)
         #tbh, these settings will make things way slower and frametimes will suffer
         #but they're the only way frames bigger than 480p will work
-        if height > 480 and os.name != 'nt':
+        if height > 480:
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-            self.cap.set(38, 4)
         else:
-            self.cap.set(38, 2)
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
+
+        self.cap.set(38, 2)
         self.cap.set(3, width)
         self.cap.set(4, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
-        self.targetFrameTime = 1. / (fps-0.01)
+        self.targetFrameTime = 1. / fps
         self.gamma = 0.7
         self.mirror = mirrorInput
         self.frameQueue = frameQueue #outgoing frames from the webcam
@@ -38,20 +41,19 @@ class Webcam():
         self.targetBrightness = targetBrightness    #the target average brightness of the face, used in gamma calculations
         self.width = width  #unused, but it seemed useful to have around
         self.height = height    #unused, but it seemed useful to have around
-        self.frame = None
         self.ret = 0
 
     def start(self):
         while self.cap.isOpened():
             frameStart= time.perf_counter()
-            self.getFrame()
+            frame = self.getFrame()
             self.cameraLatency = time.perf_counter() - frameStart
             if self.ret:
-                self.applyGamma()
+                frame = self.applyGamma(frame)
                 if self.mirror:
-                    self.frame = cv2.flip(self.frame, 1)
+                    frame = cv2.flip(frame, 1)
                 #this line is where this process sits 90% of the time
-                self.frameQueue.put([self.frame, self.cameraLatency])
+                self.frameQueue.put([frame, self.cameraLatency])
                 if self.faceQueue.qsize() > 0:
                     self.updateGamma()
             sleepTime = self.targetFrameTime - (time.perf_counter() - frameStart)
@@ -66,15 +68,15 @@ class Webcam():
         #keeping track of how long it takes to get frames from the webcam
         #because that one line is the cause of 90% of late frames
         cameraStart = time.perf_counter()
-        self.ret, self.frame = self.cap.read()
+        self.ret, frame = self.cap.read()
         self.cameraLatency = time.perf_counter() - cameraStart
-        return
+        return(frame)
 
     #Applies a gamma curve to the frame
     #Uses a lookup table because that's way faster than actually calculating every pixel
     #Immensely improves tracking in low light situations
-    def applyGamma(self):
-        img_yuv = cv2.cvtColor(self.frame, cv2.COLOR_BGR2YUV)
+    def applyGamma(self, frame):
+        img_yuv = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
         #saving a copy of the brightness channel so I can use it to adjust the gamma based on where the face is in that frame
         self.brightnessFrame = img_yuv[:,:,0].copy()
         #building a lookup table on the fly
@@ -83,8 +85,8 @@ class Webcam():
         lookupTable = np.power(loopupTable, self.gamma)*255
         img_yuv[:,:,0] = lookupTable[img_yuv[:,:,0]]
         #I convert the image to RBG here because it was getting repeatedly converted in the face tracking
-        self.frame = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
-        return
+        frame = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
+        return frame
 
 
     #calculate the ideal gamma based on the brightness of the user's face

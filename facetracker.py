@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.add_argument("-i", "--ip", help="Set IP address for sending tracking data", default="127.0.0.1")
 parser.add_argument("-p", "--port", type=int, help="Set port for sending tracking data", default=11573)
 parser.add_argument("-W", "--width", type=int, help="Set raw RGB width", default=640)
-parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
+parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=480)
 parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
 parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default=0)
 parser.add_argument("-M", "--mirror-input", action="store_true", help="Process a mirror image of the input video")
@@ -70,25 +70,15 @@ mirror_input = args.mirror_input
 featureType = args.feature_type
 visualizeFlag = (args.visualize == 1)
 
-#I make a minor tweak to the framerate to help the camera out
-#it's an inpercetible amount of time per frame
-#but my hope is it keeps things from riding up against what the webcam can put out
-target_duration = 1. / (fps-0.01)
+target_duration = 1. / fps
 targetBrightness = 0.55
 silent = (args.silent == 1)
 
-
-#increating the webcam queue to compensate for longer frame times at different settings
-frameQueueSize = 1
-if height > 480:
-    frameQueueSize = 3
-    #My testing has shown that it can take upwards of 80ms when capturing images above 480p
-    #each frame is 33ms, so I'd need 3 frames, or 99ms to cover that without skipping a frame
-if fps > 30:
-    frameQueueSize = frameQueueSize * 2
-    #I'm just going to assume the webcam does not work well above 30fps
-
 #creating queues
+if height > 480:
+    frameQueueSize = 2
+else:
+    frameQueueSize = 1
 frameQueue = multiprocessing.Queue(maxsize=frameQueueSize)
 faceQueue = multiprocessing.Queue(maxsize=1)
 packetQueue = queue.Queue()
@@ -128,12 +118,13 @@ tracker = Tracker(width, height, featureType,  threshold=args.threshold, silent=
 
 #don't start until the webcam is ready
 while frameQueue.qsize() < 1:
-    time.sleep(0.33)
+    time.sleep(0.2)
+face = None
+
 try:
     while True:
         #clearing these so there's no stale data to confuse the checks
         packet = None
-        face = None
         frame_start = time.perf_counter()
         frame_count += 1
         #if the camera process doesn't have a frame for us we just skip everything
@@ -151,6 +142,7 @@ try:
                 #there's no reason to ever wait on this process or give it much of a queue
                 if previewFrameQueue.qsize() < 1:
                     previewFrameQueue.put(frame)
+
             try:
                 face, face_center, face_radius = tracker.predict(frame)
                 failures = 0
@@ -164,14 +156,13 @@ try:
                 if failures > 30:
                     break
 
-            if face is not None:
-                packet = VTS.preparePacket(face)
-                if faceQueue.qsize() < 1:
-                    faceQueue.put([face_center, face_radius])
-                if visualizeFlag:
-                    visualize(frame, face, previewFrameQueue, face_center, face_radius)
-        else:
-            print("Camera behind, skipping frame")
+
+        if face is not None:
+            packet = VTS.preparePacket(face)
+            if faceQueue.qsize() < 1:
+                faceQueue.put([face_center, face_radius])
+            if visualizeFlag:
+                visualize(frame, face, previewFrameQueue, face_center, face_radius)
 
         duration = time.perf_counter() - frame_start
 
