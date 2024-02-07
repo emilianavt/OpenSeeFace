@@ -1,8 +1,6 @@
-import os
 import numpy as np
 import math
 import cv2
-import onnxruntime
 
 def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005ms
     x=max(pt[0],0)
