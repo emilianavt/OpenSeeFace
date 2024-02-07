@@ -54,7 +54,6 @@ class Tracker():
 
         self.detection_threshold = detection_threshold
         self.EyeTracker = eyes.EyeTracker()
-        self.Landmarks = landmarks.Landmarks(width, height, threshold)
         self.model = Models(model_type = model_type)
 
         # Image normalization constants
@@ -144,7 +143,7 @@ class Tracker():
         face_info = self.face_info
 
         if face_info.alive:
-            face_info.success, face_info.quaternion, face_info.euler, face_info.pnp_error, face_info.pts_3d, face_info.lms = self.Landmarks.estimate_depth(face_info)
+            face_info.success, face_info.quaternion, face_info.euler, face_info.pnp_error, face_info.pts_3d, face_info.lms = landmarks.estimate_depth(face_info, self.width, self.height)
 
             if face_info.success:
                 face_info.adjust_3d()

@@ -86,6 +86,7 @@ class FaceInfo():
         self.coord = None
         self.base_scale_v = self.face_3d[27:30, 1] - self.face_3d[28:31, 1]
         self.base_scale_h = np.abs(self.face_3d[[0, 36, 42], 0] - self.face_3d[[16, 39, 45], 0])
+        self.fail_count = 0
 
     def reset(self):
         self.alive = False
