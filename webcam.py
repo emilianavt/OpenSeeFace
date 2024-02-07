@@ -1,3 +1,5 @@
+import os
+import dshowcapture
 import cv2
 import multiprocessing
 import time
@@ -12,10 +14,13 @@ def startProcess(frameQueue, faceQueue, fps, targetBrightness, width, height, mi
 
 class Webcam():
     def __init__(self, frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput):
-        self.cap = cv2.VideoCapture(0)
+        if os.name == 'nt':
+            self.cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        else:
+            self.cap = cv2.VideoCapture(0)
         #tbh, these settings will make things way slower and frametimes will suffer
         #but they're the only way frames bigger than 480p will work
-        if height > 480:
+        if height > 480 and os.name != 'nt':
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
             self.cap.set(38, 4)
         else:

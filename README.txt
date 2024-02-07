@@ -8,6 +8,7 @@ This is for linux, idk how python packages work in windows
     numpy
     onnxruntime
     opencv-python
+    pillow
 
 On the Vtube Studio side:
 *go to .../VTube Studio/VTube Studio_Data/StreamingAssets/
