@@ -5,15 +5,18 @@ def detect_faces(frame, model, detection_threshold ):
 
         image = resizeImage(frame)
 
-        outputs, _ = model.faceDetection.run([], {'input': image})
+        outputs, maxpool = model.faceDetection.run([], {'input': image})
         outputs = outputs[0]
+        maxpool = maxpool[0]
+        mask = outputs[0] == maxpool[0]
+        mask2 = outputs[1] > 0.2
+        mask = mask.astype(int) * mask2.astype(int)
+        outputs[0] = outputs[0] * mask.astype(int)
         faceLocation = np.argmax(outputs[0].flatten())
         x = faceLocation % 56
         y = faceLocation // 56
-
         if outputs[0, y, x] < detection_threshold:
             return None
-
         r = outputs[1, y, x] * 112.
         results= (((x * 4) - r, (y * 4) - r, r*2,r*2))
         results = np.array(results).astype(np.float32)
