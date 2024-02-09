@@ -48,7 +48,7 @@ class Models():
         self.gazeTracker = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
 
 class Tracker():
-    def __init__(self, width, height, featureType, threads, model_type=3, detection_threshold=0.5, threshold=0.6, silent=False):
+    def __init__(self, width, height, featureType, threads, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
         self.detection_threshold = detection_threshold
         self.EyeTracker = eyes.EyeTracker()

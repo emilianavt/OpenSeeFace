@@ -9,9 +9,8 @@ def detect_faces(frame, model, detection_threshold ):
         outputs = outputs[0]
         maxpool = maxpool[0]
         mask = outputs[0] == maxpool[0]
-        mask2 = outputs[1] > 0.2
-        mask = mask.astype(int) * mask2.astype(int)
-        outputs[0] = outputs[0] * mask.astype(int)
+        mask2 = outputs[1] > 0.15
+        outputs[0] = outputs[0] * mask.astype(int) * mask2.astype(int)
         faceLocation = np.argmax(outputs[0].flatten())
         x = faceLocation % 56
         y = faceLocation // 56

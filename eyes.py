@@ -2,14 +2,18 @@ import numpy as np
 import math
 import cv2
 
-def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005ms
-    x=max(pt[0],0)
-    y=max(pt[1],0)
+def clamp_to_im(pt, w, h):
+    x = pt[0]
+    y = pt[1]
+    if x < 0:
+        x = 0
+    if y < 0:
+        y = 0
     if x >= w:
         x = w-1
     if y >= h:
         y = h-1
-    return (int(x),int(y+1))
+    return (int(x), int(y+1))
 
 def rotate(origin, point, a): #runs 22 times per frame
     x, y = point - origin
@@ -54,15 +58,18 @@ class Eye():
         #so I just don't if it's a relatively small angle
         if math.degrees(a) > 7.5 and math.degrees(a) < 352.5:
             im = rotate_image(im, a, self.outerPoint)
-
         im = im[int(y1):int(y2), int(x1):int(x2)]
+
+
         if np.prod(im.shape) < 1:
             self.image = None
             self.info = None
+            return
 
         if self.index == 1:
             im = cv2.flip(im, 1)
         scale = [(x2 - x1)/ 32., (y2 - y1)/ 32.]
+
         im = cv2.resize(im, (32, 32), interpolation=cv2.INTER_CUBIC)
         im = im.astype(np.float32) * self.std + self.mean
         im = np.expand_dims(im, 0)
