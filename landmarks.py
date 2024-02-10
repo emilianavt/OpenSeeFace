@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import cv2
+cv2.setNumThreads(6)
 
 def matrix_to_quaternion(m):
     t = 0.0

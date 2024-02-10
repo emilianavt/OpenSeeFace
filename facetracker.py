@@ -26,14 +26,13 @@ parser.add_argument("--model", type=int, help="This can be used to select the tr
 parser.add_argument("--preview", type=int, help="Preview the frames sent to the tracker", default=0)
 parser.add_argument("--feature-type", type=int, help="Sets which version of feature extraction is used. 0 is my new version that works well for me and allows for some customization, 1 is EmilianaVT's version aka, normal OpenSeeFace operation", default=0, choices=[0, 1])
 parser.add_argument("--numpy-threads", type=int, help="Numer of threads Numpy can use, doesn't seem to effect much", default=1)
-parser.add_argument("-T","--threads", type=int, help="Numer of threads used for landmark detection. Default is 1 (~15ms per frame on my computer), 2 gets slightly faster frames (~10ms on my computer), more than 2 doesn't seem to help much", default=1)
+parser.add_argument("-T","--threads", type=int, help="Numer of threads used for landmark detection. Default is 1 (~15ms per frame on my computer), 2 gets slightly faster frames (~10ms on my computer), more than 2 doesn't seem to help much", default=2)
 parser.add_argument("-v", "--visualize", type=int, help="Set this to 1 to visualize the tracking", default=0)
 
 
 args = parser.parse_args()
 
 #processing args
-#For Vtube Studio: ip 127.0.0.1 port 11573
 target_ip = args.ip
 target_port = args.port
 fps = args.fps
@@ -53,7 +52,8 @@ silent = (args.silent == 1)
 if height > 480:
     frameQueueSize = 2
 else:
-    frameQueueSize = 1
+    frameQueueSize = 2
+
 frameQueue = multiprocessing.Queue(maxsize=frameQueueSize)
 faceQueue = multiprocessing.Queue(maxsize=1)
 packetQueue = queue.Queue()
@@ -65,9 +65,7 @@ packetSenderThread.daemon = True
 packetSenderThread.start()
 
 #creating processes
-#not a very active process, it's blocked by the main thread 90% of the time
-#but putting it in it's own process means there's a little bit less occupying the same core as the main thread
-#which helps when the system is under load
+
 webcamProcess = multiprocessing.Process(target=webcam.startProcess,args = (frameQueue, faceQueue, fps, targetBrightness, width, height,  mirror_input, ))
 webcamProcess.daemon = True
 webcamProcess.start()
@@ -119,23 +117,23 @@ try:
             if previewFrameQueue.qsize() < 1:
                 previewFrameQueue.put(frame)
 
-        face, face_center, face_radius = tracker.predict(frame)
+        faceInfo, face  = tracker.predict(frame)
 
-        if face is not None:
-            packet = VTS.preparePacket(face)
+        if faceInfo is not None:
+            packet = VTS.preparePacket(faceInfo)
             if faceQueue.qsize() < 1:
-                faceQueue.put([face_center, face_radius])
+                faceQueue.put(face)
             if visualizeFlag:
-                preview.visualize(frame, face, previewFrameQueue, face_center, face_radius)
+                preview.visualize(frame, faceInfo, previewFrameQueue, face_center, face_radius)
 
         duration = time.perf_counter() - frame_get
         total_active_time += duration
         peak_frame_time = max(peak_frame_time, duration)
-
-
-        sleepTimer = max(time.perf_counter() - frame_get, sleepTimer)
-        time.sleep(max(peak_frame_time - duration, 0))
-        sleepTimer -= 0.0005
+        if duration < target_duration:
+            time.sleep(target_duration - duration)
+        else:
+            #all caps because if this is consistently happening it's an issue
+            messageQueue.put("CANNOT MAINTAIN FRAMERATE!")
 
         peak_time_between = max(peak_time_between, time.perf_counter() -frame_start)
         total_run_time += time.perf_counter() -frame_start

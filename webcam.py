@@ -3,11 +3,24 @@ import os
 os.environ["OMP_NUM_THREADS"] = str(1)
 import dshowcapture
 import cv2
+cv2.setNumThreads(6)
 import multiprocessing
 import time
 import numpy as np
 import math
 
+def clamp_to_im(pt, w, h):
+    x = pt[0]
+    y = pt[1]
+    if x < 0:
+        x = 0
+    if y < 0:
+        y = 0
+    if x >= w:
+        x = w-1
+    if y >= h:
+        y = h-1
+    return (int(x), int(y+1))
 
 #this is just here for conveience
 def startProcess(frameQueue, faceQueue, fps, targetBrightness, width, height, mirrorInput):
@@ -43,6 +56,7 @@ class Webcam():
         self.frame = None
 
     def start(self):
+
         while self.cap.isOpened():
             frameStart= time.perf_counter()
             totalFrameLatency = time.perf_counter()
@@ -91,17 +105,20 @@ class Webcam():
     #calculate the ideal gamma based on the brightness of the user's face
     #kind of winging it with the math, but it's a lot better than calculating based on the whole frame
     def updateGamma(self):
-        face_center, face_radius = self.faceQueue.get()
+        face = self.faceQueue.get()
 
-        y1 = int(face_center[1] - face_radius[1])
-        y2 = int(face_center[1] + face_radius[1])
-        x1 = int(face_center[0] - face_radius[0])
-        x2 = int(face_center[0] + face_radius[0])
+        x,y,w,h = face
+        crop_x1 = x
+        crop_y1 = y
+        crop_x2 = x + w
+        crop_y2 = y + h
 
-        #I was doing random sampling of the image brightness
-        #and that's probably brighter for the whole frame
-        #but for just the face this is pretty fast
-        averageBrightness = np.mean(self.brightnessFrame[y1:y2,x1:x2])/256
+        crop_x1, crop_y1 = clamp_to_im((crop_x1, crop_y1), self.width, self.height)
+        crop_x2, crop_y2 = clamp_to_im((crop_x2, crop_y2), self.width, self.height)
+
+        croppedFace = self.brightnessFrame[crop_y1:crop_y2, crop_x1:crop_x2]
+
+        averageBrightness = np.mean(croppedFace)/256
         self.gamma = math.log(self.targetBrightness, averageBrightness)
         return
 

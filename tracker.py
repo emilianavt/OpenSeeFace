@@ -2,6 +2,7 @@ import os
 import numpy as np
 import onnxruntime
 import cv2
+cv2.setNumThreads(6)
 import time
 import facedetection
 import eyes
@@ -9,27 +10,34 @@ import landmarks
 import face
 
 
+
 #this file is so much smaller than it used to be, lol
 #I moved most of the functionality into separate files so they're easier to work with
 
-def clamp_to_im(pt, w, h): #8 times per frame, but that only accounts for 0.005ms
-    x=max(pt[0],0)
-    y=max(pt[1],0)
+def clamp_to_im(pt, w, h):
+    x = pt[0]
+    y = pt[1]
+    if x < 0:
+        x = 0
+    if y < 0:
+        y = 0
     if x >= w:
         x = w-1
     if y >= h:
         y = h-1
-    return (int(x),int(y+1))
+    return (int(x), int(y+1))
 
 class Models():
+
+    models = [
+        "lm_model0_opt.onnx",
+        "lm_model1_opt.onnx",
+        "lm_model2_opt.onnx",
+        "lm_model3_opt.onnx",
+        "lm_model4_opt.onnx"]
+
     def __init__(self, threads,  model_type=3):
         self.model_type = model_type
-        self.models = [
-            "lm_model0_opt.onnx",
-            "lm_model1_opt.onnx",
-            "lm_model2_opt.onnx",
-            "lm_model3_opt.onnx",
-            "lm_model4_opt.onnx"]
 
         model = self.models[self.model_type]
         model_base_path = os.path.join(os.path.dirname(__file__), os.path.join("models"))
@@ -48,6 +56,9 @@ class Models():
         self.gazeTracker = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
 
 class Tracker():
+    targetimageSize = [224, 224]
+    std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
+    mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
     def __init__(self, width, height, featureType, threads, model_type=3, detection_threshold=0.6, threshold=0.6, silent=False):
 
         self.detection_threshold = detection_threshold
@@ -55,9 +66,6 @@ class Tracker():
         self.model = Models(threads, model_type = model_type)
 
         # Image normalization constants
-        self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
-        self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
-        self.targetimageSize = [224, 224]
         self.width = width
         self.height = height
 
@@ -75,12 +83,10 @@ class Tracker():
         duration_pp = 0.0
         x,y,w,h = self.face
 
-        wint = int(w * 0.1)
-        hint = int(h * 0.125)
-        crop_x1 = x - wint
-        crop_y1 = y - hint
-        crop_x2 = x + w + wint
-        crop_y2 = y + h + hint
+        crop_x1 = x - (w * 0.1)
+        crop_y1 = y - (h * 0.125)
+        crop_x2 = x + w + (w * 0.1)
+        crop_y2 = y + h + (h * 0.125)
 
         crop_x1, crop_y1 = clamp_to_im((crop_x1, crop_y1), self.width, self.height)
         crop_x2, crop_y2 = clamp_to_im((crop_x2, crop_y2), self.width, self.height)
@@ -104,7 +110,7 @@ class Tracker():
         self.face = None
         duration = (time.perf_counter() - start) * 1000
         print(f"Took {duration:.2f}ms")
-        return None, None, None
+        return None, None
 
     def predict(self, frame):
         start = time.perf_counter()
@@ -146,13 +152,13 @@ class Tracker():
             if face_info.success:
                 face_info.adjust_3d()
                 lms = face_info.lms[:, 0:2]
-                x1, y1 = lms[0:66].min(0)
-                x2, y2 = lms[0:66].max(0)
-                self.face = [y1, x1, y2 - y1, x2 - x1]
+                y1, x1 = lms[0:66].min(0)
+                y2, x2 = lms[0:66].max(0)
+                self.face = [x1, y1, x2 - x1, y2 - y1]
                 duration_pnp += 1000 * (time.perf_counter() - start_pnp)
                 duration = (time.perf_counter() - start) * 1000
                 print(f"Took {duration:.2f}ms (detect: {duration_fd:.2f}ms, crop: {duration_pp:.2f}ms, track: {duration_model:.2f}ms, 3D points: {duration_pnp:.2f}ms)")
-                return face_info, self.EyeTracker.faceCenter, self.EyeTracker.faceRadius
+                return face_info, self.face
 
         #Combined multiple failures into one catch all exit
         return self.early_exit("Face info not valid", start)

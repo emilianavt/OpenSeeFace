@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import cv2
+cv2.setNumThreads(6)
 
 def clamp_to_im(pt, w, h):
     x = pt[0]
@@ -33,14 +34,14 @@ def rotate_image(image, a, center): #twice per frame, 0.2ms - 0.25ms each, impro
     return image
 
 class Eye():
+    mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
+    std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
     def __init__(self,index):
         self.eye_tracking_frames = 0
         self.index = index
         self.state = [1.,0.,0.,0.]
         self.image = None
         self.info = None
-        self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
-        self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
         self.results = None
         self.condifence = 0
         self.standardDeviation = 0.
@@ -144,12 +145,13 @@ class Eye():
         self.standardDeviation = math.sqrt(self.averageEyeConfidenceVariance)
 
 class EyeTracker():
+    np.float32(np.array([-2.1179, -2.0357, -1.8044]))
+    std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
     def __init__(self):
         self.leftEye = Eye(1)
         self.rightEye = Eye(0)
-        self.mean = np.float32(np.array([-2.1179, -2.0357, -1.8044]))
-        self.std = np.float32(np.array([0.0171, 0.0175, 0.0174]))
         self.offset = None
+        self.face = None
         self.faceCenter = None
         self.faceRadius = None
 
@@ -187,5 +189,6 @@ class EyeTracker():
         x1, y1 = clamp_to_im(self.faceCenter - self.faceRadius , h, w)
         x2, y2 = clamp_to_im(self.faceCenter + self.faceRadius  + 1, h, w)
         self.offset = np.array((x1, y1))
+        self.face = [x1, y1, x2 - x1, y2 - y1]
         lms = (lms[:, 0:2] - self.offset).astype(int)
         return lms, frame[y1:y2, x1:x2]
