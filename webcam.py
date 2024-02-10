@@ -42,7 +42,7 @@ class Webcam():
         self.cap.set(3, width)
         self.cap.set(4, height)
         self.cap.set(cv2.CAP_PROP_FPS, fps)
-        self.targetFrameTime = 1. / fps
+        self.targetFrameTime = 1. / (fps - 0.001)
         self.gamma = 0.7
         self.mirror = mirrorInput
         self.frameQueue = frameQueue #outgoing frames from the webcam
@@ -99,7 +99,6 @@ class Webcam():
         img_yuv[:,:,0] = lookupTable[img_yuv[:,:,0]]
         #I convert the image to RBG here because it was getting repeatedly converted in the face tracking
         self.frame = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
-
 
 
     #calculate the ideal gamma based on the brightness of the user's face
