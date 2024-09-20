@@ -447,7 +447,8 @@ except KeyboardInterrupt:
 input_reader.close()
 if out is not None:
     out.release()
-cv2.destroyAllWindows()
+if args.visualize != 0:
+    cv2.destroyAllWindows()
 
 if args.silent == 0 and tracking_frames > 0:
     average_tracking_time = 1000 * tracking_time / tracking_frames
