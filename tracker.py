@@ -527,12 +527,8 @@ class Tracker():
         self.retinaface_scan = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=2, top_k=max_faces, res=(640, 640))
         self.use_retinaface = use_retinaface
 
-        # OTR 1.9 and later requires specifying providers
-        # explicitly as an argument in InferenceSession()
-        providersList = onnxruntime.capi._pybind_state.get_available_providers()
-
         # Single face instance with multiple threads
-        self.session = onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options, providers=providersList)
+        self.session = onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options)
 
         # Multiple faces with single threads
         self.sessions = []
@@ -548,18 +544,18 @@ class Tracker():
                 options.intra_op_num_threads += 1
             options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
             options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-            self.sessions.append(onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options, providers=providersList))
+            self.sessions.append(onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options))
         self.input_name = self.session.get_inputs()[0].name
 
         options = onnxruntime.SessionOptions()
-        options.inter_op_num_threads = 1
+        #options.intra_op_num_threads = max(max_threads,4)
         options.intra_op_num_threads = 1
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
         options.log_severity_level = 3
-        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
+        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options)
 
-        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options, providers=providersList)
+        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options)
         self.faces = []
 
         # Image normalization constants
@@ -767,7 +763,7 @@ class Tracker():
         image_pts = np.array(lms)[face_info.contour_pts, 0:2]
 
         success = False
-        if face_info.rotation is not None:
+        if not face_info.rotation is None:
             success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(face_info.rotation), tvec=np.transpose(face_info.translation), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
             rvec = np.array([0, 0, 0], np.float32)
@@ -920,7 +916,7 @@ class Tracker():
         x1, y1 = clamp_to_im(center - radius, h, w)
         x2, y2 = clamp_to_im(center + radius + 1, h, w)
         offset = np.array((x1, y1))
-        lms = (lms[:, 0:2] - offset).astype(int)
+        lms = (lms[:, 0:2] - offset).astype(np.int)
         frame = frame[y1:y2, x1:x2]
         return frame, lms, offset
 
@@ -985,7 +981,7 @@ class Tracker():
             eye_state.append([open[i], eye_y, eye_x, conf])
 
         eye_state = np.array(eye_state)
-        eye_state[np.isnan(eye_state).any(axis=1)] = np.array([1.,0.,0.,0.], dtype=np.float32)
+        eye_state[np.isnan(eye_state).any(axis=1)] = np.array([1.,0.,0.,0.], dtype=np.float64)
         return eye_state
 
     def assign_face_info(self, results):

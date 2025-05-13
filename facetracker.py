@@ -13,12 +13,12 @@ if os.name == 'nt':
     parser.add_argument("-a", "--list-dcaps", type=int, help="Set this to -1 to list all cameras and their available capabilities, set this to a camera id to list that camera's capabilities", default=None)
     parser.add_argument("-W", "--width", type=int, help="Set camera and raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set camera and raw RGB height", default=360)
-    parser.add_argument("-D", "--dcap", type=int, help="Set which device capability line to use or -1 to use the default camera settings (FPS still need to be set separately)", default=None)
+    parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
+    parser.add_argument("-D", "--dcap", type=int, help="Set which device capability line to use or -1 to use the default camera settings", default=None)
     parser.add_argument("-B", "--blackmagic", type=int, help="When set to 1, special support for Blackmagic devices is enabled", default=0)
 else:
     parser.add_argument("-W", "--width", type=int, help="Set raw RGB width", default=640)
     parser.add_argument("-H", "--height", type=int, help="Set raw RGB height", default=360)
-parser.add_argument("-F", "--fps", type=int, help="Set camera frames per second", default=24)
 parser.add_argument("-c", "--capture", help="Set camera ID (0, 1...) or video file", default="0")
 parser.add_argument("-M", "--mirror-input", action="store_true", help="Process a mirror image of the input video")
 parser.add_argument("-m", "--max-threads", type=int, help="Set the maximum number of threads", default=1)
@@ -42,7 +42,7 @@ parser.add_argument("--log-data", help="You can set a filename to which tracking
 parser.add_argument("--log-output", help="You can set a filename to console output will be logged here", default="")
 parser.add_argument("--model", type=int, help="This can be used to select the tracking model. Higher numbers are models with better tracking quality, but slower speed, except for model 4, which is wink optimized. Models 1 and 0 tend to be too rigid for expression and blink detection. Model -2 is roughly equivalent to model 1, but faster. Model -3 is between models 0 and -1.", default=3, choices=[-3, -2, -1, 0, 1, 2, 3, 4])
 parser.add_argument("--model-dir", help="This can be used to specify the path to the directory containing the .onnx model files", default=None)
-parser.add_argument("--gaze-tracking", type=int, help="When set to 1, gaze tracking is enabled, which makes things slightly slower", default=1)
+parser.add_argument("--gaze-tracking", type=int, help="When set to 1, experimental blink detection and gaze tracking are enabled, which makes things slightly slower", default=1)
 parser.add_argument("--face-id-offset", type=int, help="When set, this offset is added to all face ids, which can be useful for mixing tracking data from multiple network sources", default=0)
 parser.add_argument("--repeat-video", type=int, help="When set to 1 and a video file was specified with -c, the tracker will loop the video until interrupted", default=0)
 parser.add_argument("--dump-points", type=str, help="When set to a filename, the current face 3D points are made symmetric and dumped to the given file when quitting the visualization with the \"q\" key", default="")
@@ -60,12 +60,12 @@ class OutputLog(object):
         self.fh = fh
         self.output = output
     def write(self, buf):
-        if self.fh is not None:
+        if not self.fh is None:
             self.fh.write(buf)
         self.output.write(buf)
         self.flush()
     def flush(self):
-        if self.fh is not None:
+        if not self.fh is None:
             self.fh.flush()
         self.output.flush()
 output_logfile = None
@@ -78,19 +78,19 @@ if os.name == 'nt':
     import dshowcapture
     if args.blackmagic == 1:
         dshowcapture.set_bm_enabled(True)
-    if args.blackmagic_options is not None:
+    if not args.blackmagic_options is None:
         dshowcapture.set_options(args.blackmagic_options)
-    if args.priority is not None:
+    if not args.priority is None:
         import psutil
         classes = [psutil.IDLE_PRIORITY_CLASS, psutil.BELOW_NORMAL_PRIORITY_CLASS, psutil.NORMAL_PRIORITY_CLASS, psutil.ABOVE_NORMAL_PRIORITY_CLASS, psutil.HIGH_PRIORITY_CLASS, psutil.REALTIME_PRIORITY_CLASS]
         p = psutil.Process(os.getpid())
         p.nice(classes[args.priority])
 
-if os.name == 'nt' and (args.list_cameras > 0 or args.list_dcaps is not None):
+if os.name == 'nt' and (args.list_cameras > 0 or not args.list_dcaps is None):
     cap = dshowcapture.DShowCapture()
     info = cap.get_info()
     unit = 10000000.;
-    if args.list_dcaps is not None:
+    if not args.list_dcaps is None:
         formats = {0: "Any", 1: "Unknown", 100: "ARGB", 101: "XRGB", 200: "I420", 201: "NV12", 202: "YV12", 203: "Y800", 300: "YVYU", 301: "YUY2", 302: "UYVY", 303: "HDYC (Unsupported)", 400: "MJPEG", 401: "H264" }
         for cam in info:
             if args.list_dcaps == -1:
@@ -153,17 +153,18 @@ target_port = args.port
 if args.faces >= 40:
     print("Transmission of tracking data over network is not supported with 40 or more faces.")
 
-fps = args.fps
+fps = 0
 dcap = None
 use_dshowcapture_flag = False
 if os.name == 'nt':
+    fps = args.fps
     dcap = args.dcap
     use_dshowcapture_flag = True if args.use_dshowcapture == 1 else False
     input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag, dcap=dcap)
     if args.dcap == -1 and type(input_reader) == DShowCaptureReader:
         fps = min(fps, input_reader.device.get_fps())
 else:
-    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps)
+    input_reader = InputReader(args.capture, args.raw_rgb, args.width, args.height, fps, use_dshowcapture=use_dshowcapture_flag)
 if type(input_reader.reader) == VideoReader:
     fps = 0
 
@@ -248,7 +249,7 @@ try:
             height, width, channels = frame.shape
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             tracker = Tracker(width, height, threshold=args.threshold, max_threads=args.max_threads, max_faces=args.faces, discard_after=args.discard_after, scan_every=args.scan_every, silent=False if args.silent == 0 else True, model_type=args.model, model_dir=args.model_dir, no_gaze=False if args.gaze_tracking != 0 and args.model != -1 else True, detection_threshold=args.detection_threshold, use_retinaface=args.scan_retinaface, max_feature_updates=args.max_feature_updates, static_model=True if args.no_3d_adapt == 1 else False, try_hard=args.try_hard == 1)
-            if args.video_out is not None:
+            if not args.video_out is None:
                 out = cv2.VideoWriter(args.video_out, cv2.VideoWriter_fourcc('F','F','V','1'), args.video_fps, (width * args.video_scale, height * args.video_scale))
 
         try:
@@ -291,7 +292,7 @@ try:
                 packet.extend(bytearray(struct.pack("f", f.translation[0])))
                 packet.extend(bytearray(struct.pack("f", f.translation[1])))
                 packet.extend(bytearray(struct.pack("f", f.translation[2])))
-                if log is not None:
+                if not log is None:
                     log.write(f"{frame_count},{now},{width},{height},{fps},{face_num},{f.id},{f.eye_blink[0]},{f.eye_blink[1]},{f.conf},{f.success},{f.pnp_error},{f.quaternion[0]},{f.quaternion[1]},{f.quaternion[2]},{f.quaternion[3]},{f.euler[0]},{f.euler[1]},{f.euler[2]},{f.rotation[0]},{f.rotation[1]},{f.rotation[2]},{f.translation[0]},{f.translation[1]},{f.translation[2]}")
                 for (x,y,c) in f.lms:
                     packet.extend(bytearray(struct.pack("f", c)))
@@ -302,7 +303,7 @@ try:
                 for pt_num, (x,y,c) in enumerate(f.lms):
                     packet.extend(bytearray(struct.pack("f", y)))
                     packet.extend(bytearray(struct.pack("f", x)))
-                    if log is not None:
+                    if not log is None:
                         log.write(f",{y},{x},{c}")
                     if pt_num == 66 and (f.eye_blink[0] < 0.30 or c < 0.20):
                         continue
@@ -310,15 +311,24 @@ try:
                         continue
                     x = int(x + 0.5)
                     y = int(y + 0.5)
-                    if args.visualize != 0 or out is not None:
+                    if args.visualize != 0 or not out is None:
                         if args.visualize > 3:
                             frame = cv2.putText(frame, str(pt_num), (int(y), int(x)), cv2.FONT_HERSHEY_SIMPLEX, 0.25, (255,255,0))
                         color = (0, 255, 0)
                         if pt_num >= 66:
                             color = (255, 255, 0)
                         if not (x < 0 or y < 0 or x >= height or y >= width):
-                            cv2.circle(frame, (y, x), 1, color, -1)
-                if args.pnp_points != 0 and (args.visualize != 0 or out is not None) and f.rotation is not None:
+                            frame[int(x), int(y)] = color
+                        x += 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                        y += 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                        x -= 1
+                        if not (x < 0 or y < 0 or x >= height or y >= width):
+                            frame[int(x), int(y)] = color
+                if args.pnp_points != 0 and (args.visualize != 0 or not out is None) and f.rotation is not None:
                     if args.pnp_points > 1:
                         projected = cv2.projectPoints(f.face_3d[0:66], f.rotation, f.translation, tracker.camera, tracker.dist_coeffs)
                     else:
@@ -341,7 +351,7 @@ try:
                     packet.extend(bytearray(struct.pack("f", x)))
                     packet.extend(bytearray(struct.pack("f", -y)))
                     packet.extend(bytearray(struct.pack("f", -z)))
-                    if log is not None:
+                    if not log is None:
                         log.write(f",{x},{-y},{-z}")
                 if f.current_features is None:
                     f.current_features = {}
@@ -349,16 +359,16 @@ try:
                     if not feature in f.current_features:
                         f.current_features[feature] = 0
                     packet.extend(bytearray(struct.pack("f", f.current_features[feature])))
-                    if log is not None:
+                    if not log is None:
                         log.write(f",{f.current_features[feature]}")
-                if log is not None:
+                if not log is None:
                     log.write("\r\n")
                     log.flush()
 
             if detected and len(faces) < 40:
                 sock.sendto(packet, (target_ip, target_port))
 
-            if out is not None:
+            if not out is None:
                 video_frame = frame
                 if args.video_scale != 1:
                     video_frame = cv2.resize(frame, (width * args.video_scale, height * args.video_scale), interpolation=cv2.INTER_NEAREST)
@@ -369,7 +379,7 @@ try:
             if args.visualize != 0:
                 cv2.imshow('OpenSeeFace Visualization', frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
-                    if args.dump_points != "" and faces is not None and len(faces) > 0:
+                    if args.dump_points != "" and not faces is None and len(faces) > 0:
                         np.set_printoptions(threshold=sys.maxsize, precision=15)
                         pairs = [
                             (0, 16),
@@ -445,10 +455,9 @@ except KeyboardInterrupt:
         print("Quitting")
 
 input_reader.close()
-if out is not None:
+if not out is None:
     out.release()
-if args.visualize != 0:
-    cv2.destroyAllWindows()
+cv2.destroyAllWindows()
 
 if args.silent == 0 and tracking_frames > 0:
     average_tracking_time = 1000 * tracking_time / tracking_frames
