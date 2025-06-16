@@ -48,7 +48,7 @@ python-versions = ">=3.6"
 
 [[package]]
 name = "protobuf"
-version = "3.19.5"
+version = "4.25.8"
 description = "Protocol Buffers"
 category = "main"
 optional = false
