@@ -64,7 +64,7 @@ class RetinaFaceDetector():
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = threads
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
         options.log_severity_level = 3
         providersList = ['CPUExecutionProvider']
         self.session = onnxruntime.InferenceSession(model_path, sess_options=options, providers=providersList)

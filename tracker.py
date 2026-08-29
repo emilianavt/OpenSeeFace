@@ -499,7 +499,7 @@ class Tracker():
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = min(max_threads,4)
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
         options.log_severity_level = 3
         self.model_type = model_type
         self.models = [
@@ -547,7 +547,7 @@ class Tracker():
             elif i < extra_threads:
                 options.intra_op_num_threads += 1
             options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-            options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+            options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
             self.sessions.append(onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options, providers=providersList))
         self.input_name = self.session.get_inputs()[0].name
 
@@ -555,7 +555,7 @@ class Tracker():
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = 1
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_BASIC
         options.log_severity_level = 3
         self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_gpu.onnx"), sess_options=options, providers=providersList)
 
