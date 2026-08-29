@@ -499,23 +499,23 @@ class Tracker():
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = min(max_threads,4)
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         options.log_severity_level = 3
         self.model_type = model_type
         self.models = [
-            "lm_model0_opt.onnx",
-            "lm_model1_opt.onnx",
-            "lm_model2_opt.onnx",
-            "lm_model3_opt.onnx",
-            "lm_model4_opt.onnx"
+            "lm_model0_gpu.onnx",
+            "lm_model1_gpu.onnx",
+            "lm_model2_gpu.onnx",
+            "lm_model3_gpu.onnx",
+            "lm_model4_gpu.onnx"
         ]
-        model = "lm_modelT_opt.onnx"
+        model = "lm_modelT_gpu.onnx"
         if model_type >= 0:
             model = self.models[self.model_type]
         if model_type == -2:
-            model = "lm_modelV_opt.onnx"
+            model = "lm_modelV_gpu.onnx"
         if model_type == -3:
-            model = "lm_modelU_opt.onnx"
+            model = "lm_modelU_gpu.onnx"
         model_base_path = get_model_base_path(model_dir)
 
         if threshold is None:
@@ -523,8 +523,8 @@ class Tracker():
             if model_type < 0:
                 threshold = 0.87
 
-        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=max(max_threads,4), top_k=max_faces, res=(640, 640))
-        self.retinaface_scan = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_opt.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=2, top_k=max_faces, res=(640, 640))
+        self.retinaface = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_gpu.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=max(max_threads,4), top_k=max_faces, res=(640, 640))
+        self.retinaface_scan = RetinaFaceDetector(model_path=os.path.join(model_base_path, "retinaface_640x640_gpu.onnx"), json_path=os.path.join(model_base_path, "priorbox_640x640.json"), threads=2, top_k=max_faces, res=(640, 640))
         self.use_retinaface = use_retinaface
 
         # OTR 1.9 and later requires specifying providers
@@ -547,7 +547,7 @@ class Tracker():
             elif i < extra_threads:
                 options.intra_op_num_threads += 1
             options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-            options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+            options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
             self.sessions.append(onnxruntime.InferenceSession(os.path.join(model_base_path, model), sess_options=options, providers=providersList))
         self.input_name = self.session.get_inputs()[0].name
 
@@ -555,11 +555,11 @@ class Tracker():
         options.inter_op_num_threads = 1
         options.intra_op_num_threads = 1
         options.execution_mode = onnxruntime.ExecutionMode.ORT_SEQUENTIAL
-        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        options.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
         options.log_severity_level = 3
-        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_opt.onnx"), sess_options=options, providers=providersList)
+        self.gaze_model = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_gaze32_split_gpu.onnx"), sess_options=options, providers=providersList)
 
-        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_opt.onnx"), sess_options=options, providers=providersList)
+        self.detection = onnxruntime.InferenceSession(os.path.join(model_base_path, "mnv3_detection_gpu.onnx"), sess_options=options, providers=providersList)
         self.faces = []
 
         # Image normalization constants
@@ -768,11 +768,9 @@ class Tracker():
 
         success = False
         if face_info.rotation is not None:
-            success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=np.transpose(face_info.rotation), tvec=np.transpose(face_info.translation), flags=cv2.SOLVEPNP_ITERATIVE)
+            success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=face_info.rotation.reshape(3,1), tvec=face_info.translation.reshape(3,1), flags=cv2.SOLVEPNP_ITERATIVE)
         else:
-            rvec = np.array([0, 0, 0], np.float32)
-            tvec = np.array([0, 0, 0], np.float32)
-            success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=True, rvec=rvec, tvec=tvec, flags=cv2.SOLVEPNP_ITERATIVE)
+            success, face_info.rotation, face_info.translation = cv2.solvePnP(face_info.contour, image_pts, self.camera, self.dist_coeffs, useExtrinsicGuess=False, flags=cv2.SOLVEPNP_ITERATIVE)
 
         rotation = face_info.rotation
         translation = face_info.translation
@@ -783,8 +781,8 @@ class Tracker():
             face_info.translation = np.array([0.0, 0.0, 0.0], np.float32)
             return False, np.zeros(4), np.zeros(3), 99999., pts_3d, lms
         else:
-            face_info.rotation = np.transpose(face_info.rotation)
-            face_info.translation = np.transpose(face_info.translation)
+            face_info.rotation = face_info.rotation.flatten()
+            face_info.translation = face_info.translation.flatten()
 
         rmat, _ = cv2.Rodrigues(rotation)
         inverse_rotation = np.linalg.inv(rmat)
@@ -831,12 +829,12 @@ class Tracker():
                 pt = (pts_3d[42] * d1 + pts_3d[45] * d2) / d
             if i < 2:
                 reference = rmat.dot(pt)
-                reference = reference + face_info.translation
+                reference = reference + face_info.translation.flatten()
                 reference = self.camera.dot(reference)
                 depth = reference[2]
                 pt_3d = np.array([lms[66+i][0] * depth, lms[66+i][1] * depth, depth], np.float32)
                 pt_3d = self.inverse_camera.dot(pt_3d)
-                pt_3d = pt_3d - face_info.translation
+                pt_3d = pt_3d - face_info.translation.flatten()
                 pt_3d = inverse_rotation.dot(pt_3d)
                 pts_3d[66+i,:] = pt_3d[:]
         pts_3d[np.isnan(pts_3d).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
