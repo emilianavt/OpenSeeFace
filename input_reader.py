@@ -15,6 +15,7 @@ class VideoReader():
             self.cap = cv2.VideoCapture(capture, cv2.CAP_DSHOW)
         else:
             self.cap = cv2.VideoCapture(capture)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         if self.cap is None:
             print("The video source cannot be opened")
             sys.exit(0)

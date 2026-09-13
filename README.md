@@ -1,5 +1,16 @@
 ![OSF.png](https://raw.githubusercontent.com/emilianavt/OpenSeeFace/master/Images/OSF.png)
 
+> **2024/2025 Modernization Fork (OpenSeeFaceFIX)**
+> This is a modernized fork of OpenSeeFace updated to support the latest 2024+ Python ecosystems and GPU drivers.
+> 
+> **Updates include:**
+> - **Numpy 2.0+ Support:** Fixed internal array broadcasting crashes (`.flatten()`) when performing 3D matrix math.
+> - **OpenCV 5.0+ Support:** Fixed `cv2.solvePnP` crashes by forcing correct initial guess fallback paths.
+> - **ONNX Runtime 1.29+ / CUDA 13+ Support:** Re-routed the tracker to use the unoptimized `_gpu.onnx` models natively. This completely bypasses the catastrophic `unsupported conv activation mode "LeakyRelu" / "Clip"` crashes caused by the `FusedConv` operations in the original `_opt.onnx` models when running on modern Nvidia CUDA Execution Providers.
+> - **Modern Setup Script:** Added `Run_Linux.sh` to automatically build an isolated `venv` and dynamically patch CUDA library paths (`LD_LIBRARY_PATH`) so `onnxruntime-gpu` correctly attaches to pip-installed `cu12/cu13` Nvidia libraries without system-level driver hell.
+> - **Modern Poetry/Pip Support:** Lifted the strict `Python < 3.11` locks.
+
+
 # Overview
 
 **Note**: This is a tracking library, **not** a stand-alone avatar puppeteering program. I'm also working on [VSeeFace](https://www.vseeface.icu/), which allows animating [VRM](https://vrm.dev/en/how_to_make_vrm/) and [VSFAvatar](https://www.youtube.com/watch?v=jhQ8DF87I5I) 3D models by using OpenSeeFace tracking. [VTube Studio](https://denchisoft.com/) uses OpenSeeFace for webcam based tracking to animate Live2D models. A renderer for the Godot engine can be found [here](https://github.com/virtual-puppet-project/vpuppr).

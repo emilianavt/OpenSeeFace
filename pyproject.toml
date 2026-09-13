@@ -6,11 +6,11 @@ authors = ["emilianavt"]
 license = "BSD-2-Clause"
 
 [tool.poetry.dependencies]
-python = ">=3.7,<3.11"
-numpy = "^1.21.3"
-opencv-python = "^4.5.4"
-Pillow = "^8.4.0"
-onnxruntime = "^1.9.0"
+python = ">=3.7,<3.15"
+numpy = ">=1.21.3"
+opencv-python = ">=4.5.4"
+Pillow = ">=8.4.0"
+onnxruntime = ">=1.9.0"
 
 [tool.poetry.dev-dependencies]
 
