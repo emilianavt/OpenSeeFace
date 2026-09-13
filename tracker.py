@@ -745,8 +745,8 @@ class Tracker():
         t_off_y = np.take_along_axis(tensor[c1:c2].reshape((c0,self.out_res_i * self.out_res_i)), indices, 1).reshape((c0,))
         t_off_x = res * logit_arr(t_off_x, self.logit_factor)
         t_off_y = res * logit_arr(t_off_y, self.logit_factor)
-        t_x = crop_y1 + scale_y * (res * np.floor(t_m / self.out_res_i) / self.out_res + t_off_x)
-        t_y = crop_x1 + scale_x * (res * np.floor(np.mod(t_m, self.out_res_i)) / self.out_res + t_off_y)
+        t_x = crop_x1 + scale_x * (res * np.mod(t_m, self.out_res_i) / self.out_res + t_off_x)
+        t_y = crop_y1 + scale_y * (res * np.floor(t_m / self.out_res_i) / self.out_res + t_off_y)
         avg_conf = np.average(t_conf)
         lms = np.stack([t_x, t_y, t_conf], 1)
         lms[np.isnan(lms).any(axis=1)] = np.array([0.,0.,0.], dtype=np.float32)
@@ -1172,7 +1172,7 @@ class Tracker():
                 lms = face_info.lms[:, 0:2]
                 x1, y1 = tuple(lms[0:66].min(0))
                 x2, y2 = tuple(lms[0:66].max(0))
-                bbox = (y1, x1, y2 - y1, x2 - x1)
+                bbox = (x1, y1, x2 - x1, y2 - y1)
                 face_info.bbox = bbox
                 detected.append(bbox)
                 results.append(face_info)
