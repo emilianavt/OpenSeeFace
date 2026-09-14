@@ -40,7 +40,7 @@ numpy = ">=1.21.2"
 
 [[package]]
 name = "pillow"
-version = "9.3.0"
+version = "10.2.0"
 description = "Python Imaging Library (Fork)"
 category = "main"
 optional = false
@@ -48,7 +48,7 @@ python-versions = ">=3.6"
 
 [[package]]
 name = "protobuf"
-version = "3.19.1"
+version = "4.25.8"
 description = "Protocol Buffers"
 category = "main"
 optional = false

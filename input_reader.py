@@ -121,6 +121,30 @@ class OpenCVReader(VideoReader):
     def close(self):
         super(OpenCVReader, self).close()
 
+class V4L2Reader(OpenCVReader):
+    def __init__(self, capture, width, height, fps, dformat):
+        self.cap = cv2.VideoCapture(capture, cv2.CAP_V4L2)
+        if dformat:
+            fourcc = cv2.VideoWriter.fourcc(*dformat)
+            self.cap.set(6, fourcc)
+        self.device = None
+        self.width = width
+        self.height = height
+        self.fps = fps
+        self.name = str(capture)
+        self.cap.set(3, width)
+        self.cap.set(4, height)
+        self.cap.set(38, 1)
+        self.cap.set(5, fps)
+    def is_open(self):
+        return super(V4L2Reader, self).is_open()
+    def is_ready(self):
+        return super(V4L2Reader, self).is_ready()
+    def read(self):
+        return super(V4L2Reader, self).read()
+    def close(self):
+        super(V4L2Reader, self).close()
+
 class RawReader:
     def __init__(self, width, height):
         self.width = int(width)
@@ -232,6 +256,14 @@ class InputReader():
                     print(f"Escapi failed. Falling back to OpenCV. If this fails, please change your camera settings.", file=sys.stderr)
                     self.reader = OpenCVReader(int(capture), width, height, fps)
                     self.name = self.reader.name
+                elif sys.platform == 'linux':
+                    try:
+                        self.reader = V4L2Reader(int(capture), width, height, fps, dcap)
+                    except:
+                        print("V4L2 exception: ")
+                        traceback.print_exc()
+                        print(f"V4L2 failed. Falling back to OpenCV. If this fails, please change your camera settings.", file=sys.stderr)
+                        self.reader = OpenCVReader(int(capture), width, height, fps)
                 else:
                     self.reader = OpenCVReader(int(capture), width, height, fps)
         except Exception as e:

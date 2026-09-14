@@ -1,7 +1,7 @@
 # This file is not used by the tracking application and currently outdated
 import torch
 import torch.nn as nn
-import geffnet.mobilenetv3 # geffnet.mobilenetv3._gen_mobilenet_v3 needs to be patched to return the parameters instead of instantiating the network
+import geffnet.mobilenetv3 # geffnet.mobilenetv3._gen_mobilenet_v3 needs to be patched to return the parameters instead of instantiating the network, based on commit c450c12ae6ffb1757f62dde3c2765da3c10f6def
 from geffnet.efficientnet_builder import round_channels
 
 class DSConv2d(nn.Module):
@@ -251,7 +251,7 @@ def AdapWingLoss(pre_hm, gt_hm):
         img_dilate = cv2.morphologyEx(img_merge, cv2.MORPH_DILATE, kernel)
         img_dilate[img_dilate < 51] = 1  # 0*W+1
         img_dilate[img_dilate >= 51] = 11  # 1*W+1
-        img_dilate = np.array(img_dilate, dtype=np.int)
+        img_dilate = np.array(img_dilate, dtype=int)
         img_dilate = img_dilate.transpose(2, 0, 1)
         dilated = torch.from_numpy(img_dilate).float()
         if first:
