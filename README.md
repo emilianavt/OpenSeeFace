@@ -30,15 +30,19 @@ The script will perform the tracking on webcam input or video file and send the 
 
 The provided `OpenSee` Unity component can receive these UDP packets and provides the received information through a public field called `trackingData`. The `OpenSeeShowPoints` component can visualize the landmark points of a detected face. It also serves as an example. Please look at it to see how to properly make use of the `OpenSee` component. Further examples are included in the `Examples` folder. The UDP packets are received in a separate thread, so any components using the `trackingData` field of the `OpenSee` component should first copy the field and access this copy, because otherwise the information may get overwritten during processing. This design also means that the field will keep updating, even if the `OpenSee` component is disabled.
 
+## Running the script
+
+If you are not on Windows or otherwise want to run the scripts directly, I recommend using [uv](https://docs.astral.sh/uv/) to manage the dependencies and run the script. This will also ensure that a compatible version of python itself will be used.
+
+With `uv` installed, you can automatically create a venv with the command: `uv sync --locked`
+
 Run the python script with `--help` to learn about the possible options you can set.
 
-    python facetracker.py --help
+    uv run facetracker.py --help
 
 A simple demonstration can be achieved by creating a new scene in Unity, adding an empty game object and both the `OpenSee` and `OpenSeeShowPoints` components to it. While the scene is playing, run the face tracker on a video file:
 
-    python facetracker.py --visualize 3 --pnp-points 1 --max-threads 4 -c video.mp4
-
-__Note__: If dependencies were installed using [poetry](https://python-poetry.org/), the commands have to be executed from a `poetry shell` or have to be prefixed with `poetry run`.
+    uv run facetracker.py --visualize 3 --pnp-points 1 --max-threads 4 -c video.mp4
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
@@ -131,6 +135,8 @@ The release builds contain a custom build of ONNX Runtime without telemetry.
 
 # Dependencies (Python 3.6 - 3.9)
 
+Note: I recommend installing the dependencies using `uv` as described above.
+
 * ONNX Runtime
 * OpenCV
 * Pillow
@@ -139,11 +145,6 @@ The release builds contain a custom build of ONNX Runtime without telemetry.
 The required libraries can be installed using pip:
 
      pip install onnxruntime opencv-python pillow numpy
-
-Alternatively poetry can be used to 
-install all dependencies for this project in a separate virtual env:
-
-     poetry install
 
 # Dependencies
 
