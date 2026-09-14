@@ -46,6 +46,8 @@ A simple demonstration can be achieved by creating a new scene in Unity, adding 
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
+## Running from Unity
+
 The included `OpenSeeLauncher` component allows starting the face tracker program from Unity. It is designed to work with the pyinstaller created executable distributed in the binary release bundles. It provides three public API functions:
 
 * `public string[] ListCameras()` returns the names of available cameras. The index of the camera in the array corresponds to its ID for the `cameraIndex` field. Setting the `cameraIndex` to `-1` will disable webcam capturing.
