@@ -50,8 +50,9 @@ jobs:
         include:
           - name: linux
             os: ubuntu-latest
-          - name: mac
-            os: macos-latest
+          # onnxruntime 1.9.0 not compatible
+          #- name: mac
+          #  os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Pull OpenSeeFace

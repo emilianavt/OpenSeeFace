@@ -13,19 +13,15 @@ if [[ -z "$PYTHON_BINARY" ]]; then
     fi
 fi
 
-echo "Creating venv"
-"$PYTHON_BINARY" -m venv venv
+echo "Installing uv"
+pip install uv
 
-source venv/bin/activate
-
-echo "Installing packages"
-pip install wheel # Make sure this is installed beforehand
-
-pip install onnxruntime opencv-python==4.5.4.60 pillow numpy==1.23.0 pyinstaller
+echo "Installing dependencies"
+uv sync --locked
+uv pip install pyinstaller==6.22.3
 
 echo "Creating binary"
-pyinstaller --onedir --clean facetracker.py \
-    --add-binary venv/lib/python3.*/site-packages/onnxruntime/capi/*.so:onnxruntime/capi
+uv run pyinstaller --onedir --clean facetracker.py --add-binary .venv/lib/python3.*/site-packages/onnxruntime/capi/*.so:onnxruntime/capi
 
 echo "Files should be available in the dist/ folder"
 echo "Done!"
