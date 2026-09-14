@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
 
 namespace OpenSee {
@@ -147,60 +145,118 @@ public class OpenSeeExpression : MonoBehaviour
         [Tooltip("When enabled, the depth value of points is also used for training.")]
         public bool includeDepth = false;
     }
-    [Serializable]
-    private class OpenSeeExpressionRepresentation {
-        private Dictionary<string, List<float[]>> expressions;
-        private byte[] modelBytes = null;
-        private string[] classLabels = null;
-        private int[] indices = null;
-        private PointSelection pointSelection;
-        private bool thunderSVM = false;
-        //private bool newModel = false;
+
+    private static class OpenSeeExpressionRepresentation {
+        private const string className = "OpenSee.OpenSeeExpression+OpenSeeExpressionRepresentation";
+        private const string pointSelectionClassName = "OpenSee.OpenSeeExpression+PointSelection";
+        private const string libraryName = "Assembly-CSharp, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null";
 
         static public void LoadSerialized(byte[] modelBytes, out Dictionary<string, List<float[]>> expressions, out SVMModel model, out string[] classLabels, out int[] indices, ref PointSelection pointSelection) {
-            IFormatter formatter = new BinaryFormatter();
-            MemoryStream memoryStream = new MemoryStream(modelBytes);
-            memoryStream.Position = 0;
-            OpenSeeExpressionRepresentation oser;
-            using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress)) {
-                oser = formatter.Deserialize(gzipStream) as OpenSeeExpressionRepresentation;
+            object root;
+            using (MemoryStream memoryStream = new MemoryStream(modelBytes, false))
+            using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress))
+            using (MemoryStream decompressed = new MemoryStream()) {
+                gzipStream.CopyTo(decompressed);
+                decompressed.Position = 0;
+                root = SafeBinaryReader.Deserialize(decompressed);
             }
-            expressions = oser.expressions;
-            /*if (oser.thunderSVM)
-                model = new ThunderSVMModel(oser.modelBytes);
-            else*/
-            model = new SVMModel(oser.modelBytes);
-            classLabels = oser.classLabels;
-            indices = oser.indices;
-            //pointSelection = oser.pointSelection;
+            SafeObject oser = root as SafeObject;
+            if (oser == null)
+                throw new SafeSerializationException("Serialized data does not contain expression data");
+            expressions = SafeCollections.ToDictionary(oser.GetObject("expressions"));
+            model = new SVMModel(oser.GetByteArray("modelBytes"));
+            classLabels = oser.GetStringArray("classLabels");
+            indices = oser.GetInt32Array("indices");
             if (indices == null) {
                 indices = new int[1 + 1 + 3 + 4 + 3 + 3 * 66];
                 for (int i = 0; i < 1 + 1 + 3 + 4 + 3 + 3 * 66; i++)
                     indices[i] = i;
             }
-            /*if (pointSelection == null)
-                pointSelection = new PointSelection();
-            if (!oser.newModel)
-                pointSelection.features = true;*/
         }
 
         static public byte[] ToSerialized(Dictionary<string, List<float[]>> expressions, SVMModel model, string[] classLabels, int[] indices, PointSelection pointSelection) {
-            OpenSeeExpressionRepresentation oser = new OpenSeeExpressionRepresentation();
-            oser.expressions = expressions;
-            oser.modelBytes = model.SaveModel();
-            oser.classLabels = classLabels;
-            oser.indices = indices;
-            oser.pointSelection = pointSelection;
-            oser.thunderSVM = model is ThunderSVMModel;
-            //oser.newModel = true;
-
-            IFormatter formatter = new BinaryFormatter();
+            byte[] modelBytes = model.SaveModel();
             MemoryStream memoryStream = new MemoryStream();
             using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Compress)) {
-                formatter.Serialize(gzipStream, oser);
+                WriteSerialized(gzipStream, expressions, modelBytes, classLabels, indices, pointSelection, model is ThunderSVMModel);
                 gzipStream.Flush();
             }
             return memoryStream.ToArray();
+        }
+
+        static private void WriteSerialized(Stream stream, Dictionary<string, List<float[]>> expressions, byte[] modelBytes, string[] classLabels, int[] indices, PointSelection pointSelection, bool thunderSVM) {
+            SafeBinaryWriter writer = new SafeBinaryWriter(stream);
+            int rootId = writer.AllocateId();
+            int libraryId = writer.AllocateId();
+            int expressionsId = writer.AllocateId();
+            int modelBytesId = writer.AllocateId();
+            int classLabelsId = writer.AllocateId();
+            int indicesId = writer.AllocateId();
+            int pointSelectionId = writer.AllocateId();
+            writer.WriteHeader(rootId);
+            writer.WriteBinaryLibrary(libraryId, libraryName);
+            writer.WriteClassHeader(rootId, className,
+                new string[] {"expressions", "modelBytes", "classLabels", "indices", "pointSelection", "thunderSVM"},
+                new SafeMemberType[] {
+                    SafeMemberType.SystemClass(SafeCollections.DictionaryClassName),
+                    SafeMemberType.PrimitiveArray(NrbfPrimitiveType.Byte),
+                    SafeMemberType.StringArray(),
+                    SafeMemberType.PrimitiveArray(NrbfPrimitiveType.Int32),
+                    SafeMemberType.Class(pointSelectionClassName, libraryId),
+                    SafeMemberType.Primitive(NrbfPrimitiveType.Boolean)
+                }, libraryId);
+            if (expressions != null)
+                writer.WriteMemberReference(expressionsId);
+            else
+                writer.WriteObjectNull();
+            if (modelBytes != null)
+                writer.WriteMemberReference(modelBytesId);
+            else
+                writer.WriteObjectNull();
+            if (classLabels != null)
+                writer.WriteMemberReference(classLabelsId);
+            else
+                writer.WriteObjectNull();
+            if (indices != null)
+                writer.WriteMemberReference(indicesId);
+            else
+                writer.WriteObjectNull();
+            writer.WriteMemberReference(pointSelectionId);
+            writer.WriteValue(thunderSVM);
+
+            if (expressions != null)
+                SafeCollections.WriteDictionary(writer, expressionsId, expressions);
+            if (modelBytes != null)
+                writer.WriteArraySinglePrimitive(modelBytesId, modelBytes);
+            if (classLabels != null) {
+                writer.WriteStringArrayHeader(classLabelsId, classLabels.Length);
+                foreach (string label in classLabels) {
+                    if (label != null)
+                        writer.WriteBinaryObjectString(writer.AllocateId(), label);
+                    else
+                        writer.WriteObjectNull();
+                }
+            }
+            if (indices != null)
+                writer.WriteArraySinglePrimitive(indicesId, indices);
+
+            string[] memberNames = new string[] {"pointsFaceContour", "pointsBrowRight", "pointsBrowLeft", "pointsEyeRight", "pointsEyeLeft", "pointsNose", "pointsMouthCorner", "pointsLipUpper", "pointsLipLower", "features", "includeDepth"};
+            SafeMemberType[] memberTypes = new SafeMemberType[memberNames.Length];
+            for (int i = 0; i < memberTypes.Length; i++)
+                memberTypes[i] = SafeMemberType.Primitive(NrbfPrimitiveType.Boolean);
+            writer.WriteClassHeader(pointSelectionId, pointSelectionClassName, memberNames, memberTypes, libraryId);
+            writer.WriteValue(pointSelection.pointsFaceContour);
+            writer.WriteValue(pointSelection.pointsBrowRight);
+            writer.WriteValue(pointSelection.pointsBrowLeft);
+            writer.WriteValue(pointSelection.pointsEyeRight);
+            writer.WriteValue(pointSelection.pointsEyeLeft);
+            writer.WriteValue(pointSelection.pointsNose);
+            writer.WriteValue(pointSelection.pointsMouthCorner);
+            writer.WriteValue(pointSelection.pointsLipUpper);
+            writer.WriteValue(pointSelection.pointsLipLower);
+            writer.WriteValue(pointSelection.features);
+            writer.WriteValue(pointSelection.includeDepth);
+            writer.WriteMessageEnd();
         }
     }
 

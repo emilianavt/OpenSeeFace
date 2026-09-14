@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using UnityEngine;
 
@@ -68,51 +66,78 @@ public class SVMModel {
     private int cols;
     private int maxClasses;
 
-    [Serializable]
-    private class SVMModelRepresentation {
-        public string modelString;
-        public int cols;
-        public int maxClasses;
-        public double[] means;
-        public double[] sdevs;
-    }
+    private const string representationClassName = "OpenSee.SVMModel+SVMModelRepresentation";
+    private const string representationLibraryName = "Assembly-CSharp-firstpass, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null";
 
     public System.IntPtr LoadSerialized(byte[] modelBytes, out int cols, out int maxClasses, bool compress) {
-        IFormatter formatter = new BinaryFormatter();
-        MemoryStream memoryStream = new MemoryStream(modelBytes);
-        memoryStream.Position = 0;
-        SVMModelRepresentation smr;
+        MemoryStream memoryStream = new MemoryStream(modelBytes, false);
+        object root;
         if (compress) {
-            using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress)) {
-                smr = formatter.Deserialize(gzipStream) as SVMModelRepresentation;
+            using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Decompress))
+            using (MemoryStream decompressed = new MemoryStream()) {
+                gzipStream.CopyTo(decompressed);
+                decompressed.Position = 0;
+                root = SafeBinaryReader.Deserialize(decompressed);
             }
         } else {
-            smr = formatter.Deserialize(memoryStream) as SVMModelRepresentation;
+            root = SafeBinaryReader.Deserialize(memoryStream);
         }
-        cols = smr.cols;
-        maxClasses = smr.maxClasses;
-        System.IntPtr model = loadModelString(smr.modelString, smr.cols, smr.maxClasses, smr.means, smr.sdevs);
-        return model;
+        SafeObject smr = root as SafeObject;
+        if (smr == null)
+            throw new SafeSerializationException("Serialized data does not contain an SVM model");
+        string modelString = smr.GetString("modelString");
+        cols = smr.GetInt32("cols", 0);
+        maxClasses = smr.GetInt32("maxClasses", 0);
+        double[] means = smr.GetDoubleArray("means");
+        double[] sdevs = smr.GetDoubleArray("sdevs");
+        if (modelString == null || means == null || sdevs == null || cols < 1 || maxClasses < 1 || means.Length != cols || sdevs.Length != cols)
+            throw new SafeSerializationException("Serialized SVM model data is incomplete");
+        return loadModelString(modelString, cols, maxClasses, means, sdevs);
+    }
+
+    private void WriteSerialized(Stream stream, string modelString, int cols, int maxClasses, double[] means, double[] sdevs) {
+        SafeBinaryWriter writer = new SafeBinaryWriter(stream);
+        int rootId = writer.AllocateId();
+        int libraryId = writer.AllocateId();
+        int modelStringId = writer.AllocateId();
+        int meansId = writer.AllocateId();
+        int sdevsId = writer.AllocateId();
+        writer.WriteHeader(rootId);
+        writer.WriteBinaryLibrary(libraryId, representationLibraryName);
+        writer.WriteClassHeader(rootId, representationClassName,
+            new string[] {"modelString", "cols", "maxClasses", "means", "sdevs"},
+            new SafeMemberType[] {
+                SafeMemberType.String(),
+                SafeMemberType.Primitive(NrbfPrimitiveType.Int32),
+                SafeMemberType.Primitive(NrbfPrimitiveType.Int32),
+                SafeMemberType.PrimitiveArray(NrbfPrimitiveType.Double),
+                SafeMemberType.PrimitiveArray(NrbfPrimitiveType.Double)
+            }, libraryId);
+        writer.WriteMemberReference(modelStringId);
+        writer.WriteValue(cols);
+        writer.WriteValue(maxClasses);
+        writer.WriteMemberReference(meansId);
+        writer.WriteMemberReference(sdevsId);
+        writer.WriteBinaryObjectString(modelStringId, modelString);
+        writer.WriteArraySinglePrimitive(meansId, means);
+        writer.WriteArraySinglePrimitive(sdevsId, sdevs);
+        writer.WriteMessageEnd();
     }
 
     public byte[] ToSerialized(System.IntPtr model, int cols, int maxClasses, bool compress) {
-        SVMModelRepresentation smr = new SVMModelRepresentation();
-        smr.cols = cols;
-        smr.maxClasses = maxClasses;
-        smr.means = new double[cols];
-        smr.sdevs = new double[cols];
-        getScales(model, smr.means, smr.sdevs);
-        smr.modelString = saveModelString(model);
+        double[] means = new double[cols];
+        double[] sdevs = new double[cols];
+        getScales(model, means, sdevs);
+        string modelString = saveModelString(model);
 
-        IFormatter formatter = new BinaryFormatter();
         MemoryStream memoryStream = new MemoryStream();
         if (compress) {
             using (GZipStream gzipStream = new GZipStream(memoryStream, CompressionMode.Compress)) {
-                formatter.Serialize(gzipStream, smr);
+                WriteSerialized(gzipStream, modelString, cols, maxClasses, means, sdevs);
                 gzipStream.Flush();
             }
         } else {
-            formatter.Serialize(memoryStream, smr);
+            WriteSerialized(memoryStream, modelString, cols, maxClasses, means, sdevs);
         }
         return memoryStream.ToArray();
     }
