@@ -46,6 +46,10 @@ A simple demonstration can be achieved by creating a new scene in Unity, adding 
 
 This way the tracking script will output its own tracking visualization while also demonstrating the transmission of tracking data to Unity.
 
+One user has reported that python failed to load the onnxruntime library on Linux, which was fixable with this command, run from within the OpenSeeFace folder:
+
+    execstack -c .venv/lib/python3.9/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-39-x86_64-linux-gnu.so
+
 ## Running from Unity
 
 The included `OpenSeeLauncher` component allows starting the face tracker program from Unity. It is designed to work with the pyinstaller created executable distributed in the binary release bundles. It provides three public API functions:
